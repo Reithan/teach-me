@@ -131,6 +131,7 @@ func TestBaselineHelp_WithTMDOC_VersionMatch(t *testing.T) {
 }
 
 func TestBaselineHelp_WithTMDOC_VersionMismatch(t *testing.T) {
+	tempErrlog(t) // prevent ERRORS.jsonl pollution in the test working dir
 	dir := t.TempDir()
 	docPath := filepath.Join(dir, "SKILL.md")
 	marker := docver.Marker()
@@ -153,6 +154,7 @@ func TestBaselineHelp_WithTMDOC_VersionMismatch(t *testing.T) {
 }
 
 func TestBaselineHelp_WithTMDOC_MissingMarker(t *testing.T) {
+	tempErrlog(t) // prevent ERRORS.jsonl pollution in the test working dir
 	dir := t.TempDir()
 	docPath := filepath.Join(dir, "SKILL.md")
 	// Write a file with NO tm-version in frontmatter.
@@ -170,6 +172,167 @@ func TestBaselineHelp_WithTMDOC_MissingMarker(t *testing.T) {
 	wantErr := fmt.Sprintf("err: %s is for tm ?, this is tm %s", docPath, marker)
 	if !strings.Contains(out, wantErr) {
 		t.Errorf("want %q in output; got:\n%s", wantErr, out)
+	}
+}
+
+// ── Docver mismatch logging tests (§10.1) ─────────────────────────────────────
+
+// writeMismatchDoc writes a TM_DOC file whose tm-version differs from the
+// CLI's marker, sets TM_DOC, and returns the expected err text (without the
+// "err: " prefix) that the CLI will print and log.
+func writeMismatchDoc(t *testing.T, wrongVer string) (wantErrText string) {
+	t.Helper()
+	dir := t.TempDir()
+	docPath := filepath.Join(dir, "SKILL.md")
+	content := fmt.Sprintf("---\nmetadata:\n  tm-version: %q\n---\n# skill\n", wrongVer)
+	if err := os.WriteFile(docPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_DOC", docPath)
+	marker := docver.Marker()
+	return fmt.Sprintf("%s is for tm %s, this is tm %s", docPath, wrongVer, marker)
+}
+
+func TestDocverMismatch_Logging_VersionDiff(t *testing.T) {
+	// `tm --help` with a drifted TM_DOC: exit 0, stdout has see+err lines,
+	// ERRORS.jsonl gets exactly ONE row with exit 0 and err = mismatch text,
+	// file = null (no graph resolved in baseline help).
+	errlogPath := tempErrlog(t)
+	wantErrText := writeMismatchDoc(t, "99.99")
+
+	out, _, code := run(t, "--help")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d", code)
+	}
+	if !strings.Contains(out, "err: "+wantErrText) {
+		t.Errorf("want err line in stdout; got:\n%s", out)
+	}
+
+	rows := readErrlog(t, errlogPath)
+	if len(rows) != 1 {
+		t.Fatalf("want exactly 1 errlog row, got %d", len(rows))
+	}
+	r := rows[0]
+	if r.Exit != 0 {
+		t.Errorf("row exit: want 0, got %d", r.Exit)
+	}
+	if r.Err != wantErrText {
+		t.Errorf("row err: want %q, got %q", wantErrText, r.Err)
+	}
+	if r.File != nil {
+		t.Errorf("row file: want null, got %v", *r.File)
+	}
+	if r.Fix != nil {
+		t.Errorf("row fix: want null, got %v", *r.Fix)
+	}
+	if len(r.Argv) < 1 || r.Argv[0] != "tm" {
+		t.Errorf("row argv: want [tm ...], got %v", r.Argv)
+	}
+}
+
+func TestDocverMismatch_Logging_MissingMarker(t *testing.T) {
+	// `tm --help` with a TM_DOC missing tm-version: exit 0, err uses "?"
+	// sentinel, exactly one row in ERRORS.jsonl.
+	errlogPath := tempErrlog(t)
+	dir := t.TempDir()
+	docPath := filepath.Join(dir, "SKILL.md")
+	content := "---\nmetadata:\n  other-key: value\n---\n# skill\n"
+	if err := os.WriteFile(docPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_DOC", docPath)
+	marker := docver.Marker()
+	wantErrText := fmt.Sprintf("%s is for tm ?, this is tm %s", docPath, marker)
+
+	out, _, code := run(t, "--help")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d", code)
+	}
+	if !strings.Contains(out, "err: "+wantErrText) {
+		t.Errorf("want err line in stdout; got:\n%s", out)
+	}
+
+	rows := readErrlog(t, errlogPath)
+	if len(rows) != 1 {
+		t.Fatalf("want exactly 1 errlog row, got %d", len(rows))
+	}
+	r := rows[0]
+	if r.Exit != 0 {
+		t.Errorf("row exit: want 0, got %d", r.Exit)
+	}
+	if r.Err != wantErrText {
+		t.Errorf("row err: want %q, got %q", wantErrText, r.Err)
+	}
+	if r.File != nil {
+		t.Errorf("row file: want null, got %v", *r.File)
+	}
+}
+
+func TestDocverMismatch_Logging_UnknownSubcommand(t *testing.T) {
+	// Unknown subcommand with a drifted TM_DOC: exit 3, ERRORS.jsonl gets
+	// exactly TWO rows — the unknown-command row and the mismatch row, both
+	// with exit 3 (§10.1: each err: line produces its own row).
+	errlogPath := tempErrlog(t)
+	wantMismatch := writeMismatchDoc(t, "99.99")
+
+	_, _, code := run(t, "frobnicate")
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d", code)
+	}
+
+	rows := readErrlog(t, errlogPath)
+	if len(rows) != 2 {
+		t.Fatalf("want exactly 2 errlog rows (unknown-cmd + mismatch), got %d", len(rows))
+	}
+
+	// Both rows must carry exit 3.
+	for i, r := range rows {
+		if r.Exit != 3 {
+			t.Errorf("row %d exit: want 3, got %d", i, r.Exit)
+		}
+	}
+
+	// One row must be the unknown-command row.
+	var hasUnknown, hasMismatch bool
+	for _, r := range rows {
+		if strings.Contains(r.Err, "unknown command") {
+			hasUnknown = true
+		}
+		if r.Err == wantMismatch {
+			hasMismatch = true
+		}
+	}
+	if !hasUnknown {
+		t.Errorf("want an unknown-command row; rows: %v", rows)
+	}
+	if !hasMismatch {
+		t.Errorf("want a mismatch row with err=%q; rows: %v", wantMismatch, rows)
+	}
+}
+
+func TestDocverMismatch_NoLog_VersionMatch(t *testing.T) {
+	// Matching TM_DOC: no err line in stdout, no ERRORS.jsonl row created.
+	errlogPath := tempErrlog(t)
+	dir := t.TempDir()
+	docPath := filepath.Join(dir, "SKILL.md")
+	marker := docver.Marker()
+	content := fmt.Sprintf("---\nmetadata:\n  tm-version: %q\n---\n# skill\n", marker)
+	if err := os.WriteFile(docPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_DOC", docPath)
+
+	out, _, code := run(t, "--help")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d", code)
+	}
+	if strings.Contains(out, "err:") {
+		t.Errorf("no err line expected for matching version; got:\n%s", out)
+	}
+
+	// No ERRORS.jsonl file should be created.
+	if _, err := os.Stat(errlogPath); !os.IsNotExist(err) {
+		t.Errorf("no errlog row expected for matching version; file exists: %v", err)
 	}
 }
 
