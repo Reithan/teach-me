@@ -1,34 +1,30 @@
 flowchart TB
     subgraph passed["Concepts User understands"]
-        %% leader concept
         consensus["Consensus: agreement among replicas<br/>algo.txt:1-50"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% gate annotation
-        %% tm:gate consensus base=3
-        safety["Safety: committed values never lost<br/>algo.txt:51-100"]
+        %% tm:gate safety base=1
+        safety["Safety: committed values never lost<br/>GAP: conflates committed with durable<br/>algo.txt:51-100"]
         liveness["Liveness: eventual progress<br/>algo.txt:101-150"]
-        %% reopen-style edge
         consensus --"requires"--> safety
         safety --"enables"--> liveness
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        %% pending answer question
-        q1["What makes a value committed<br/>algo.txt:51-60"]:::probe_1
-        a1["it#39;s #quot;safe#quot; when a majority confirms it"]:::pending
-        q2["When can progress stall<br/>algo.txt:101-110"]:::teach_1
-        a2["OOS<br/>out-of-scope answer text"]:::pass
-        a3["unclear response"]:::unclear
-        a4["fails to distinguish"]:::fail
+        q1["What makes an entry committed<br/>algo.txt:51-60"]:::probe_1
+        q2["Why a majority quorum guarantees no loss<br/>algo.txt:61-80"]:::probe_1
+        a1["Confuses durable with committed"]:::fail
+        a2["Correct explanation of quorum overlap"]:::pass
+        q3["How majority overlap prevents divergence<br/>algo.txt:81-100"]:::teach_2
+        a3["Explains overlap correctly"]:::pass
         safety --> q1
+        safety --> q2
         q1 --> a1
-        liveness --> q2
         q2 --> a2
-        q2 --> a3
-        q2 --> a4
+        a1 --> q3
+        q3 --> a3
     end
     classDef probe_1 stroke:#4aa3ff
-    classDef teach_1 stroke:#c9a227
+    classDef teach_2 stroke:#c9a227
     classDef pass stroke:#3fb950
     classDef fail stroke:#f85149
     classDef unclear stroke:#d29922

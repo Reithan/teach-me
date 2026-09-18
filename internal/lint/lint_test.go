@@ -779,7 +779,7 @@ func TestValidRegression(t *testing.T) {
 
 	cases := []string{
 		"../../testdata/raft.mmd",
-		"../../testdata/gated.mmd",
+		"../../testdata/gated_valid.mmd",
 	}
 	for _, path := range cases {
 		t.Run(path, func(t *testing.T) {

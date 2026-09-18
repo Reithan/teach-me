@@ -541,9 +541,10 @@ func check8(
 
 		if needsRootCheck {
 			rootQ, rootA := walkToRootProbe(q.ID, inEdges, qByID, aByID, concepts)
-			if rootQ == nil {
-				viols = append(viols, Violation{Msg: fmt.Sprintf("question %q does not resolve to a concept", q.ID)})
-			} else if rootA.Class != "fail" && rootA.Class != "unclear" {
+			// A nil rootQ means the chain structure does not terminate at a
+			// recognisable root probe, even though the concept itself is reachable.
+			// The accurate diagnostic is the same as a wrong-class root answer.
+			if rootQ == nil || (rootA.Class != "fail" && rootA.Class != "unclear") {
 				viols = append(viols, Violation{Msg: fmt.Sprintf("question %q chain must end at a failed or unclear probe", q.ID)})
 			}
 		}
