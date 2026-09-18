@@ -94,7 +94,7 @@ var Table = []Command{
 			{Name: "src", TakesValue: true, ValueName: "<cite>"},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          editRun,
 	},
 	{
 		Name: "drop",
@@ -102,7 +102,7 @@ var Table = []Command{
 			{Name: "<concept>"},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          dropRun,
 	},
 	{
 		Name: "gap",
@@ -111,7 +111,7 @@ var Table = []Command{
 			{Name: `"<gap>"`, Stdin: true},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          gapRun,
 	},
 	{
 		Name: "reopen",
