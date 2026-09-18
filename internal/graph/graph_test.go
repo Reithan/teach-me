@@ -3,47 +3,54 @@ package graph
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 )
 
-// TestGoldenRoundTrip parses testdata/raft.mmd and verifies that Write
-// produces byte-identical output.
+// TestGoldenRoundTrip parses each golden .mmd file under testdata/ and verifies
+// that Write produces byte-identical output (canonical round-trip).
 func TestGoldenRoundTrip(t *testing.T) {
-	t.Helper()
-	path := "../../testdata/raft.mmd"
-	want, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
+	goldens := []string{
+		"../../testdata/raft.mmd",
+		"../../testdata/gated.mmd",
 	}
-
-	g, err := Parse(want)
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-
-	got := Write(g)
-
-	if !bytes.Equal(got, want) {
-		// Produce a per-line diff for easier debugging.
-		wantLines := bytes.Split(want, []byte("\n"))
-		gotLines := bytes.Split(got, []byte("\n"))
-		n := len(wantLines)
-		if len(gotLines) > n {
-			n = len(gotLines)
-		}
-		t.Errorf("Write output is not byte-identical to %s", path)
-		for i := range n {
-			var w, g2 []byte
-			if i < len(wantLines) {
-				w = wantLines[i]
+	for _, path := range goldens {
+		t.Run(path, func(t *testing.T) {
+			want, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
 			}
-			if i < len(gotLines) {
-				g2 = gotLines[i]
+
+			g, err := Parse(want)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
 			}
-			if !bytes.Equal(w, g2) {
-				t.Errorf("  line %d:\n    want: %q\n    got:  %q", i+1, w, g2)
+
+			got := Write(g)
+
+			if !bytes.Equal(got, want) {
+				// Produce a per-line diff for easier debugging.
+				wantLines := bytes.Split(want, []byte("\n"))
+				gotLines := bytes.Split(got, []byte("\n"))
+				n := len(wantLines)
+				if len(gotLines) > n {
+					n = len(gotLines)
+				}
+				t.Errorf("Write output is not byte-identical to %s", path)
+				for i := range n {
+					var w, g2 []byte
+					if i < len(wantLines) {
+						w = wantLines[i]
+					}
+					if i < len(gotLines) {
+						g2 = gotLines[i]
+					}
+					if !bytes.Equal(w, g2) {
+						t.Errorf("  line %d:\n    want: %q\n    got:  %q", i+1, w, g2)
+					}
+				}
 			}
-		}
+		})
 	}
 }
 
@@ -359,4 +366,342 @@ func strIndex(s, sub string) int {
 
 func strContains(s, sub string) bool {
 	return strIndex(s, sub) >= 0
+}
+
+// TestQuestionN covers numeric suffix extraction for both q- and a-prefixed IDs.
+func TestQuestionN(t *testing.T) {
+	cases := []struct {
+		s    string
+		want int
+	}{
+		{"q1", 1},
+		{"q5", 5},
+		{"q99", 99},
+		{"a1", 1},
+		{"a42", 42},
+		// degenerate inputs
+		{"", 0},
+		{"q", 0},
+		{"a", 0},
+	}
+	for _, tc := range cases {
+		got := QuestionN(tc.s)
+		if got != tc.want {
+			t.Errorf("QuestionN(%q) = %d, want %d", tc.s, got, tc.want)
+		}
+	}
+}
+
+// TestIsAnswerClass covers all four valid classes and common invalid values.
+func TestIsAnswerClass(t *testing.T) {
+	valid := []string{"pending", "pass", "fail", "unclear"}
+	for _, c := range valid {
+		if !IsAnswerClass(c) {
+			t.Errorf("IsAnswerClass(%q) = false, want true", c)
+		}
+	}
+
+	invalid := []string{"", "probe_1", "teach_1", "PASS", "Pending", "oos", "unknown"}
+	for _, c := range invalid {
+		if IsAnswerClass(c) {
+			t.Errorf("IsAnswerClass(%q) = true, want false", c)
+		}
+	}
+}
+
+// TestEdgeHomeBlockCases covers the corner cases of the 4.2 rule:
+// both endpoints unknown, and only one endpoint known.
+func TestEdgeHomeBlockCases(t *testing.T) {
+	blocks := map[string]Block{
+		"alpha": BlockPassed,
+		"beta":  BlockUntested,
+		"gamma": BlockTesting,
+	}
+
+	cases := []struct {
+		name string
+		from string
+		to   string
+		want Block
+	}{
+		// both known: later block wins
+		{"passed->passed", "alpha", "alpha", BlockPassed},
+		{"passed->untested", "alpha", "beta", BlockUntested},
+		{"passed->testing", "alpha", "gamma", BlockTesting},
+		{"untested->testing", "beta", "gamma", BlockTesting},
+		// only From known
+		{"from-known only (passed)", "alpha", "unknown", BlockPassed},
+		{"from-known only (untested)", "beta", "unknown", BlockUntested},
+		// only To known
+		{"to-known only (passed)", "unknown", "alpha", BlockPassed},
+		{"to-known only (testing)", "unknown", "gamma", BlockTesting},
+		// both unknown: defaults to BlockPassed
+		{"both unknown", "unknown1", "unknown2", BlockPassed},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &Edge{From: tc.from, To: tc.to}
+			got := edgeHomeBlock(e, blocks)
+			if got != tc.want {
+				t.Errorf("edgeHomeBlock(%q->%q) = %v, want %v", tc.from, tc.to, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestWriteInt covers both the n==0 fast path and the digit-extraction loop.
+func TestWriteInt(t *testing.T) {
+	cases := []struct {
+		n    int
+		want string
+	}{
+		{0, "0"},
+		{1, "1"},
+		{9, "9"},
+		{10, "10"},
+		{100, "100"},
+		{3, "3"},
+		{12345, "12345"},
+		{1000000, "1000000"},
+	}
+	for _, tc := range cases {
+		var b strings.Builder
+		writeInt(&b, tc.n)
+		if got := b.String(); got != tc.want {
+			t.Errorf("writeInt(%d) = %q, want %q", tc.n, got, tc.want)
+		}
+	}
+}
+
+// TestWriteGateMeta verifies the exact output format of writeGateMeta.
+func TestWriteGateMeta(t *testing.T) {
+	cases := []struct {
+		m    GateMeta
+		want string
+	}{
+		{
+			m:    GateMeta{Concept: "foo", Base: 3},
+			want: "        %% tm:gate foo base=3\n",
+		},
+		{
+			m:    GateMeta{Concept: "bar", Base: 0},
+			want: "        %% tm:gate bar base=0\n",
+		},
+		{
+			m:    GateMeta{Concept: "consensus", Base: 10},
+			want: "        %% tm:gate consensus base=10\n",
+		},
+	}
+	for _, tc := range cases {
+		var b strings.Builder
+		writeGateMeta(&b, tc.m)
+		if got := b.String(); got != tc.want {
+			t.Errorf("writeGateMeta(%+v)\n  got  %q\n  want %q", tc.m, got, tc.want)
+		}
+	}
+}
+
+// TestWriteLeadingComments verifies that each comment is emitted at indent2.
+func TestWriteLeadingComments(t *testing.T) {
+	cases := []struct {
+		comments []string
+		want     string
+	}{
+		{nil, ""},
+		{[]string{}, ""},
+		{
+			[]string{"%% first"},
+			"        %% first\n",
+		},
+		{
+			[]string{"%% first", "%% second"},
+			"        %% first\n        %% second\n",
+		},
+	}
+	for _, tc := range cases {
+		var b strings.Builder
+		writeLeadingComments(&b, tc.comments)
+		if got := b.String(); got != tc.want {
+			t.Errorf("writeLeadingComments(%v)\n  got  %q\n  want %q", tc.comments, got, tc.want)
+		}
+	}
+}
+
+// TestParseGateMetaDirect calls parseGateMeta directly to cover error paths.
+func TestParseGateMetaDirect(t *testing.T) {
+	// success case
+	m, err := parseGateMeta("%% tm:gate consensus base=3", nil)
+	if err != nil {
+		t.Fatalf("parseGateMeta: unexpected error: %v", err)
+	}
+	if m.Concept != "consensus" || m.Base != 3 {
+		t.Errorf("parseGateMeta: got %+v, want concept=consensus base=3", m)
+	}
+
+	// wrong number of fields (only one field after prefix)
+	_, err = parseGateMeta("%% tm:gate foo", nil)
+	if err == nil || !strings.Contains(err.Error(), "invalid tm:gate line") {
+		t.Errorf("parseGateMeta single field: want 'invalid tm:gate line' error, got %v", err)
+	}
+
+	// missing base= prefix (two fields but second doesn't start with base=)
+	_, err = parseGateMeta("%% tm:gate foo notbase=1", nil)
+	if err == nil || !strings.Contains(err.Error(), "missing base=") {
+		t.Errorf("parseGateMeta missing base=: want 'missing base=' error, got %v", err)
+	}
+
+	// invalid base value (non-digit)
+	_, err = parseGateMeta("%% tm:gate foo base=abc", nil)
+	if err == nil || !strings.Contains(err.Error(), "invalid base value") {
+		t.Errorf("parseGateMeta bad base: want 'invalid base value' error, got %v", err)
+	}
+
+	// empty base value
+	_, err = parseGateMeta("%% tm:gate foo base=", nil)
+	if err == nil || !strings.Contains(err.Error(), "invalid base value") {
+		t.Errorf("parseGateMeta empty base: want 'invalid base value' error, got %v", err)
+	}
+}
+
+// minimalGraph returns a minimal well-formed graph string using the three
+// empty blocks. The caller replaces individual block content via fmt.Sprintf
+// or string replacement.
+func minimalGraphWith(passed, untested, testing string) string {
+	return "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n" + passed + "    end\n" +
+		"    subgraph untested[\"U\"]\n" + untested + "    end\n" +
+		"    subgraph testing[\"T\"]\n" + testing + "    end\n"
+}
+
+// TestParseErrors covers error paths in Parse / parseBlock / parseSubgraphHeader.
+func TestParseErrors(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string // expected substring in the error message
+	}{
+		{
+			name:  "empty file",
+			input: "",
+			want:  "expected \"flowchart TB\"",
+		},
+		{
+			name:  "wrong flowchart direction",
+			input: "flowchart LR\n",
+			want:  "expected \"flowchart TB\"",
+		},
+		{
+			name:  "EOF before passed block",
+			input: "flowchart TB\n",
+			want:  "expected subgraph passed",
+		},
+		{
+			name:  "non-subgraph line where subgraph expected",
+			input: "flowchart TB\nfoo[\"bar\"]\n",
+			want:  "expected subgraph passed",
+		},
+		{
+			name:  "invalid subgraph header (no bracket title)",
+			input: "flowchart TB\n    subgraph passed\n    end\n",
+			want:  "invalid subgraph header",
+		},
+		{
+			name:  "wrong block order (untested before passed)",
+			input: "flowchart TB\n    subgraph untested[\"U\"]\n    end\n    subgraph passed[\"P\"]\n    end\n    subgraph testing[\"T\"]\n    end\n",
+			want:  "expected block \"passed\"",
+		},
+		{
+			name:  "unclosed subgraph (missing end)",
+			input: "flowchart TB\n    subgraph passed[\"P\"]\n        foo[\"Foo<br/>x.txt:1\"]\n",
+			want:  "unclosed subgraph passed",
+		},
+		{
+			name:  "tm:gate meta in passed block",
+			input: minimalGraphWith("        %% tm:gate foo base=1\n", "", ""),
+			want:  "tm:gate meta outside untested block",
+		},
+		{
+			name:  "tm:gate meta in testing block",
+			input: minimalGraphWith("", "", "        %% tm:gate foo base=1\n"),
+			want:  "tm:gate meta outside untested block",
+		},
+		{
+			name:  "invalid tm:gate line (one field only)",
+			input: minimalGraphWith("", "        %% tm:gate foo\n", ""),
+			want:  "invalid tm:gate line",
+		},
+		{
+			name:  "invalid tm:gate line (missing base= key)",
+			input: minimalGraphWith("", "        %% tm:gate foo notbase=1\n", ""),
+			want:  "missing base=",
+		},
+		{
+			name:  "invalid tm:gate base value (non-digit)",
+			input: minimalGraphWith("", "        %% tm:gate foo base=abc\n", ""),
+			want:  "invalid base value",
+		},
+		{
+			name:  "unrecognized line in block (no brackets, no arrow)",
+			input: minimalGraphWith("        notanode\n", "", ""),
+			want:  "unrecognized line in block passed",
+		},
+		{
+			name:  "unexpected line after all blocks",
+			input: minimalGraphWith("", "", "") + "junk line\n",
+			want:  "unexpected line after blocks",
+		},
+		{
+			name:  "unclosed frontmatter",
+			input: "---\nconfig:\n  key: value\n",
+			want:  "unclosed frontmatter",
+		},
+		{
+			name:  "question declared outside testing block",
+			input: minimalGraphWith("        q1[\"Q<br/>x.txt:1\"]:::probe_1\n", "", ""),
+			want:  "question",
+		},
+		{
+			name:  "concept declared in testing block",
+			input: minimalGraphWith("", "", "        foo[\"Foo<br/>x.txt:1\"]\n"),
+			want:  "concept",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(tc.input))
+			if err == nil {
+				t.Fatalf("Parse succeeded, want error containing %q", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.want)
+			}
+		})
+	}
+}
+
+// TestParseBlankLineInsideBlock verifies that blank lines within a subgraph
+// body are silently skipped (they do not survive round-trip, which is correct).
+func TestParseBlankLineInsideBlock(t *testing.T) {
+	input := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n" +
+		"        foo[\"Foo<br/>x.txt:1-5\"]\n" +
+		"\n" +
+		"        bar[\"Bar<br/>x.txt:6-10\"]\n" +
+		"    end\n" +
+		"    subgraph untested[\"U\"]\n" +
+		"    end\n" +
+		"    subgraph testing[\"T\"]\n" +
+		"    end\n"
+	g, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(g.PassedConcepts) != 2 {
+		t.Errorf("want 2 concepts, got %d", len(g.PassedConcepts))
+	}
+	if g.PassedConcepts[0].ID != "foo" || g.PassedConcepts[1].ID != "bar" {
+		t.Errorf("unexpected concept IDs: %v, %v", g.PassedConcepts[0].ID, g.PassedConcepts[1].ID)
+	}
 }
