@@ -67,6 +67,12 @@ type ConceptStatusResult struct {
 	// TeachingSpent is true when TeachCount >= Config.MaxTeach.
 	TeachingSpent bool
 
+	// LatestTeachNotAllPass is true when either (a) no teach batch above Base
+	// exists yet, or (b) the latest teach batch above Base has at least one
+	// in-scope question whose answer is not "pass" (or the question is unanswered).
+	// Used by ask/answer for the teaching-incomplete refusal (§7, §8.6–8.9).
+	LatestTeachNotAllPass bool
+
 	// Gated is true when len(FailedProbeBatches) >= Config.MaxFails or Stalled.
 	Gated bool
 }
@@ -117,7 +123,20 @@ func Load(file string, cfg Config) (*State, error) {
 	if cfg.SrcRoot == "" {
 		cfg.SrcRoot = cite.SrcRoot(filepath.Dir(file))
 	}
+	return buildState(g, cfg), nil
+}
 
+// LoadFromGraph builds a fully derived State from an already-parsed in-memory
+// graph (no file I/O). cfg.SrcRoot should be set by the caller when cite
+// resolution is needed. Used by answer --override to re-derive state after a
+// gate clear without touching the on-disk file.
+func LoadFromGraph(g *graph.Graph, cfg Config) *State {
+	return buildState(g, cfg)
+}
+
+// buildState is the common implementation behind Load and LoadFromGraph.
+// It builds all derived indexes from g and cfg.
+func buildState(g *graph.Graph, cfg Config) *State {
 	s := &State{
 		g:              g,
 		cfg:            cfg,
@@ -227,7 +246,7 @@ func Load(file string, cfg Config) (*State, error) {
 		}
 	}
 
-	return s, nil
+	return s
 }
 
 // --- §5 Concept classification ---
@@ -326,12 +345,16 @@ func (s *State) BatchStateOf(batchClass string) BatchStatus {
 	}
 
 	// No answers. For probe batches, check whether a higher-numbered teach batch
-	// exists under the same concept (which would lock this batch).
+	// exists under the same concept AND is above the gate base (§7 gate paragraph:
+	// "Probes left unanswered from before the gate stop being fallback probes and
+	// are asked as written"). A teach batch at or below the gate base no longer
+	// locks any probe batch (Fix 1).
 	if graph.IsProbeClass(batchClass) {
 		probeN := graph.BatchN(batchClass)
 		cID := s.batchConcept[batchClass]
+		base := s.gateBase[cID]
 		for _, other := range s.conceptBatches[cID] {
-			if graph.IsTeachClass(other) && graph.BatchN(other) > probeN {
+			if graph.IsTeachClass(other) && graph.BatchN(other) > probeN && graph.BatchN(other) > base {
 				return BatchLocked
 			}
 		}
@@ -375,6 +398,25 @@ func (s *State) ConceptStatus(conceptID string) ConceptStatusResult {
 		} else {
 			teachBatches = append(teachBatches, b)
 		}
+	}
+
+	// LatestTeachNotAllPass: true when there are no teach batches above base,
+	// or the latest one has an in-scope question not yet graded "pass" (§7,
+	// §8.6–8.9; Fix 2).
+	if len(teachBatches) == 0 {
+		r.LatestTeachNotAllPass = true
+	} else {
+		latest := teachBatches[len(teachBatches)-1]
+		latestAllPass := true
+		for _, q := range s.batchQs[latest] {
+			a := s.answerFor(q.ID)
+			inScope := a == nil || !a.OOS
+			if inScope && (a == nil || a.Class != "pass") {
+				latestAllPass = false
+				break
+			}
+		}
+		r.LatestTeachNotAllPass = !latestAllPass
 	}
 
 	// Failed probe batches: probe batches above base with ≥1 fail answer.

@@ -179,14 +179,20 @@ func askRun(ctx *Context) int {
 
 	if selectedBatch == "" {
 		// No unresolved teach batch — try probe selection.
-		// §7: refuse when open targets remain and teaching is not spent.
-		// This fires when all teach batches are resolved but the latest had
-		// in-scope fails and there are still failed probes with no passing teach.
-		if len(cs.OpenTargets) > 0 && !cs.TeachingSpent {
-			openTarget := cs.OpenTargets[0]
+		// §7: refuse when failed probe batches remain above base, teaching is
+		// not spent, and the latest teach batch above base is not all-pass (§8.6–8.9).
+		// Uses LatestTeachNotAllPass rather than OpenTargets to key on the latest
+		// batch status, not on a stale per-target accounting (Fix 2).
+		if len(cs.FailedProbeBatches) > 0 && !cs.TeachingSpent && cs.LatestTeachNotAllPass {
+			var openTarget string
+			if len(cs.OpenTargets) > 0 {
+				openTarget = cs.OpenTargets[0]
+			}
 			ctx.ErrMsg = fmt.Sprintf("teaching round for %s is not complete", conceptID)
-			ctx.FixMsg = fmt.Sprintf("add a teach question for %s with tm q %s ... --teach --re %s",
-				openTarget, conceptID, openTarget)
+			if openTarget != "" {
+				ctx.FixMsg = fmt.Sprintf("add a teach question for %s with tm q %s ... --teach --re %s",
+					openTarget, conceptID, openTarget)
+			}
 			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
 			return 1
 		}
