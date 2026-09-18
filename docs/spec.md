@@ -148,7 +148,7 @@ All labels are plain double-quoted strings. Fields are separated by `<br/>`.
 |---|---|
 | Concept | scope; optional `GAP: <gap>`; citations (`file:a-b`, comma-separated) |
 | Question | narrow scope; one citation |
-| Answer | optional `OOS` (teach answers only); then the raw answer while `pending`, replaced by the grader's summary |
+| Answer | optional `OOS` (teach answers only); optional `ASKED: <wording>`; then the raw answer while `pending`, replaced by the grader's summary |
 
 The writer escapes `"` as `#quot;`, `'` as `#39;`, `#` as `#35;`, `<` and `>` as `#lt;` and `#gt;`, and collapses newlines to spaces. `tm check`, `tm show`, and the log unescape. A pending answer holding `it#39;s the #quot;same#quot; entry (I think) [index, term] -> cmd; 100% sure?` parses cleanly on 11.17.2.
 
