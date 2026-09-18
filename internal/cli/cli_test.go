@@ -654,6 +654,7 @@ func TestLint_Success(t *testing.T) {
 }
 
 func TestLint_Success_ViaTMFILE(t *testing.T) {
+	tempErrlog(t)
 	setupRaftSrcRoot(t)
 
 	raftPath := filepath.Join("..", "..", "testdata", "raft.mmd")
@@ -943,6 +944,7 @@ func raftFixture(t *testing.T) string {
 // ── Global --file flag tests ──────────────────────────────────────────────────
 
 func TestGlobalFileFlag_Lint_Success(t *testing.T) {
+	tempErrlog(t)
 	setupRaftSrcRoot(t)
 	t.Setenv("TM_FILE", "")
 	raftPath := raftFixture(t)
@@ -973,6 +975,7 @@ func TestGlobalFileFlag_MissingValue_Exit3(t *testing.T) {
 }
 
 func TestGlobalFileFlag_WinsOverPositional(t *testing.T) {
+	tempErrlog(t)
 	setupRaftSrcRoot(t)
 	t.Setenv("TM_FILE", "")
 	raftPath := raftFixture(t)
