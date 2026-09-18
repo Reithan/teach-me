@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -341,4 +342,108 @@ func askBatchIsReplacement(g *graph.Graph, batchClass string) bool {
 		}
 	}
 	return found // true only if we saw at least one question and all came from answers
+}
+
+// emitAskForConcept runs §8 ask selection and emits lines-format output for
+// conceptID to out. Returns (0, "", "") when output is emitted (or nothing to
+// ask), (1, errMsg, fixMsg) on invariant refusal, (3, errMsg, "") on unknown
+// concept. Does NOT perform file resolution or write to errOut.
+//
+// This is the shared emitter used by statusConcept to chain tm ask output.
+func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code int, errMsg, fixMsg string) {
+	g := s.Graph()
+	cfg := s.Cfg()
+
+	passedSet := make(map[string]bool, len(g.PassedConcepts))
+	for _, c := range g.PassedConcepts {
+		passedSet[c.ID] = true
+	}
+	allConceptSet := make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts))
+	for k := range passedSet {
+		allConceptSet[k] = true
+	}
+	for _, c := range g.UntestedConcepts {
+		allConceptSet[c.ID] = true
+	}
+
+	if !allConceptSet[conceptID] {
+		return 3, fmt.Sprintf("unknown concept %q", conceptID), ""
+	}
+	for _, e := range g.Edges {
+		if e.To == conceptID && allConceptSet[e.From] && !passedSet[e.From] {
+			return 1, fmt.Sprintf("parent %s is not passed", e.From),
+				fmt.Sprintf("pass %s first", e.From)
+		}
+	}
+	cs := s.ConceptStatus(conceptID)
+	if cs.Gated {
+		return 1, fmt.Sprintf("%s is gated", conceptID),
+			fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID)
+	}
+	batches := askConceptBatches(g, s, conceptID)
+	selectedBatch := ""
+	for _, b := range batches {
+		if graph.IsTeachClass(b) && s.BatchStateOf(b) != state.BatchResolved {
+			selectedBatch = b
+			break
+		}
+	}
+	if selectedBatch == "" {
+		if len(cs.OpenTargets) > 0 && !cs.TeachingSpent {
+			openTarget := cs.OpenTargets[0]
+			return 1,
+				fmt.Sprintf("teaching round for %s is not complete", conceptID),
+				fmt.Sprintf("add a teach question for %s with tm q %s ... --teach --re %s",
+					openTarget, conceptID, openTarget)
+		}
+		for _, b := range batches {
+			if !graph.IsProbeClass(b) {
+				continue
+			}
+			bst := s.BatchStateOf(b)
+			if bst == state.BatchLocked || bst == state.BatchResolved {
+				continue
+			}
+			selectedBatch = b
+			break
+		}
+	}
+	if selectedBatch == "" {
+		return 0, "", ""
+	}
+	qCount := askBatchQuestionCount(g, selectedBatch)
+	if graph.IsProbeClass(selectedBatch) && qCount < cfg.ProbeMin {
+		return 1,
+			fmt.Sprintf("batch %s has too few questions (need at least %d)", selectedBatch, cfg.ProbeMin),
+			fmt.Sprintf("add more questions with tm q %s", conceptID)
+	}
+	if graph.IsTeachClass(selectedBatch) && qCount < cfg.TeachMin {
+		return 1,
+			fmt.Sprintf("batch %s has too few questions (need at least %d)", selectedBatch, cfg.TeachMin),
+			fmt.Sprintf("add more questions with tm q %s --teach", conceptID)
+	}
+	answerByQID := buildAnswerMap(g)
+	var unanswered []*graph.QuestionNode
+	for _, item := range g.TestingItems {
+		if item.Q == nil || item.Q.Class != selectedBatch {
+			continue
+		}
+		if _, hasAnswer := answerByQID[item.Q.ID]; !hasAnswer {
+			unanswered = append(unanswered, item.Q)
+		}
+	}
+	if len(unanswered) == 0 {
+		return 0, "", ""
+	}
+	_, _ = fmt.Fprintln(out, selectedBatch)
+	for _, q := range unanswered {
+		line := q.ID + " | " + q.Scope + " | " + q.Cite
+		if graph.IsTeachClass(q.Class) {
+			if targetQID, ok := s.TeachingTarget(q.ID); ok {
+				line += " | re " + targetQID
+			}
+		}
+		_, _ = fmt.Fprintln(out, line)
+	}
+	return 0, "", ""
 }
