@@ -72,7 +72,7 @@ var Table = []Command{
 			{Name: "child", TakesValue: true, ValueName: `<id>:"<rel>"`, Repeatable: true},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          addRun,
 	},
 	{
 		Name: "link",
@@ -82,7 +82,7 @@ var Table = []Command{
 			{Name: `"<rel>"`, Stdin: true},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          linkRun,
 	},
 	{
 		Name: "edit",
