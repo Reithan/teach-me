@@ -1,0 +1,29 @@
+name: Cross-Platform Tests
+
+# macOS and Windows runners bill at 10x and 2x the Linux minute rate, so the
+# per-PR CI (ci.yml) runs Linux only. This workflow exercises the race suite on
+# macOS and Windows on a weekly schedule, and on demand via workflow_dispatch.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Run tests
+        run: go test -race ./...
