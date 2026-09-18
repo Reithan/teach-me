@@ -932,41 +932,70 @@ func TestLifecycle_UpstreamInsert(t *testing.T) {
 
 // ── §12 edge: Gated → Answering (pending probes asked as written) ────────────
 
-// TestLifecycle_GateWithPendingProbes drives the §12 edge where a gated concept
-// (probe gate, dec#23) has unanswered probes ABOVE the gate base after clearing.
-// Scenario: probe_1 fails → probe gate (TM_MAX_FAILS=1) → gate cleared by
-// upstream insert (base=1) → new probe_2 added (N=2 > base=1) → upstream passes
-// → pending probes are asked as written (Gated → Answering).
-// Covers §12 edge: Gated → Answering (unanswered probes asked as written).
+// TestLifecycle_GateWithPendingProbes drives the §12 edge where a stall gate
+// trips while a fallback probe is still unanswered. After the gate clears
+// (base = max batch incl. the teach batch), tm ask emits the former fallback
+// probe AS WRITTEN (§7 gate paragraph, §12 diagram).
+//
+// Scenario: probe_1 (q1 pass, q2 fail) resolved → probe_2 (q3, q4) locked as
+// fallback → teach_3 added, graded fail → stall gate trips (probe_2 still
+// unanswered) → gate cleared via upstream insert (base=3, teach_3 N=3) →
+// upstream passes → ask mycon emits q3, q4 as written.
 func TestLifecycle_GateWithPendingProbes(t *testing.T) {
-	// §12 edge: Gated → Answering (unanswered probes above gate base)
+	// §12 edge: Teaching → Gated (stall) → Answering (fallback probes as written)
 	dir, _ := qSetupDir(t)
-	t.Setenv("TM_PROBE_MIN", "1")
+	t.Setenv("TM_PROBE_MIN", "2")
 	t.Setenv("TM_PROBE_MAX", "5")
-	t.Setenv("TM_MAX_FAILS", "1") // 1 failed probe batch → probe gate immediately
-	t.Setenv("TM_MAX_STALL", "4")
+	t.Setenv("TM_TEACH_MIN", "1")
+	t.Setenv("TM_MAX_STALL", "1") // one all-fail teach batch → stall gate
+	t.Setenv("TM_MAX_FAILS", "2") // keep probe gate from tripping (only 1 failed batch)
 	t.Setenv("TM_MAX_TEACH", "8")
 
-	// gatedConceptGraph: "con" in untested, probe_1 (q1 fail answer) already present.
-	// TM_MAX_FAILS=1 TM_PROBE_MIN=1: "con" is gated (probe_1 has fail).
-	file := buildGatedGraph(t, dir, gatedConceptGraph)
+	// lifecycleTeachReadyGraph: probe_1 (q1 pass, q2 fail) resolved,
+	// probe_2 (q3, q4) locked as fallback, GAP set on mycon.
+	file := qWriteGraph(t, dir, lifecycleTeachReadyGraph())
 
-	// Verify con is gated.
-	_, errOut, code := run(t, "ask", "con")
-	if code != 1 || !strings.Contains(errOut, "is gated") {
-		t.Fatalf("§12 gate+pending probes: want con gated; code=%d err=%s", code, errOut)
+	// Add teach question (teach_3, N=3) targeting q2's fail.
+	out, errOut, code := run(t, "q", "mycon", "src.txt:1-3", "teach scope", "--teach", "--re", "q2")
+	if code != 0 {
+		t.Fatalf("q --teach --re: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	q5 := strings.TrimSpace(out) // teach_3 question ID
+
+	// Answer the teach question.
+	_, errOut, code = run(t, "answer", q5, "wrong answer")
+	if code != 0 {
+		t.Fatalf("answer teach: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
 
-	// ── Gate cleared: add upstream as prerequisite → base=1 ──────────────────
-	out, errOut, code := run(t, "add", "upstream", "src.txt:1-5", "upstream scope", "--child", "con:requires")
+	// Grade fail → teach_3 resolved all-fail → stall streak=1=TM_MAX_STALL → gated.
+	// probe_2 (q3, q4) is still unanswered at this moment.
+	_, errOut, code = run(t, "grade", q5, "fail", "did not explain")
 	if code != 0 {
-		t.Fatalf("add upstream --child con: want exit 0, got %d; stderr:\n%s", code, errOut)
+		t.Fatalf("grade teach fail: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+
+	// Assert: mycon is gated (stall gate tripped while probe_2 was still unanswered).
+	_, errOut, code = run(t, "ask", "mycon")
+	if code != 1 {
+		t.Fatalf("§12 gate+pending probes: want exit 1 (gated), got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "is gated") {
+		t.Errorf("§12 gate+pending probes: want 'is gated' in err, got:\n%s", errOut)
+	}
+
+	// ── Gate cleared via upstream insert ─────────────────────────────────────
+	// base = max batch N = 3 (teach_3 N=3). After clearing, teach_3 N=3 is NOT
+	// > base=3, so probe_2 is no longer locked (BatchStateOf → Draft).
+	out, errOut, code = run(t, "add", "upstream", "src.txt:1-5", "upstream scope", "--child", "mycon:requires")
+	if code != 0 {
+		t.Fatalf("add --child: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
 	if strings.TrimSpace(out) != "ok" {
 		t.Errorf("add --child: want 'ok', got %q", out)
 	}
 
-	// Gate meta for "con" must have base=1 (only probe_1 at N=1 existed).
+	// Gate meta for mycon: base must be 3 (teach_3 N=3 was the max batch).
 	data, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatalf("read graph: %v", err)
@@ -975,41 +1004,59 @@ func TestLifecycle_GateWithPendingProbes(t *testing.T) {
 	if parseErr != nil {
 		t.Fatalf("parse graph: %v", parseErr)
 	}
-	meta := gateMetaFor(g, "con")
+	meta := gateMetaFor(g, "mycon")
 	if meta == nil {
-		t.Fatal("§12 gate+pending probes: want gate meta for 'con' after add --child")
+		t.Fatal("§12 gate+pending probes: want gate meta for 'mycon' after add --child")
 	}
-	if meta.Base != 1 {
-		t.Errorf("§12 gate+pending probes: gate meta base: want 1, got %d", meta.Base)
+	if meta.Base != 3 {
+		t.Errorf("§12 gate+pending probes: gate meta base: want 3 (teach_3 N), got %d", meta.Base)
 	}
 
-	// ── Add new probe batch for "con" (above base=1) ──────────────────────────
-	// After clearing: con is not gated (FailedProbeBatches filtered). Draft probes.
-	out, errOut, code = run(t, "q", "con", "src.txt:1-5", "pending probe 1")
-	if code != 0 {
-		t.Fatalf("q con probe 1: want exit 0, got %d; stderr:\n%s", code, errOut)
+	// Gate event must record trip=stall, via=add, base=3.
+	rows := readEventLog(t, file)
+	gateRows := eventsByType(rows, "gate")
+	if len(gateRows) != 1 {
+		t.Fatalf("§12 gate+pending probes: want 1 gate event, got %d", len(gateRows))
 	}
-	qP1 := strings.TrimSpace(out) // BatchN=2 > base=1
-
-	out, errOut, code = run(t, "q", "con", "src.txt:3-5", "pending probe 2")
-	if code != 0 {
-		t.Fatalf("q con probe 2: want exit 0, got %d; stderr:\n%s", code, errOut)
+	gr := gateRows[0]
+	if gr["trip"] != "stall" {
+		t.Errorf("§12 gate+pending probes: gate event trip: want 'stall', got %v", gr["trip"])
 	}
-	qP2 := strings.TrimSpace(out)
+	if gr["via"] != "add" {
+		t.Errorf("§12 gate+pending probes: gate event via: want 'add', got %v", gr["via"])
+	}
+	baseVal, _ := gr["base"].(float64)
+	if int(baseVal) != 3 {
+		t.Errorf("§12 gate+pending probes: gate event base: want 3, got %v", gr["base"])
+	}
 
 	// ── Upstream passes ───────────────────────────────────────────────────────
-	out, errOut, code = run(t, "q", "upstream", "src.txt:1-5", "upstream probe")
+	// Need TM_PROBE_MIN=2 probes for upstream.
+	out, errOut, code = run(t, "q", "upstream", "src.txt:1-5", "upstream probe 1")
 	if code != 0 {
-		t.Fatalf("q upstream: want exit 0, got %d; stderr:\n%s", code, errOut)
+		t.Fatalf("q upstream 1: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	qUp := strings.TrimSpace(out)
-	_, errOut, code = run(t, "answer", qUp, "upstream understood")
+	qUp1 := strings.TrimSpace(out)
+	out, errOut, code = run(t, "q", "upstream", "src.txt:3-5", "upstream probe 2")
 	if code != 0 {
-		t.Fatalf("answer upstream: want exit 0, got %d; stderr:\n%s", code, errOut)
+		t.Fatalf("q upstream 2: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	_, errOut, code = run(t, "grade", qUp, "pass", "good")
+	qUp2 := strings.TrimSpace(out)
+	_, errOut, code = run(t, "answer", qUp1, "upstream answer 1")
 	if code != 0 {
-		t.Fatalf("grade upstream: want exit 0, got %d; stderr:\n%s", code, errOut)
+		t.Fatalf("answer upstream 1: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	_, errOut, code = run(t, "answer", qUp2, "upstream answer 2")
+	if code != 0 {
+		t.Fatalf("answer upstream 2: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	_, errOut, code = run(t, "grade", qUp1, "pass", "good")
+	if code != 0 {
+		t.Fatalf("grade upstream 1: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	_, errOut, code = run(t, "grade", qUp2, "pass", "good")
+	if code != 0 {
+		t.Fatalf("grade upstream 2: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
 
 	// Verify upstream in passed.
@@ -1025,38 +1072,40 @@ func TestLifecycle_GateWithPendingProbes(t *testing.T) {
 		t.Error("§12 gate+pending probes: upstream must pass after probe all pass")
 	}
 
-	// ── Gated → Answering: ask emits the pending probes above gate base ───────
-	// §12: "Unanswered probes are asked as written"
-	askOut, errOut, code := run(t, "ask", "con")
+	// ── Gated → Answering: former fallback probes asked as written ────────────
+	// §7 gate paragraph: "Probes left unanswered from before the gate stop being
+	// fallback probes and are asked as written."
+	// probe_2 (q3, q4) is no longer locked — BatchStateOf returns Draft.
+	askOut, errOut, code := run(t, "ask", "mycon")
 	if code != 0 {
-		t.Fatalf("§12 gate+pending probes: ask con after upstream passes: want exit 0, got %d; stderr:\n%s", code, errOut)
+		t.Fatalf("§12 gate+pending probes: ask mycon after upstream passes: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	if !strings.Contains(askOut, qP1) {
-		t.Errorf("§12 gate+pending probes: ask: want %s in output, got:\n%s", qP1, askOut)
+	if !strings.Contains(askOut, "q3") {
+		t.Errorf("§12 gate+pending probes: ask: want q3 in output, got:\n%s", askOut)
 	}
-	if !strings.Contains(askOut, qP2) {
-		t.Errorf("§12 gate+pending probes: ask: want %s in output, got:\n%s", qP2, askOut)
+	if !strings.Contains(askOut, "q4") {
+		t.Errorf("§12 gate+pending probes: ask: want q4 in output, got:\n%s", askOut)
 	}
 
-	// Answer + grade pending probes → con passes.
-	_, errOut, code = run(t, "answer", qP1, "probe answer 1")
+	// Answer + grade probe_2 probes → mycon passes.
+	_, errOut, code = run(t, "answer", "q3", "probe answer 1")
 	if code != 0 {
-		t.Fatalf("§12 gate+pending probes: answer %s: want exit 0, got %d; stderr:\n%s", qP1, code, errOut)
+		t.Fatalf("§12 gate+pending probes: answer q3: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	_, errOut, code = run(t, "answer", qP2, "probe answer 2")
+	_, errOut, code = run(t, "answer", "q4", "probe answer 2")
 	if code != 0 {
-		t.Fatalf("§12 gate+pending probes: answer %s: want exit 0, got %d; stderr:\n%s", qP2, code, errOut)
+		t.Fatalf("§12 gate+pending probes: answer q4: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	_, errOut, code = run(t, "grade", qP1, "pass", "good")
+	_, errOut, code = run(t, "grade", "q3", "pass", "good")
 	if code != 0 {
-		t.Fatalf("§12 gate+pending probes: grade %s: want exit 0, got %d; stderr:\n%s", qP1, code, errOut)
+		t.Fatalf("§12 gate+pending probes: grade q3: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	_, errOut, code = run(t, "grade", qP2, "pass", "good")
+	_, errOut, code = run(t, "grade", "q4", "pass", "good")
 	if code != 0 {
-		t.Fatalf("§12 gate+pending probes: grade %s: want exit 0, got %d; stderr:\n%s", qP2, code, errOut)
+		t.Fatalf("§12 gate+pending probes: grade q4: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
 
-	// "con" must now be passed.
+	// mycon must now be passed.
 	data, err = os.ReadFile(file)
 	if err != nil {
 		t.Fatalf("read graph: %v", err)
@@ -1065,17 +1114,17 @@ func TestLifecycle_GateWithPendingProbes(t *testing.T) {
 	if parseErr != nil {
 		t.Fatalf("parse graph: %v", parseErr)
 	}
-	conPassed := false
+	myconPassed := false
 	for _, c := range g.PassedConcepts {
-		if c.ID == "con" {
-			conPassed = true
+		if c.ID == "mycon" {
+			myconPassed = true
 		}
 	}
-	if !conPassed {
-		t.Error("§12 gate+pending probes: 'con' must pass after pending probes all pass")
+	if !myconPassed {
+		t.Error("§12 gate+pending probes: 'mycon' must pass after probe_2 all pass")
 	}
 
-	lintM6(t, file, dir, 1)
+	lintM6(t, file, dir, 2)
 }
 
 // ── §16.5 concurrency: 20 parallel grade calls ───────────────────────────────
