@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -41,6 +42,11 @@ func TestGraphProperty_RoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Parse(Write(g)) failed for seed %d: %v\nOutput:\n%s",
 					seed, err, out1)
+			}
+
+			// parse(write(g)) must equal g structurally.
+			if !reflect.DeepEqual(g, g2) {
+				t.Errorf("seed %d: Parse(Write(g)) != g (model round-trip failed)", seed)
 			}
 
 			out2 := graph.Write(g2)
@@ -181,8 +187,10 @@ func checkDeclsBeforeEdges(t *testing.T, seed int64, blkName, blockOut string) {
 				lastDeclLine = i
 			}
 		}
-		// An edge line contains ` --> ` (> is escaped in labels to #gt;, so safe).
-		if strings.Contains(trimmed, " --> ") {
+		// An edge line contains "-->": either " --> " (structural) or
+		// `--"..."--> ` (labelled). The ">" in node labels is escaped to
+		// "#gt;" so "-->" never appears inside a declaration.
+		if strings.Contains(trimmed, "-->") {
 			if firstEdgeLine < 0 {
 				firstEdgeLine = i
 			}
