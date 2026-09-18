@@ -478,17 +478,16 @@ func TestUnknownCommand_ShowsBaselineHelp(t *testing.T) {
 func TestNilRunPlaceholder_Exit3(t *testing.T) {
 	errlogPath := tempErrlog(t)
 	t.Setenv("TM_ROLE", "")
+	t.Setenv("TM_FILE", "")
+	t.Chdir(t.TempDir()) // empty dir — no .tmconfig
 
-	// "grade" has nil Run in this build (answer is now implemented).
+	// grade is now implemented; with no graph file it exits 3.
 	_, errOut, code := run(t, "grade", "q1", "pass", "summary")
 	if code != 3 {
 		t.Fatalf("want exit 3, got %d", code)
 	}
-	if !strings.Contains(errOut, "err: grade is not implemented in this build") {
-		t.Errorf("want 'not implemented' err; got:\n%s", errOut)
-	}
-	if !strings.Contains(errOut, "fix: tm grade") {
-		t.Errorf("want 'fix:' with usage; got:\n%s", errOut)
+	if !strings.Contains(errOut, "err: no graph file") {
+		t.Errorf("want 'no graph file' err; got:\n%s", errOut)
 	}
 
 	rows := readErrlog(t, errlogPath)
@@ -501,18 +500,19 @@ func TestNilRunPlaceholder_Exit3(t *testing.T) {
 }
 
 func TestNilRunPlaceholder_GradeNotImplemented(t *testing.T) {
-	// grade has nil Run but is also exempt from grader ban.
-	// With no TM_ROLE set, the nil-Run placeholder should fire.
+	// grade is now implemented; verify it passes the role guard and reaches the
+	// handler, which exits 3 when no graph file is available.
 	t.Setenv("TM_ROLE", "")
+	t.Setenv("TM_FILE", "")
 	tempErrlog(t)
+	t.Chdir(t.TempDir()) // empty dir — no .tmconfig
 
-	// grade needs 3 positionals; give them to get past parse.
 	_, errOut, code := run(t, "grade", "q1", "pass", "summary")
 	if code != 3 {
 		t.Fatalf("want exit 3, got %d", code)
 	}
-	if !strings.Contains(errOut, "grade is not implemented in this build") {
-		t.Errorf("want grade not implemented; got:\n%s", errOut)
+	if strings.Contains(errOut, "not implemented") {
+		t.Errorf("grade should be implemented; got:\n%s", errOut)
 	}
 }
 

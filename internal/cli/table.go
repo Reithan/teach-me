@@ -185,7 +185,7 @@ var Table = []Command{
 		},
 		ForbidGrader:  false,
 		ForbidTeacher: true,
-		Run:           nil,
+		Run:           gradeRun,
 	},
 	{
 		Name: "lint",
