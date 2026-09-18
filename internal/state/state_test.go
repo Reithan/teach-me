@@ -442,6 +442,130 @@ func TestBatchStateOf_Unknown(t *testing.T) {
 	}
 }
 
+// TestBatchStateOf_GateBase_NoLock verifies Fix 1: a probe batch whose N is
+// below a teach batch's N is NOT locked when the teach batch's N equals the
+// gate base. Before the fix, BatchStateOf ignored the base and returned
+// BatchLocked even for teach batches at or below base.
+func TestBatchStateOf_GateBase_NoLock(t *testing.T) {
+	// probe_3 (N=3), teach_4 (N=4, resolved pass), gate base=4.
+	// teach_4's N (4) is not strictly above base (4), so it must not lock probe_3.
+	g := `flowchart TB
+    subgraph passed["Passed"]
+    end
+    subgraph untested["Untested"]
+        foo["Foo<br/>f.txt:1-10"]
+        %% tm:gate foo base=4
+    end
+    subgraph testing["Testing"]
+        q3["Q<br/>f.txt:1-5"]:::probe_3
+        q4["Q<br/>f.txt:1-5"]:::teach_4
+        a4["pass"]:::pass
+        foo --> q3
+        foo --> q4
+        q4 --> a4
+    end
+    classDef probe_3,probe_1 stroke:#4aa3ff
+    classDef teach_4 stroke:#c9a227
+    classDef pass stroke:#3fb950
+`
+	s := mustLoad(t, g, defaultCfg())
+	got := s.BatchStateOf("probe_3")
+	if got != BatchDraft {
+		t.Errorf("BatchStateOf(probe_3) = %v, want BatchDraft; "+
+			"teach_4 at gate base must not lock probe_3 (Fix 1)", got)
+	}
+}
+
+// TestConceptStatus_LatestTeachNotAllPass_NoTeachBatches verifies that
+// LatestTeachNotAllPass is true when no teach batches exist above base.
+func TestConceptStatus_LatestTeachNotAllPass_NoTeachBatches(t *testing.T) {
+	g := `flowchart TB
+    subgraph passed["Passed"]
+    end
+    subgraph untested["Untested"]
+        foo["Foo<br/>f.txt:1-10"]
+    end
+    subgraph testing["Testing"]
+        q1["Q<br/>f.txt:1-5"]:::probe_1
+        foo --> q1
+    end
+    classDef probe_1 stroke:#4aa3ff
+`
+	s := mustLoad(t, g, defaultCfg())
+	cs := s.ConceptStatus("foo")
+	if !cs.LatestTeachNotAllPass {
+		t.Error("LatestTeachNotAllPass should be true when no teach batches exist above base")
+	}
+}
+
+// TestConceptStatus_LatestTeachNotAllPass_LatestAllPass verifies that
+// LatestTeachNotAllPass is false when the latest teach batch is all-pass.
+func TestConceptStatus_LatestTeachNotAllPass_LatestAllPass(t *testing.T) {
+	// probe_1 (q1 fail), teach_2 (q2 pass) — latest batch is all-pass.
+	g := `flowchart TB
+    subgraph passed["Passed"]
+    end
+    subgraph untested["Untested"]
+        foo["Foo<br/>f.txt:1-10"]
+    end
+    subgraph testing["Testing"]
+        q1["Q<br/>f.txt:1-5"]:::probe_1
+        a1["fail"]:::fail
+        q2["Q<br/>f.txt:1-5"]:::teach_2
+        a2["pass"]:::pass
+        foo --> q1
+        q1 --> a1
+        a1 --> q2
+        q2 --> a2
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef teach_2 stroke:#c9a227
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+`
+	s := mustLoad(t, g, defaultCfg())
+	cs := s.ConceptStatus("foo")
+	if cs.LatestTeachNotAllPass {
+		t.Error("LatestTeachNotAllPass should be false when latest teach batch is all-pass")
+	}
+}
+
+// TestConceptStatus_LatestTeachNotAllPass_LatestHasFail verifies that
+// LatestTeachNotAllPass is true when the latest teach batch has a non-pass answer.
+func TestConceptStatus_LatestTeachNotAllPass_LatestHasFail(t *testing.T) {
+	// probe_1 (q1 fail), teach_2 (q2 pass), teach_4 (q4 fail) — latest has fail.
+	g := `flowchart TB
+    subgraph passed["Passed"]
+    end
+    subgraph untested["Untested"]
+        foo["Foo<br/>f.txt:1-10"]
+    end
+    subgraph testing["Testing"]
+        q1["Q<br/>f.txt:1-5"]:::probe_1
+        a1["fail"]:::fail
+        q2["Q<br/>f.txt:1-5"]:::teach_2
+        a2["pass"]:::pass
+        q4["Q<br/>f.txt:1-5"]:::teach_4
+        a4["fail"]:::fail
+        foo --> q1
+        q1 --> a1
+        a1 --> q2
+        q2 --> a2
+        a2 --> q4
+        q4 --> a4
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef teach_2,teach_4 stroke:#c9a227
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+`
+	s := mustLoad(t, g, defaultCfg())
+	cs := s.ConceptStatus("foo")
+	if !cs.LatestTeachNotAllPass {
+		t.Error("LatestTeachNotAllPass should be true when latest teach batch has a fail answer")
+	}
+}
+
 // --- TeachingTarget ---
 
 func TestTeachingTarget_Basic(t *testing.T) {

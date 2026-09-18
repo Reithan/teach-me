@@ -621,3 +621,381 @@ func TestAsk_Override_OtherRefusalsStillApply(t *testing.T) {
 		t.Fatalf("want exit 0 (parent is passed), got %d; stderr:\n%s", code, errOut)
 	}
 }
+
+// ── G. Fix 1: ask emits former fallback probe after gate clear ─────────────────
+
+// gatedClearedFallbackGraph has a gate meta (base=4) already written and a
+// probe_3 question (q3) that was formerly a fallback probe locked by teach_4.
+// After the gate clear, probe_3 must be emittable by ask (Fix 1).
+const gatedClearedFallbackGraph = `---
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---
+flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        con["Con scope<br/>src.txt:1-5"]
+        %% tm:gate con base=4
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        a1["fail answer"]:::fail
+        q2["teach scope<br/>src.txt:1-5"]:::teach_2
+        a2["pass answer"]:::pass
+        q3["probe scope<br/>src.txt:1-5"]:::probe_3
+        q4["teach scope<br/>src.txt:1-5"]:::teach_4
+        a4["pass answer"]:::pass
+        con --> q1
+        con --> q3
+        q1 --> a1
+        a1 --> q2
+        a1 --> q4
+        q2 --> a2
+        q4 --> a4
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef probe_3 stroke:#4aa3ff
+    classDef teach_2 stroke:#c9a227
+    classDef teach_4 stroke:#c9a227
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+// TestAsk_FallbackProbeEmitted_AfterGateClear verifies Fix 1: once a gate is
+// cleared (gate meta base=4 is already present), ask emits the formerly-locked
+// fallback probe (probe_3 / q3) rather than returning nothing.
+// Before the fix, BatchStateOf(probe_3) returned BatchLocked because teach_4
+// (N=4 > probeN=3) existed, even though teach_4 was at the gate base.
+func TestAsk_FallbackProbeEmitted_AfterGateClear(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	t.Setenv("TM_FILE", "")
+	t.Setenv("TM_MAX_FAILS", "1")
+	t.Setenv("TM_PROBE_MIN", "1")
+	t.Setenv("TM_TEACH_MIN", "1")
+	setupSrcFile(t, dir)
+	buildGatedGraph(t, dir, gatedClearedFallbackGraph)
+
+	out, errOut, code := run(t, "ask", "con")
+	if code != 0 {
+		t.Fatalf("want exit 0 (gate cleared, probe_3 should be emittable), got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(out, "probe_3") {
+		t.Errorf("want 'probe_3' batch in ask output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "q3") {
+		t.Errorf("want question 'q3' in ask output, got:\n%s", out)
+	}
+}
+
+// ── H. Fix 2a: no refusal when latest teach batch is all-pass ─────────────────
+
+// latestTeachAllPassGraph has two fail questions in probe_1 (q1, q5), but
+// the latest teach batch (teach_4) is all-pass. Under the old OpenTargets
+// condition, ask would refuse because q5 has no passing teach. Under Fix 2,
+// ask does not refuse because LatestTeachNotAllPass is false.
+const latestTeachAllPassGraph = `---
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---
+flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        con["Con scope<br/>src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        a1["fail answer"]:::fail
+        q5["probe scope<br/>src.txt:1-5"]:::probe_1
+        a5["fail answer"]:::fail
+        q2["teach scope<br/>src.txt:1-5"]:::teach_2
+        a2["pass answer"]:::pass
+        q4["teach scope<br/>src.txt:1-5"]:::teach_4
+        a4["pass answer"]:::pass
+        con --> q1
+        con --> q5
+        q1 --> a1
+        q5 --> a5
+        a1 --> q2
+        q2 --> a2
+        a2 --> q4
+        q4 --> a4
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef teach_2 stroke:#c9a227
+    classDef teach_4 stroke:#c9a227
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+// TestAsk_NoRefusal_WhenLatestTeachAllPass verifies Fix 2 (over-refusal path):
+// ask must NOT refuse with "teaching round is not complete" when the latest
+// teach batch above base is all-pass, even if some failed probe question has
+// no passing teach question targeting it (OpenTargets > 0).
+func TestAsk_NoRefusal_WhenLatestTeachAllPass(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	t.Setenv("TM_FILE", "")
+	t.Setenv("TM_MAX_FAILS", "3") // not gated: 1 failed batch < MaxFails=3
+	t.Setenv("TM_PROBE_MIN", "1")
+	t.Setenv("TM_TEACH_MIN", "1")
+	setupSrcFile(t, dir)
+	buildGatedGraph(t, dir, latestTeachAllPassGraph)
+
+	_, errOut, code := run(t, "ask", "con")
+	if code != 0 {
+		t.Fatalf("want exit 0 (latest teach all-pass, no refusal), got %d; stderr:\n%s", code, errOut)
+	}
+	if strings.Contains(errOut, "teaching round") {
+		t.Errorf("want no 'teaching round' refusal when latest teach is all-pass; got:\n%s", errOut)
+	}
+}
+
+// ── I. Fix 2b: refusal fires when latest teach batch has a non-pass answer ────
+
+// latestTeachHasFailGraph has probe_1 (q1 fail), teach_2 (q2 pass covers q1),
+// and teach_4 (q4 fail). The latest teach batch (teach_4) is not all-pass.
+// Under the old OpenTargets condition, ask would NOT refuse (OpenTargets=[]).
+// Under Fix 2, ask refuses because LatestTeachNotAllPass is true.
+const latestTeachHasFailGraph = `---
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---
+flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        con["Con scope<br/>src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        a1["fail answer"]:::fail
+        q2["teach scope<br/>src.txt:1-5"]:::teach_2
+        a2["pass answer"]:::pass
+        q4["teach scope<br/>src.txt:1-5"]:::teach_4
+        a4["fail answer"]:::fail
+        con --> q1
+        q1 --> a1
+        a1 --> q2
+        q2 --> a2
+        a2 --> q4
+        q4 --> a4
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef teach_2 stroke:#c9a227
+    classDef teach_4 stroke:#c9a227
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+// TestAsk_Refuse_WhenLatestTeachHasFail verifies Fix 2 (under-refusal path):
+// ask must refuse with "teaching round is not complete" when the latest teach
+// batch above base has a non-pass answer, even if OpenTargets is empty
+// (the failed probe is already covered by an earlier passing teach question).
+func TestAsk_Refuse_WhenLatestTeachHasFail(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	t.Setenv("TM_FILE", "")
+	t.Setenv("TM_MAX_FAILS", "3") // not gated: 1 failed batch < MaxFails=3
+	t.Setenv("TM_PROBE_MIN", "1")
+	t.Setenv("TM_TEACH_MIN", "1")
+	setupSrcFile(t, dir)
+	buildGatedGraph(t, dir, latestTeachHasFailGraph)
+
+	_, errOut, code := run(t, "ask", "con")
+	if code != 1 {
+		t.Fatalf("want exit 1 (latest teach has fail → teaching incomplete), got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "teaching round for con is not complete") {
+		t.Errorf("want 'teaching round for con is not complete' in stderr, got:\n%s", errOut)
+	}
+}
+
+// ── J/K. Fix 3: answer --override clear-then-refusal pattern ──────────────────
+
+// gatedFallbackProbeUnresolvedTeachGraph is a gated concept "con" (probe_1
+// with two fail questions q1/q5, TM_MAX_FAILS=1) with an unanswered teach_2
+// and an unanswered probe_3 (only one question, q3).
+//
+// probe_1 has 2 questions so it passes lint even at TM_PROBE_MIN=2.
+// probe_3 has 1 question so the apply-level min-count check fires when
+// TM_PROBE_MIN=2 (Test K), but not when TM_PROBE_MIN=1 (Test J).
+//
+// Under old code, answering q3 with --override would wrongly refuse at the
+// fallback-probe check (teach_2 is unresolved) using the pre-clear state.
+// Under Fix 3, the gate is cleared first, making the fallback-probe check
+// irrelevant (all batches fall to/below the new base after clear).
+const gatedFallbackProbeUnresolvedTeachGraph = `---
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---
+flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        con["Con scope<br/>src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        a1["fail answer"]:::fail
+        q5["probe scope<br/>src.txt:1-5"]:::probe_1
+        a5["fail answer"]:::fail
+        q2["teach scope<br/>src.txt:1-5"]:::teach_2
+        q3["probe scope<br/>src.txt:1-5"]:::probe_3
+        con --> q1
+        con --> q5
+        con --> q3
+        q1 --> a1
+        q5 --> a5
+        a1 --> q2
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef probe_3 stroke:#4aa3ff
+    classDef teach_2 stroke:#c9a227
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+// TestAnswer_Override_FallbackProbe_ClearsGateAndSucceeds verifies Fix 3:
+// `tm answer q3 "raw" --override "reason"` on a gated concept must clear the
+// gate FIRST, then evaluate remaining refusals against the post-clear state.
+// The fallback-probe refusal (teach_2 unresolved) must NOT fire because after
+// the gate clear, all batches fall to/below the new base and cs.FallbackProbes
+// is empty. The gate line must be persisted before the answer.
+func TestAnswer_Override_FallbackProbe_ClearsGateAndSucceeds(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	t.Setenv("TM_FILE", "")
+	t.Setenv("TM_MAX_FAILS", "1")
+	t.Setenv("TM_PROBE_MIN", "1")
+	t.Setenv("TM_TEACH_MIN", "1")
+	setupSrcFile(t, dir)
+	file := buildGatedGraph(t, dir, gatedFallbackProbeUnresolvedTeachGraph)
+
+	out, errOut, code := run(t, "answer", "q3", "my answer", "--override", "override reason")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	if strings.TrimSpace(out) != "ok" {
+		t.Errorf("want 'ok', got %q", out)
+	}
+
+	// Gate meta must be written. base = max(N of probe_1=1, teach_2=2, probe_3=3) = 3.
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read graph: %v", err)
+	}
+	g, parseErr := graph.Parse(data)
+	if parseErr != nil {
+		t.Fatalf("parse graph: %v", parseErr)
+	}
+	meta := gateMetaFor(g, "con")
+	if meta == nil {
+		t.Fatal("want gate meta for 'con' after answer --override, got none")
+	}
+	if meta.Base != 3 {
+		t.Errorf("gate meta base: want 3 (max of probe_1=1, teach_2=2, probe_3=3), got %d", meta.Base)
+	}
+
+	// Gate event must precede answer event in the log.
+	rows := readEventLog(t, file)
+	gateRows := eventsByType(rows, "gate")
+	answerRows := eventsByType(rows, "answer")
+	if len(gateRows) != 1 {
+		t.Fatalf("want 1 gate event, got %d; all rows: %v", len(gateRows), rows)
+	}
+	if len(answerRows) != 1 {
+		t.Fatalf("want 1 answer event, got %d", len(answerRows))
+	}
+	gr := gateRows[0]
+	if gr["via"] != "override" {
+		t.Errorf("gate event via: want 'override', got %v", gr["via"])
+	}
+	if gr["reason"] != "override reason" {
+		t.Errorf("gate event reason: want 'override reason', got %v", gr["reason"])
+	}
+	var gateIdx, answerIdx int
+	for i, r := range rows {
+		if r["ev"] == "gate" {
+			gateIdx = i
+		}
+		if r["ev"] == "answer" {
+			answerIdx = i
+		}
+	}
+	if gateIdx >= answerIdx {
+		t.Errorf("gate event (idx %d) must precede answer event (idx %d)", gateIdx, answerIdx)
+	}
+}
+
+// TestAnswer_Override_NoGatePersisted_OnSubsequentRefusal verifies the owner
+// ruling for Fix 3: when answer --override clears the gate but a subsequent
+// refusal fires (here: probe_3 has only 1 question, below TM_PROBE_MIN=2),
+// the gate line must NOT be persisted (the whole mutation is atomically aborted).
+func TestAnswer_Override_NoGatePersisted_OnSubsequentRefusal(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	t.Setenv("TM_FILE", "")
+	t.Setenv("TM_MAX_FAILS", "1")
+	t.Setenv("TM_PROBE_MIN", "2") // probe_3 has 1 question < min 2 → refusal fires
+	t.Setenv("TM_TEACH_MIN", "1")
+	setupSrcFile(t, dir)
+	file := buildGatedGraph(t, dir, gatedFallbackProbeUnresolvedTeachGraph)
+
+	_, errOut, code := run(t, "answer", "q3", "my answer", "--override", "override reason")
+	if code != 1 {
+		t.Fatalf("want exit 1 (min-count refusal after gate clear), got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "too few questions") {
+		t.Errorf("want 'too few questions' error in stderr, got:\n%s", errOut)
+	}
+
+	// Gate meta must NOT be written (mutation was aborted).
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read graph: %v", err)
+	}
+	g, _ := graph.Parse(data)
+	if meta := gateMetaFor(g, "con"); meta != nil {
+		t.Errorf("want no gate meta when mutation is aborted; got meta %+v", meta)
+	}
+}
