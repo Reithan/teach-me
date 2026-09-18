@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - main
+  workflow_call:
 
 jobs:
   lint:
@@ -121,6 +122,19 @@ jobs:
         run: go run ./internal/tools/corpus -out conformance/corpus
       - name: Run Mermaid conformance suite
         run: node conformance/parse.mjs
+
+  version-sync:
+    name: Version Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Check version sync
+        run: make version-sync
 
   release-check:
     name: Release Check
