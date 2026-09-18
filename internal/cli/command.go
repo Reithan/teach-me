@@ -45,6 +45,11 @@ type Context struct {
 	// Flags holds parsed flag values. Boolean flags map to [""]. Repeatable
 	// flags may hold multiple values.
 	Flags map[string][]string
+	// FileFlag holds the value of the global --file flag, if supplied.
+	// The dispatcher extracts it from the raw args before per-command parsing
+	// so handlers receive it without needing to declare it in their FlagSpec.
+	// Priority per §3: --file > $TM_FILE > .tmconfig.
+	FileFlag string
 	// Out is the stdout writer for command output.
 	Out io.Writer
 	// ErrOut is the stderr writer for err:/fix: diagnostic lines.

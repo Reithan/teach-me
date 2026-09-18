@@ -104,6 +104,28 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 		return code
 	}
 
+	// ── Global --file extraction (§3) ───────────────────────────────────────
+	// Strip --file <value> from remaining before per-command parsing so that
+	// individual commands do not need to declare it in their FlagSpec.
+	var fileFlag string
+	filtered := remaining[:0:len(remaining)]
+	for i := 0; i < len(remaining); i++ {
+		if remaining[i] == "--file" {
+			if i+1 >= len(remaining) {
+				errMsg := "--file requires a value"
+				fixMsg := cmd.Usage()
+				writeErrFix(errOut, errMsg, fixMsg)
+				appendErrLog(role, args, 3, errMsg, &fixMsg)
+				return 3
+			}
+			fileFlag = remaining[i+1]
+			i++ // consume the value token
+		} else {
+			filtered = append(filtered, remaining[i])
+		}
+	}
+	remaining = filtered
+
 	// ── Structural arg parse ─────────────────────────────────────────────────
 	pos, flags, parseErrMsg := parseArgs(cmd, remaining)
 	if parseErrMsg != "" {
@@ -126,6 +148,7 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 	ctx := &Context{
 		Positionals: pos,
 		Flags:       flags,
+		FileFlag:    fileFlag,
 		Out:         out,
 		ErrOut:      errOut,
 	}
