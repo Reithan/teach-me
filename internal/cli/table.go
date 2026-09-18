@@ -35,7 +35,7 @@ var Table = []Command{
 			{Name: "concept", TakesValue: true, ValueName: "<id>"},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          statusRun,
 	},
 	{
 		Name: "find",
@@ -46,7 +46,7 @@ var Table = []Command{
 			{Name: "kind", TakesValue: true, ValueName: "concept|q|a", Values: []string{"concept", "q", "a"}},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          findRun,
 	},
 	{
 		// show is exempt from the grader ban (§7).
@@ -58,7 +58,7 @@ var Table = []Command{
 			{Name: "history"},
 		},
 		ForbidGrader: false,
-		Run:          nil,
+		Run:          showRun,
 	},
 	{
 		Name: "add",
