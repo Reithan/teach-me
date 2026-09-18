@@ -157,8 +157,10 @@ func askRun(ctx *Context) int {
 	}
 
 	// §7: refuse when the selected batch is under its minimum.
+	// §8.5: replacement batches (all questions incoming from answers, not concepts)
+	// are exempt from ProbeMin.
 	qCount := askBatchQuestionCount(g, selectedBatch)
-	if graph.IsProbeClass(selectedBatch) && qCount < cfg.ProbeMin {
+	if graph.IsProbeClass(selectedBatch) && !askBatchIsReplacement(g, selectedBatch) && qCount < cfg.ProbeMin {
 		ctx.ErrMsg = fmt.Sprintf("batch %s has too few questions (need at least %d)", selectedBatch, cfg.ProbeMin)
 		ctx.FixMsg = fmt.Sprintf("add more questions with tm q %s", conceptID)
 		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
@@ -308,4 +310,35 @@ func askBatchQuestionCount(g *graph.Graph, batchClass string) int {
 		}
 	}
 	return n
+}
+
+// askBatchIsReplacement reports whether batchClass is a §8.5 replacement probe
+// batch. A replacement batch has every question's single incoming edge coming
+// from an answer node (unclear answer being replaced), not from a concept.
+// Replacement batches are exempt from ProbeMin/ProbeMax.
+func askBatchIsReplacement(g *graph.Graph, batchClass string) bool {
+	// Build an answer-ID set for fast membership tests.
+	answerIDs := make(map[string]bool)
+	for _, item := range g.TestingItems {
+		if item.A != nil {
+			answerIDs[item.A.ID] = true
+		}
+	}
+	// Build a map from node ID to the ID of its single incoming node.
+	inFrom := make(map[string]string)
+	for _, e := range g.Edges {
+		inFrom[e.To] = e.From
+	}
+	found := false
+	for _, item := range g.TestingItems {
+		if item.Q == nil || item.Q.Class != batchClass {
+			continue
+		}
+		found = true
+		src, ok := inFrom[item.Q.ID]
+		if !ok || !answerIDs[src] {
+			return false // at least one question whose source is not an answer
+		}
+	}
+	return found // true only if we saw at least one question and all came from answers
 }

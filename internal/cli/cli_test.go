@@ -1419,6 +1419,57 @@ func TestAsk_NoFileResolved_Exit3(t *testing.T) {
 	}
 }
 
+func TestAsk_ReplacementBatch_ExemptFromProbeMin(t *testing.T) {
+	// §8.5: replacement probe batches are exempt from ProbeMin.
+	// Graph: mycon → q1 (probe_1, unclear) → a1 (unclear) →
+	//   q2 (teach_2) → a2 (pass)   [teaching done, so OpenTargets is empty]
+	//   a1 → q3 (probe_3, 1 replacement question)
+	// ProbeMin=2, so probe_3 has fewer questions than ProbeMin.
+	// Without the fix, tm ask refuses probe_3. With the fix, it succeeds.
+	tempErrlog(t)
+	setupCheckSrcRoot(t)
+
+	g := `flowchart TB
+    subgraph passed["Passed"]
+    end
+    subgraph untested["Untested"]
+        mycon["My concept<br/>src.txt:1-5"]
+    end
+    subgraph testing["Testing"]
+        q1["Q1<br/>src.txt:1-3"]:::probe_1
+        a1["Unclear answer"]:::unclear
+        q2["Q2<br/>src.txt:1-3"]:::teach_2
+        a2["Pass answer"]:::pass
+        q3["Q3<br/>src.txt:1-3"]:::probe_3
+        mycon --> q1
+        q1 --> a1
+        a1 --> q2
+        q2 --> a2
+        a1 --> q3
+    end
+    classDef probe_1,probe_3 stroke:#4aa3ff
+    classDef teach_2 stroke:#c9a227
+    classDef unclear stroke:#d29922
+    classDef pass stroke:#3fb950
+`
+	dir := t.TempDir()
+	gfile := filepath.Join(dir, "rep.mmd")
+	if err := os.WriteFile(gfile, []byte(g), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_FILE", gfile)
+	t.Setenv("TM_PROBE_MIN", "2") // explicitly set to make the exemption visible
+
+	out, errOut, code := run(t, "ask", "mycon")
+	if code != 0 {
+		t.Fatalf("want exit 0 for replacement batch, got %d; stderr:\n%s", code, errOut)
+	}
+	// probe_3 is the replacement batch and should be selected.
+	if !strings.Contains(out, "probe_3") {
+		t.Errorf("want probe_3 batch; got:\n%s", out)
+	}
+}
+
 // ── Errlog row completeness test ──────────────────────────────────────────────
 
 func TestErrlogRow_Completeness_Lint(t *testing.T) {
