@@ -16,8 +16,8 @@ import (
 
 const (
 	pollInterval  = 25 * time.Millisecond
-	lockDeadline  = 10 * time.Second
-	staleAge      = 30 * time.Second
+	lockDeadline  = 45 * time.Second
+	staleAge      = 90 * time.Second
 	renameRetries = 3
 	renameSleep   = 5 * time.Millisecond
 )
@@ -36,9 +36,13 @@ func LockPath(graphFile string) string {
 // Acquire creates the lock file for graphFile and returns the Lock handle.
 //
 // If the lock file already exists and is not stale, Acquire polls every
-// 25 ms until the file is removed or the 10 s deadline passes. If the
-// stored timestamp inside the lock file is older than 30 s the lock is
-// considered stale and is taken over immediately.
+// 25 ms until the file is removed or the 45 s deadline passes. If the
+// stored timestamp inside the lock file is older than 90 s the lock is
+// considered stale and is taken over immediately. The deadline stays
+// below staleAge so a waiter times out rather than reclaiming a lock a
+// live holder still owns; both are sized generously so heavy parallel-
+// grader contention (notably slow Windows file-metadata ops) does not
+// spuriously time out.
 //
 // The lock file contains two lines: the acquisition time in RFC3339 format
 // and the acquiring process's PID. Both are written on success.
