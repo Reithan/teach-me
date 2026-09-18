@@ -13,7 +13,7 @@ Every interaction with the CLI is built for an agent reader at the lowest token 
 - Errors and warnings. The CLI returns one only when it must, and appends every one to `ERRORS.jsonl` (10.1) without saying so. Each is an `err:` line saying what is wrong, plus a `fix:` line with the command or action that unblocks the agent when the error does not already make that obvious.
 
 - Help. All help text is written for an agent: terse lines generated from the argument parser, with no prose, examples, or color. What the CLI returns depends on what the call reveals:
-  - Bare `tm --help`, or a subcommand that does not exist: the agent lacks baseline knowledge. With `TM_DOC` set, print only `see <path> (tm <version>)`. Without it, print one usage line per command.
+  - Bare `tm`, `tm --help`, or a subcommand that does not exist: the agent lacks baseline knowledge. With `TM_DOC` set, print only `see <path> (tm <version>)`. Without it, print one usage line per command.
   - `tm --help <command>`, `tm <command> --help`, or `tm <command> --help <flag>`: a specific inquiry. Print that command's usage line, or one line on that flag.
   - A real command with bad arguments: a likely input slip. Print `err:` naming what is wrong and `fix:` with that command's usage line.
 - Doc version. The file named by `TM_DOC` carries `tm-version: "<major.minor>"` under `metadata` in its YAML frontmatter. Whenever the CLI points at the file it prints its own version, and if the marker is missing or differs it adds `err: <path> is for tm <x>, this is tm <y>`. The file ships in the CLI's repository and the two versions are bumped together; CI fails a PR where they differ. Drift inside one version is a review matter, not a runtime one.
@@ -220,7 +220,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm check <qid>` | grader: emit the grading payload (section 9) | the payload |
 | `tm grade <qid> pass\|fail\|unclear "<summary>" [--guided] [--oos]` | grader: write the verdict, run the transitions in section 8 | `ok` |
 | `tm lint [<file>]` | check the graph (section 11) | `ok`, or every violation |
-| `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when `TM_DOC` is set; otherwise one usage line per command |
+| Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when `TM_DOC` is set; otherwise one usage line per command |
 | `tm --help <command>`, `tm <command> --help [<flag>]` | specific inquiry | that command's usage line, or one line on the flag |
 
 Samples:
@@ -370,7 +370,7 @@ One JSON object per line, written with a single append so parallel callers canno
 | `role` | `$TM_ROLE` or null |
 | `file` | resolved graph path, or null |
 | `argv` | the command as typed; text read from stdin is recorded as `-` plus its length |
-| `exit` | 1, 2, or 3 |
+| `exit` | the process exit code: 1, 2, or 3, or 0 for a doc-version mismatch on `tm --help` |
 | `err`, `fix` | the lines printed; `fix` null when none was |
 | `violations` | `tm lint` only: the full list, as one row per run |
 
