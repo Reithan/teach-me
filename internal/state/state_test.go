@@ -473,11 +473,12 @@ func TestTeachingTarget_Unknown(t *testing.T) {
 	}
 }
 
-// Multi-hop teach chain: teach question off another teach's answer.
-func TestTeachingTarget_MultiHop(t *testing.T) {
-	// Graph: foo has probe_1 (q1 fail), then teach_2 (q2 off a1), then teach_3
-	// (q3 off a2 — which is off q2, which is off a1, which is off q1).
-	// Both q2 and q3 should resolve to q1 as teaching target.
+// TestTeachingTarget_ReplacementProbe verifies that walkToRootProbe stops at
+// the first probe encountered — including replacement/fallback probes whose
+// incoming edge is an answer rather than a concept.
+func TestTeachingTarget_ReplacementProbe(t *testing.T) {
+	// Graph: foo → q1 (probe_1, fail) → a1 (fail) → q2 (probe_2, fallback) →
+	// a2 (fail) → q3 (teach_3). q3's target must be q2, not q1.
 	g := `flowchart TB
     subgraph passed["Passed"]
     end
@@ -504,18 +505,57 @@ func TestTeachingTarget_MultiHop(t *testing.T) {
 `
 	s := mustLoad(t, g, defaultCfg())
 
-	// q2 is probe_2 whose incoming edge is from a1 (unclear→replacement,
-	// or fail in this case). q2's chain: a1 → q1 (probe, concept edge) → q1 is the root.
 	target, ok := s.TeachingTarget("q3")
 	if !ok {
 		t.Fatal("TeachingTarget(q3) should succeed")
 	}
-	// q3 is teach_3; a2 → q2 (probe_2); q2's incoming edge is a1 (not concept), so walk: a1 → q1 (probe_1, concept edge). Root = q1.
-	// Wait: q2 is probe_2, but its incoming edge is a1 (not a concept edge). So q2 is NOT a root probe.
-	// walkToRootProbe for q3: a2 → q2 (not root, no concept edge). Continue: a1 → q1 (probe_1, concept edge log_matching → q1)... but foo → q1.
-	// So target should be q1.
-	if target != "q1" {
-		t.Errorf("TeachingTarget(q3) = %q, want q1", target)
+	// q3 teach target: walk back a2 → q2 (probe_2). q2 is a probe — stop here.
+	// The target is q2, not q1, because q2 is the probe whose answer failed.
+	if target != "q2" {
+		t.Errorf("TeachingTarget(q3) = %q, want q2", target)
+	}
+}
+
+// TestTeachingTarget_MultiHopTeach covers a true multi-hop teach chain where
+// all intermediate nodes are teach questions (not probes).
+func TestTeachingTarget_MultiHopTeach(t *testing.T) {
+	// Graph: foo → q1 (probe_1, fail) → a1 (fail) → q2 (teach_2) → a2 (fail) → q3 (teach_3).
+	// Both q2 and q3 should resolve to q1 as teaching target.
+	g := `flowchart TB
+    subgraph passed["Passed"]
+    end
+    subgraph untested["Untested"]
+        foo["Foo<br/>f.txt:1-10"]
+    end
+    subgraph testing["Testing"]
+        q1["Q1<br/>f.txt:1-5"]:::probe_1
+        a1["A1"]:::fail
+        q2["Q2<br/>f.txt:1-5"]:::teach_2
+        a2["A2"]:::fail
+        q3["Q3<br/>f.txt:1-5"]:::teach_3
+        a3["A3"]:::fail
+        foo --> q1
+        q1 --> a1
+        a1 --> q2
+        q2 --> a2
+        a2 --> q3
+        q3 --> a3
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef teach_2,teach_3 stroke:#c9a227
+    classDef fail stroke:#f85149
+`
+	s := mustLoad(t, g, defaultCfg())
+
+	// q2 is a teach question; chain: a1 → q1 (probe_1, concept edge) → q1 is the root.
+	target, ok := s.TeachingTarget("q2")
+	if !ok || target != "q1" {
+		t.Errorf("TeachingTarget(q2) = (%q, %v), want (q1, true)", target, ok)
+	}
+	// q3 is teach_3; chain: a2 → q2 (teach_2, not probe) → a1 → q1 (probe_1). Root = q1.
+	target, ok = s.TeachingTarget("q3")
+	if !ok || target != "q1" {
+		t.Errorf("TeachingTarget(q3) = (%q, %v), want (q1, true)", target, ok)
 	}
 }
 

@@ -554,12 +554,11 @@ func (s *State) walkToRootProbe(qid string) (*graph.QuestionNode, *graph.AnswerN
 		if !ok {
 			return nil, nil
 		}
-		// A root probe is a probe whose single incoming edge comes from a concept.
+		// The teaching target is any probe in the chain — including replacement
+		// probes (incoming from an unclear answer rather than a concept).
+		// Walking through a replacement probe would return the wrong ancestor.
 		if graph.IsProbeClass(qX.Class) {
-			qXEdges := s.inEdges[qX.ID]
-			if len(qXEdges) == 1 && s.allConcepts[qXEdges[0].From] {
-				return qX, a
-			}
+			return qX, a
 		}
 		cur = qXID
 	}
