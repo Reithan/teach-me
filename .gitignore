@@ -44,3 +44,10 @@ conformance/corpus/
 
 # Node dependencies (conformance suite)
 node_modules/
+
+# tm runtime sidecars at repo root (never commit; leaked by manual runs)
+/.tmconfig
+/ERRORS.jsonl
+/*.mmd.jsonl
+/*.mmd.lock
+/*.mmd.tmp.*
