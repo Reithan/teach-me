@@ -17,7 +17,7 @@ var Table = []Command{
 			{Name: "title", TakesValue: true, ValueName: `"<t>"`},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          newRun,
 	},
 	{
 		Name: "load",
@@ -25,7 +25,7 @@ var Table = []Command{
 			{Name: "<file>"},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          loadRun,
 	},
 	{
 		Name:    "status",
