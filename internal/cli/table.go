@@ -132,9 +132,10 @@ var Table = []Command{
 		Flags: []FlagSpec{
 			{Name: "re", TakesValue: true, ValueName: "<qid>"},
 			{Name: "teach"},
+			{Name: "override", TakesValue: true, ValueName: "<reason>"}, // --override gate-clearing wired in m6e
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          qRun,
 	},
 	{
 		Name: "ask",
