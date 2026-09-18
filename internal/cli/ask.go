@@ -344,7 +344,6 @@ func askBatchIsReplacement(g *graph.Graph, batchClass string) bool {
 	return found // true only if we saw at least one question and all came from answers
 }
 
-
 // emitAskForConcept runs §8 ask selection and emits lines-format output for
 // conceptID to out. Returns (0, "", "") when output is emitted (or nothing to
 // ask), (1, errMsg, fixMsg) on invariant refusal, (3, errMsg, "") on unknown
