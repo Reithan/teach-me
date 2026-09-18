@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/reithan/teach-me/internal/graph"
 )
@@ -97,4 +98,43 @@ func (s *State) BatchOf(qid string) (string, bool) {
 		return "", false
 	}
 	return q.Class, true
+}
+
+// UnblockedBy returns the IDs of untested concepts that become newly
+// answerable because conceptID just passed. A concept X is unblocked when
+// conceptID is one of X's concept-parents and every other concept-parent of X
+// is already in passed.
+//
+// This feeds the pass event's unblocked field (§10). The caller supplies the
+// conceptID that has just passed; it need not yet appear in s.passedSet.
+// The returned slice is sorted ascending.
+func (s *State) UnblockedBy(conceptID string) []string {
+	var result []string
+	for _, c := range s.g.UntestedConcepts {
+		if c.ID == conceptID {
+			continue // skip the concept that is passing
+		}
+		// Determine whether conceptID is a direct concept-parent of c, and
+		// whether all other concept-parents of c are already in passed.
+		hasConceptAsParent := false
+		allOthersPassed := true
+		for _, e := range s.inEdges[c.ID] {
+			if !s.allConcepts[e.From] {
+				continue // skip non-concept edges (e.g., answer → question)
+			}
+			if e.From == conceptID {
+				hasConceptAsParent = true
+				continue
+			}
+			if !s.passedSet[e.From] {
+				allOthersPassed = false
+				break
+			}
+		}
+		if hasConceptAsParent && allOthersPassed {
+			result = append(result, c.ID)
+		}
+	}
+	sort.Strings(result)
+	return result
 }
