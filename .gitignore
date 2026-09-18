@@ -45,6 +45,9 @@ conformance/corpus/
 # Node dependencies (conformance suite)
 node_modules/
 
+# GoReleaser output
+dist/
+
 # tm runtime sidecars at repo root (never commit; leaked by manual runs)
 /.tmconfig
 /ERRORS.jsonl
