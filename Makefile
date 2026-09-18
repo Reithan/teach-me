@@ -39,7 +39,7 @@ test:
 ## coverage: generate coverage profile excluding cmd/tm and internal/tools.
 coverage:
 	go test -race -covermode=atomic -coverprofile=coverage.out \
-		$(shell go list ./... | grep -Ev 'github.com/reithan/teach-me/(cmd/tm|internal/tools)$$')
+		$(shell go list ./... | grep -Ev 'github.com/reithan/teach-me/(cmd/tm|internal/tools)(/|$$)')
 	go tool gocover-cobertura < coverage.out > coverage.xml
 	sed -i 's|github.com/reithan/teach-me/||g' coverage.xml
 
