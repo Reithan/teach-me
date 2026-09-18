@@ -172,7 +172,7 @@ func TestMutate_RefusalShortCircuits(t *testing.T) {
 	}
 }
 
-func TestMutate_PreExistingLintFailureRefusesExit1(t *testing.T) {
+func TestMutate_PreExistingLintFailureRefusesExit2(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TM_ERRORS", filepath.Join(dir, "ERRORS.jsonl"))
 	t.Setenv("TM_ROLE", "")
@@ -199,8 +199,8 @@ func TestMutate_PreExistingLintFailureRefusesExit1(t *testing.T) {
 	if refusal == nil {
 		t.Fatal("expected refusal for lint-failing graph, got nil")
 	}
-	if refusal.Exit != 1 {
-		t.Errorf("refusal.Exit = %d, want 1", refusal.Exit)
+	if refusal.Exit != 2 {
+		t.Errorf("refusal.Exit = %d, want 2", refusal.Exit)
 	}
 	if !strings.Contains(refusal.Err, "lint") {
 		t.Errorf("refusal.Err should mention lint, got: %s", refusal.Err)

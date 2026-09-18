@@ -24,8 +24,8 @@ import (
 )
 
 // Refusal is a structured refusal returned when a mutation cannot proceed due
-// to invariant violations. Exit is 1 for invariant / pre-condition failures and
-// 3 for usage errors; 2 is reserved for output-lint failures (also a Refusal).
+// to invariant violations. Exit is 1 for invariant / pre-condition failures,
+// 2 for lint failures (both pre- and post-mutation graph), and 3 for usage errors.
 type Refusal struct {
 	Err  string
 	Fix  string
@@ -48,7 +48,7 @@ type Apply func(g *graph.Graph, s *state.State) (newG *graph.Graph, rows []event
 //  1. Acquire the advisory lock (lockfile.Acquire). Failure → error.
 //  2. Defer lock release.
 //  3. Read the current graph bytes from disk.
-//  4. Lint the current bytes (lint.Check). Violations → Refusal{Exit:1}.
+//  4. Lint the current bytes (lint.Check). Violations → Refusal{Exit:2}.
 //  5. Load state (state.Load); graph is obtained via s.Graph().
 //  6. Call apply(g, s). Non-nil refusal → return it unchanged; no write.
 //  7. Serialize the new graph (graph.Write).
@@ -86,7 +86,7 @@ func Mutate(
 		}
 		return nil, &Refusal{
 			Err:  "graph fails lint: " + strings.Join(msgs, "; "),
-			Exit: 1,
+			Exit: 2,
 		}, nil
 	}
 
