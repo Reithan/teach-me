@@ -157,9 +157,10 @@ var Table = []Command{
 		},
 		Flags: []FlagSpec{
 			{Name: "asked", TakesValue: true, ValueName: `"<wording>"`},
+			{Name: "override", TakesValue: true, ValueName: `"<reason>"`}, // gate-clearing wired in m6e
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          answerRun,
 	},
 	{
 		// check is exempt from the grader ban (§7).
