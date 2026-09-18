@@ -30,3 +30,14 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local tools (installed by make tools)
+.tools/
+.tools/bin/
+
+# Coverage artifacts
+coverage.out
+coverage.xml
+
+# Conformance corpus (generated)
+conformance/corpus/
