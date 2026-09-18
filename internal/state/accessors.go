@@ -100,6 +100,17 @@ func (s *State) BatchOf(qid string) (string, bool) {
 	return q.Class, true
 }
 
+// RootProbeUnclear reports whether the root probe reachable from qid via its
+// incoming-edge chain has an unclear answer. Returns false when qid is a root
+// probe itself (no chain above it) or the chain cannot be resolved.
+//
+// This implements the §8.2 check (Q5): a question graded unclear that chains
+// up to an unclear root probe is recorded as "fail" instead.
+func (s *State) RootProbeUnclear(qid string) bool {
+	_, a := s.walkToRootProbe(qid)
+	return a != nil && a.Class == "unclear"
+}
+
 // UnblockedBy returns the IDs of untested concepts that become newly
 // answerable because conceptID just passed. A concept X is unblocked when
 // conceptID is one of X's concept-parents and every other concept-parent of X
