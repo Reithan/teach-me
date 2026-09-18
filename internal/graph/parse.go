@@ -312,7 +312,7 @@ func parseNode(g *Graph, block Block, t string, comments []string) error {
 		if block == BlockTesting {
 			return fmt.Errorf("graph: concept %q declared in testing block", id)
 		}
-		cn := parseConceptNode(id, block, label, comments)
+		cn := parseConceptNode(id, block, label, class, comments)
 		if block == BlockPassed {
 			g.PassedConcepts = append(g.PassedConcepts, cn)
 		} else {
@@ -325,10 +325,11 @@ func parseNode(g *Graph, block Block, t string, comments []string) error {
 
 // parseConceptNode builds a ConceptNode from the raw (escaped) label.
 // Label fields are separated by "<br/>": scope[, "GAP: " gap][, cite...].
-func parseConceptNode(id string, block Block, label string, comments []string) *ConceptNode {
+func parseConceptNode(id string, block Block, label, class string, comments []string) *ConceptNode {
 	cn := &ConceptNode{
 		ID:              id,
 		Block:           block,
+		Class:           class,
 		LeadingComments: comments,
 	}
 	parts := strings.Split(label, "<br/>")

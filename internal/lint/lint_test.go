@@ -801,3 +801,67 @@ func TestValidRegression(t *testing.T) {
 		})
 	}
 }
+
+// check1 (UTF-8) ──────────────────────────────────────────────────────────────
+
+// TestCheck1_InvalidUTF8 verifies that a file with invalid UTF-8 bytes returns
+// a single file-level violation before any parsing is attempted.
+func TestCheck1_InvalidUTF8(t *testing.T) {
+	data := []byte("flowchart TB\n    subgraph passed[\"\xff\"]\n    end\n")
+	viols := lint.Check(data, defaultCfg())
+	if len(viols) != 1 {
+		t.Fatalf("expected 1 violation, got %d: %v", len(viols), viols)
+	}
+	if viols[0].Msg != "file is not valid UTF-8" {
+		t.Errorf("unexpected message: %q", viols[0].Msg)
+	}
+	if viols[0].Line != 0 {
+		t.Errorf("expected Line==0, got %d", viols[0].Line)
+	}
+}
+
+// check6 (valid concept IDs) ──────────────────────────────────────────────────
+
+const invalidConceptIDGraph = `flowchart TB
+    subgraph passed["P"]
+        BadID["invalid uppercase ID"]
+    end
+    subgraph untested["U"]
+    end
+    subgraph testing["T"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+func TestCheck6_InvalidConceptID(t *testing.T) {
+	viols := lint.Check([]byte(invalidConceptIDGraph), defaultCfg())
+	if !hasMsgContaining(viols, `invalid concept ID`) {
+		t.Errorf("expected invalid-concept-ID violation; got %v", viols)
+	}
+}
+
+// check7 (concepts none) ──────────────────────────────────────────────────────
+
+const conceptWithClassGraph = `flowchart TB
+    subgraph passed["P"]
+        foo["Concept A"]:::someclass
+    end
+    subgraph untested["U"]
+    end
+    subgraph testing["T"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+func TestCheck7_ConceptMustNotHaveClass(t *testing.T) {
+	viols := lint.Check([]byte(conceptWithClassGraph), defaultCfg())
+	if !hasMsgContaining(viols, `must not carry a class`) {
+		t.Errorf("expected concept-with-class violation; got %v", viols)
+	}
+}

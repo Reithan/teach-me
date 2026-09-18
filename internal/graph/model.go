@@ -24,6 +24,9 @@ type ConceptNode struct {
 	Cites []string
 	// Block records which subgraph the concept belongs to.
 	Block Block
+	// Class is the :::class suffix if present; always empty for valid concepts.
+	// §11.7 requires concepts to carry no class; lint reports a non-empty value.
+	Class string
 	// LeadingComments are %% comment lines immediately preceding this node.
 	LeadingComments []string
 }

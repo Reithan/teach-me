@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/graph"
@@ -30,15 +31,20 @@ type Config struct {
 // The returned slice is nil on a valid graph. Violations are sorted by Line
 // ascending, with Line==0 entries last; order is stable within a line.
 func Check(data []byte, cfg Config) []Violation {
+	// §11.1: the file must be valid UTF-8.
+	if !utf8.Valid(data) {
+		return []Violation{{Line: 0, Msg: "file is not valid UTF-8"}}
+	}
+
 	g, err := graph.Parse(data)
 	if err != nil {
-		// If Parse returns an error, checks 1, 2, 3, and 6 cannot be verified
+		// If Parse returns an error, checks 2, 3, and 4 cannot be verified
 		// individually. A broken parse yields no reliable model, so we return a
 		// single file-level violation and stop — any other violations would be
 		// spurious artefacts of the malformed input.
 		return []Violation{{Line: 0, Msg: "invalid graph: " + err.Error()}}
 	}
-	// On a successful parse, checks 1, 2, 3, and 6 are satisfied by construction.
+	// On a successful parse, checks 2 and 3 are satisfied by construction.
 
 	// Build shared indexes used by multiple checks.
 	allConcepts := buildConceptSet(g)
@@ -51,6 +57,7 @@ func Check(data []byte, cfg Config) []Violation {
 	perCheck := [][]Violation{
 		check4(g),
 		check5(data, blocks),
+		check6(g),
 		check7(g),
 		check8(g, inEdges, qByID, aByID, allConcepts),
 		check9(g, cfg, inEdges, qByID, aByID, allConcepts),
@@ -346,10 +353,40 @@ func parseEdgeLine(t string) (from, to string, ok bool) {
 	return from, to, true
 }
 
-// check7 verifies that questions carry a valid batch class and answers carry a
-// valid answer class.
+// check6 verifies that all concept IDs are valid per §11.6.
+func check6(g *graph.Graph) []Violation {
+	var viols []Violation
+	check := func(cn *graph.ConceptNode) {
+		if !graph.ValidConceptID(cn.ID) {
+			viols = append(viols, Violation{Msg: fmt.Sprintf("invalid concept ID %q", cn.ID)})
+		}
+	}
+	for _, c := range g.PassedConcepts {
+		check(c)
+	}
+	for _, c := range g.UntestedConcepts {
+		check(c)
+	}
+	return viols
+}
+
+// check7 verifies that questions carry a valid batch class, answers carry a
+// valid answer class, and concepts carry no class (§11.7).
 func check7(g *graph.Graph) []Violation {
 	var viols []Violation
+
+	// Concepts must carry no class.
+	for _, c := range g.PassedConcepts {
+		if c.Class != "" {
+			viols = append(viols, Violation{Msg: fmt.Sprintf("concept %q must not carry a class (got %q)", c.ID, c.Class)})
+		}
+	}
+	for _, c := range g.UntestedConcepts {
+		if c.Class != "" {
+			viols = append(viols, Violation{Msg: fmt.Sprintf("concept %q must not carry a class (got %q)", c.ID, c.Class)})
+		}
+	}
+
 	for _, item := range g.TestingItems {
 		if item.Q != nil {
 			q := item.Q
