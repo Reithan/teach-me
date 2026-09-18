@@ -375,6 +375,69 @@ func qNoFallbackGraph() string {
 `
 }
 
+// qProbeWrongConceptGraph: two concepts; othercon has probe_1 with q1=unclear and
+// q2 unanswered (2 questions satisfies lint min). mycon has no batches.
+// Using --re q1 with mycon must fail because q1 belongs to othercon.
+func qProbeWrongConceptGraph() string {
+	return qFrontmatter + `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        mycon["My concept<br/>src.txt:1-5"]
+        othercon["Other concept<br/>src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        a1["ambiguous answer"]:::unclear
+        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        othercon --> q1
+        q1 --> a1
+        othercon --> q2
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef unclear stroke:#d29922
+`
+}
+
+// qTeachWrongConceptGraph: mycon is teach-ready; othercon has probe_3 with q5=fail
+// and q6 unanswered (2 questions satisfies lint min).
+// Using --teach --re q5 with mycon must fail because q5 belongs to othercon.
+func qTeachWrongConceptGraph() string {
+	return qFrontmatter + `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
+        othercon["Other concept<br/>src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        a1["correct answer"]:::pass
+        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        a2["wrong answer"]:::fail
+        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
+        q5["Other concept probe<br/>src.txt:1-2"]:::probe_3
+        a5["wrong answer"]:::fail
+        q6["Other concept probe 2<br/>src.txt:3-4"]:::probe_3
+        mycon --> q1
+        q1 --> a1
+        mycon --> q2
+        q2 --> a2
+        mycon --> q3
+        mycon --> q4
+        othercon --> q5
+        q5 --> a5
+        othercon --> q6
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef probe_2 stroke:#4aa3ff
+    classDef probe_3 stroke:#4aa3ff
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+`
+}
+
 // ── Exit 3 tests ──────────────────────────────────────────────────────────────
 
 func TestQ_UnknownConcept_Exit3(t *testing.T) {
@@ -670,6 +733,24 @@ func TestQ_ReTeachNotFailOrUnclear_Exit1(t *testing.T) {
 	}
 }
 
+func TestQ_ReTeachWrongConcept_Exit1(t *testing.T) {
+	// --teach --re q5 where q5 is a fail answer belonging to othercon, not mycon.
+	dir, errPath := qSetupDir(t)
+	qWriteGraph(t, dir, qTeachWrongConceptGraph())
+
+	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q5")
+	if code != 1 {
+		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "err: q5 belongs to othercon, not mycon") {
+		t.Errorf("want wrong-concept err; got:\n%s", errOut)
+	}
+	rows := readErrlog(t, errPath)
+	if len(rows) != 1 || rows[0].Exit != 1 {
+		t.Errorf("ERRORS.jsonl: want 1 row exit 1; got %v", rows)
+	}
+}
+
 func TestQ_ReTeachOOS_Exit1(t *testing.T) {
 	// --teach --re q2 where q2's answer is OOS.
 	dir, errPath := qSetupDir(t)
@@ -699,6 +780,24 @@ func TestQ_ReNotUnclearProbe_Exit1(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "err: q1 is not an unclear probe") {
 		t.Errorf("want 'not an unclear probe' err; got:\n%s", errOut)
+	}
+	rows := readErrlog(t, errPath)
+	if len(rows) != 1 || rows[0].Exit != 1 {
+		t.Errorf("ERRORS.jsonl: want 1 row exit 1; got %v", rows)
+	}
+}
+
+func TestQ_ReProbeWrongConcept_Exit1(t *testing.T) {
+	// --re q1 where q1 is an unclear probe belonging to othercon, not mycon.
+	dir, errPath := qSetupDir(t)
+	qWriteGraph(t, dir, qProbeWrongConceptGraph())
+
+	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "replacement scope", "--re", "q1")
+	if code != 1 {
+		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "err: q1 belongs to othercon, not mycon") {
+		t.Errorf("want wrong-concept err; got:\n%s", errOut)
 	}
 	rows := readErrlog(t, errPath)
 	if len(rows) != 1 || rows[0].Exit != 1 {

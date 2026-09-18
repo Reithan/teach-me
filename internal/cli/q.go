@@ -185,6 +185,20 @@ func qRun(ctx *Context) int {
 				}
 			}
 
+			// Exit 1: --re target belongs to a different concept.
+			if reQID != "" {
+				if c, ok := s.ConceptOf(reQID); !ok || c != conceptID {
+					msg := fmt.Sprintf("%s does not belong to %s", reQID, conceptID)
+					if ok {
+						msg = fmt.Sprintf("%s belongs to %s, not %s", reQID, c, conceptID)
+					}
+					return nil, nil, &ops.Refusal{
+						Err:  msg,
+						Exit: 1,
+					}
+				}
+			}
+
 			// Exit 1: --re on a probe whose target is not an unclear probe.
 			if reQID != "" && !s.ProbeReplacesUnclear(reQID) {
 				return nil, nil, &ops.Refusal{
@@ -317,6 +331,18 @@ func qRun(ctx *Context) int {
 					Fix:  fmt.Sprintf("finish answering %s before adding new teach questions", b),
 					Exit: 1,
 				}
+			}
+		}
+
+		// Exit 1: --re target belongs to a different concept.
+		if c, ok := s.ConceptOf(reQID); !ok || c != conceptID {
+			msg := fmt.Sprintf("%s does not belong to %s", reQID, conceptID)
+			if ok {
+				msg = fmt.Sprintf("%s belongs to %s, not %s", reQID, c, conceptID)
+			}
+			return nil, nil, &ops.Refusal{
+				Err:  msg,
+				Exit: 1,
 			}
 		}
 
