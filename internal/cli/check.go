@@ -20,14 +20,6 @@ import (
 //	0  payload emitted
 //	1  invariant refusal: no pending answer (§7 line 266)
 //	3  usage / load error: unknown question ID or file problem
-//
-// ASKED gap: the current graph model stores no "asked wording" field (§4.4 answer
-// fields do not include it, and §3 forbids reading the event log here). The ASKED
-// line is omitted until M6 (tm answer --asked) adds storage for it. M6 note:
-// the --asked wording must be written into an accessible location — either as a
-// field on the answer node (e.g. a new fourth <br/>-separated field) or as a
-// dedicated graph annotation — so that tm check can read it without touching the
-// event log.
 func checkRun(ctx *Context) int {
 	qid := ctx.Positionals[0]
 
@@ -91,7 +83,10 @@ func checkRun(ctx *Context) int {
 	// Q: <question scope> (already unescaped by parser)
 	fmt.Fprintf(&b, "Q: %s\n", qn.Scope)
 
-	// ASKED: line intentionally omitted — no storage in current model; see M6 note above.
+	// ASKED: <teacher's wording> — emitted only when stored by tm answer --asked.
+	if an.Asked != "" {
+		fmt.Fprintf(&b, "ASKED: %s\n", an.Asked)
+	}
 
 	// SRC <cite>
 	//   <cited lines, verbatim, indented 2 spaces>
