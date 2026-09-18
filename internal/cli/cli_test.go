@@ -478,15 +478,15 @@ func TestUnknownCommand_ShowsBaselineHelp(t *testing.T) {
 func TestNilRunPlaceholder_Exit3(t *testing.T) {
 	errlogPath := tempErrlog(t)
 
-	// "reopen" has nil Run in this build.
-	_, errOut, code := run(t, "reopen", "mycon", "new gap")
+	// "answer" has nil Run in this build.
+	_, errOut, code := run(t, "answer", "q1", "my answer")
 	if code != 3 {
 		t.Fatalf("want exit 3, got %d", code)
 	}
-	if !strings.Contains(errOut, "err: reopen is not implemented in this build") {
+	if !strings.Contains(errOut, "err: answer is not implemented in this build") {
 		t.Errorf("want 'not implemented' err; got:\n%s", errOut)
 	}
-	if !strings.Contains(errOut, "fix: tm reopen") {
+	if !strings.Contains(errOut, "fix: tm answer") {
 		t.Errorf("want 'fix:' with usage; got:\n%s", errOut)
 	}
 

@@ -120,7 +120,7 @@ var Table = []Command{
 			{Name: `"<gap>"`, Stdin: true},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          reopenRun,
 	},
 	{
 		Name: "q",
