@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 
 	"github.com/reithan/teach-me/internal/graph"
-	"github.com/reithan/teach-me/internal/graph/gen"
+	"github.com/reithan/teach-me/internal/tools/gen"
 )
 
 const (

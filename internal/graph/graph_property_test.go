@@ -1,6 +1,6 @@
 // External (black-box) property tests; using package graph_test avoids the
 // import cycle that would arise if this file were package graph and imported
-// internal/graph/gen (which itself imports internal/graph).
+// internal/tools/gen (which itself imports internal/graph).
 package graph_test
 
 import (
@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/reithan/teach-me/internal/graph"
-	"github.com/reithan/teach-me/internal/graph/gen"
+	"github.com/reithan/teach-me/internal/tools/gen"
 )
 
 // seedList returns the seeds used for property tests: 0..99 plus a handful of
