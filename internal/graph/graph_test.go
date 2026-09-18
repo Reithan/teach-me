@@ -765,6 +765,22 @@ func TestAnswerNodeAskedRoundTrip(t *testing.T) {
 			asked: "",
 			label: "plain body",
 		},
+		{
+			// Body is exactly "OOS" with no prefix flag set; the parser must not
+			// treat it as the OOS field (trailing-part guard).
+			name:  "body looks like OOS prefix",
+			asked: "",
+			label: "OOS",
+			oos:   false,
+		},
+		{
+			// Body begins with "ASKED: " but Asked is empty; the parser must not
+			// treat it as the ASKED field (trailing-part guard).
+			name:  "body looks like ASKED prefix",
+			asked: "",
+			label: "ASKED: this is the answer body",
+			oos:   false,
+		},
 	}
 
 	for _, tc := range cases {

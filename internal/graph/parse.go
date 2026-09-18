@@ -379,14 +379,16 @@ func parseAnswerNode(id, label, class string, comments []string) *AnswerNode {
 	parts := strings.Split(label, "<br/>")
 	i := 0
 
-	// Consume optional OOS prefix.
-	if i < len(parts) && parts[i] == "OOS" {
+	// Consume optional OOS prefix only when a following field exists; a lone
+	// "OOS" with no <br/> separator is the body, not the prefix flag.
+	if i < len(parts) && parts[i] == "OOS" && i+1 < len(parts) {
 		an.OOS = true
 		i++
 	}
 
-	// Consume optional ASKED: field.
-	if i < len(parts) && strings.HasPrefix(parts[i], "ASKED: ") {
+	// Consume optional ASKED: field only when a following field exists; a body
+	// that begins with "ASKED: " and has no <br/> separator is not the field.
+	if i < len(parts) && strings.HasPrefix(parts[i], "ASKED: ") && i+1 < len(parts) {
 		an.Asked = Unescape(strings.TrimPrefix(parts[i], "ASKED: "))
 		i++
 	}
