@@ -367,19 +367,35 @@ func parseQuestionNode(id, label, class string, comments []string) *QuestionNode
 }
 
 // parseAnswerNode builds an AnswerNode from the raw label.
-// Label format: optional "OOS" field separated by "<br/>", then the answer text.
+// Label format: [OOS<br/>][ASKED: <wording><br/>]<body>
+// Mirrors the OOS prefix handling in parseConceptNode's GAP: prefix pattern.
 func parseAnswerNode(id, label, class string, comments []string) *AnswerNode {
 	an := &AnswerNode{
 		ID:              id,
 		Class:           class,
 		LeadingComments: comments,
 	}
-	parts := strings.SplitN(label, "<br/>", 2)
-	if parts[0] == "OOS" && len(parts) > 1 {
+	// Split into fields; consume prefix fields by name; last field is the body.
+	parts := strings.Split(label, "<br/>")
+	i := 0
+
+	// Consume optional OOS prefix.
+	if i < len(parts) && parts[i] == "OOS" {
 		an.OOS = true
-		an.Label = Unescape(parts[1])
-	} else {
-		an.Label = Unescape(parts[0])
+		i++
+	}
+
+	// Consume optional ASKED: field.
+	if i < len(parts) && strings.HasPrefix(parts[i], "ASKED: ") {
+		an.Asked = Unescape(strings.TrimPrefix(parts[i], "ASKED: "))
+		i++
+	}
+
+	// Remaining field(s) are the body. Re-join with <br/> in case the body
+	// itself was split (should not happen since Escape encodes < and >, but
+	// defensive: reassemble any tail).
+	if i < len(parts) {
+		an.Label = Unescape(strings.Join(parts[i:], "<br/>"))
 	}
 	return an
 }

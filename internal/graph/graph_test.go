@@ -733,3 +733,86 @@ func TestMultiCiteRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// TestAnswerNodeAskedRoundTrip verifies that AnswerNode.Asked survives a
+// write→parse round-trip, including wordings that contain characters that
+// require escaping (quotes, <br/>, $).
+func TestAnswerNodeAskedRoundTrip(t *testing.T) {
+	cases := []struct {
+		name  string
+		asked string
+		label string
+		oos   bool
+	}{
+		{
+			name:  "asked only",
+			asked: "how does X work?",
+			label: "the answer body",
+		},
+		{
+			name:  "asked with special chars",
+			asked: `"quoted" $var <br/> text`,
+			label: "body text",
+		},
+		{
+			name:  "oos and asked",
+			asked: "what's the key idea?",
+			label: "answer with 'quotes' and $signs",
+			oos:   true,
+		},
+		{
+			name:  "no asked",
+			asked: "",
+			label: "plain body",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			g := &Graph{
+				PassedTitle:   "P",
+				UntestedTitle: "U",
+				TestingTitle:  "T",
+				TestingItems: []TestingItem{
+					{
+						A: &AnswerNode{
+							ID:    "a1",
+							OOS:   tc.oos,
+							Asked: tc.asked,
+							Label: tc.label,
+							Class: "pending",
+						},
+					},
+				},
+			}
+
+			// Write and parse back.
+			data := Write(g)
+			g2, err := Parse(data)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+
+			var got *AnswerNode
+			for _, item := range g2.TestingItems {
+				if item.A != nil && item.A.ID == "a1" {
+					got = item.A
+					break
+				}
+			}
+			if got == nil {
+				t.Fatal("a1 not found after round-trip")
+			}
+			if got.Asked != tc.asked {
+				t.Errorf("Asked: want %q, got %q", tc.asked, got.Asked)
+			}
+			if got.Label != tc.label {
+				t.Errorf("Label: want %q, got %q", tc.label, got.Label)
+			}
+			if got.OOS != tc.oos {
+				t.Errorf("OOS: want %v, got %v", tc.oos, got.OOS)
+			}
+		})
+	}
+}

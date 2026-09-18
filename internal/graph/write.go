@@ -151,16 +151,21 @@ func writeQuestionNode(b *strings.Builder, q *QuestionNode) {
 }
 
 // writeAnswerNode emits an answer node declaration.
+// Label format: [OOS<br/>][ASKED: <esc wording><br/>]<esc body>
+// The optional OOS field comes first, then the optional ASKED: field, then the body.
 func writeAnswerNode(b *strings.Builder, a *AnswerNode) {
 	b.WriteString(indent2)
 	b.WriteString(a.ID)
 	b.WriteString(`["`)
 	if a.OOS {
 		b.WriteString("OOS<br/>")
-		b.WriteString(Escape(a.Label))
-	} else {
-		b.WriteString(Escape(a.Label))
 	}
+	if a.Asked != "" {
+		b.WriteString("ASKED: ")
+		b.WriteString(Escape(a.Asked))
+		b.WriteString("<br/>")
+	}
+	b.WriteString(Escape(a.Label))
 	b.WriteString(`"]:::`)
 	b.WriteString(a.Class)
 	b.WriteByte('\n')

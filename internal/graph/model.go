@@ -46,6 +46,9 @@ type AnswerNode struct {
 	ID string
 	// OOS is set when the answer is flagged out-of-scope (teach answers only).
 	OOS bool
+	// Asked holds the teacher's wording as recorded by tm answer --asked.
+	// Empty when the flag was not supplied.
+	Asked string
 	// Label holds the unescaped answer text or grader summary.
 	Label string
 	// Class is the answer class: "pending", "pass", "fail", or "unclear".
