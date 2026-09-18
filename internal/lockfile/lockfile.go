@@ -63,8 +63,31 @@ func Acquire(graphFile string, clk errlog.Clock) (*Lock, error) {
 			first, _, _ := strings.Cut(string(data), "\n")
 			if t, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(first)); parseErr == nil {
 				if clk.Now().UTC().Sub(t.UTC()) > staleAge {
-					// Stale lock: remove it and retry the O_EXCL create immediately.
-					_ = os.Remove(path)
+					// Stale lock: take it over atomically using a temp file + rename
+					// (the same pattern as WriteTempAndRename).  A plain os.Remove
+					// followed by a new O_EXCL create has a TOCTOU window where two
+					// concurrent callers can both succeed.  With rename, exactly one
+					// caller's content survives on POSIX; we confirm ownership by
+					// reading our PID back before returning.
+					pid := os.Getpid()
+					tmpPath := fmt.Sprintf("%s.take.%d", path, pid)
+					now := clk.Now().UTC()
+					content := []byte(fmt.Sprintf("%s\n%d\n", now.Format(time.RFC3339), pid))
+					if wErr := os.WriteFile(tmpPath, content, 0o644); wErr == nil {
+						if rErr := os.Rename(tmpPath, path); rErr == nil {
+							// Verify our PID is in the lock file (we won the rename race).
+							if check, cErr := os.ReadFile(path); cErr == nil {
+								parts := strings.SplitN(string(check), "\n", 3)
+								if len(parts) >= 2 && strings.TrimSpace(parts[1]) == fmt.Sprintf("%d", pid) {
+									if lf, oErr := os.OpenFile(path, os.O_RDWR, 0o644); oErr == nil {
+										return &Lock{path: path, f: lf}, nil
+									}
+								}
+							}
+						} else {
+							_ = os.Remove(tmpPath)
+						}
+					}
 					continue
 				}
 			}
@@ -79,14 +102,16 @@ func Acquire(graphFile string, clk errlog.Clock) (*Lock, error) {
 	}
 }
 
-// Release removes the lock file and closes the file handle.
+// Release closes the file handle and removes the lock file.
+// The handle is closed before removal so that Windows (which refuses to
+// delete open files) does not return a spurious error.
 func (l *Lock) Release() error {
-	removeErr := os.Remove(l.path)
 	closeErr := l.f.Close()
-	if removeErr != nil {
-		return removeErr
+	removeErr := os.Remove(l.path)
+	if closeErr != nil {
+		return closeErr
 	}
-	return closeErr
+	return removeErr
 }
 
 // WriteTempAndRename writes data to a temporary file adjacent to finalPath,
