@@ -79,7 +79,7 @@ func addRun(ctx *Context) int {
 	}
 
 	// ── Apply closure ────────────────────────────────────────────────────────
-	apply := func(g *graph.Graph, _ *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
+	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		// Build the set of all existing concepts for lookup.
 		existsInPassed := false
 		existsInUntested := false
@@ -186,7 +186,17 @@ func addRun(ctx *Context) int {
 			"children": childIDs,
 		})
 
-		return &newG, []eventlog.Row{row}, nil
+		// Gate clearing for gated children (Q2 / spec §7 line 278).
+		// When --child C is gated, write the gate meta + gate event for C via=add.
+		rows := []eventlog.Row{row}
+		currentG := &newG
+		for _, ch := range childPairs {
+			if clearedG, gateRow, ok := ops.ClearGate(currentG, s, ch.endpointID, "add", ""); ok {
+				currentG = clearedG
+				rows = append(rows, gateRow)
+			}
+		}
+		return currentG, rows, nil
 	}
 
 	// ctx.GraphFile already set above; runMutation will re-resolve, but we've
