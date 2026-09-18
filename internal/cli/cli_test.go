@@ -477,16 +477,17 @@ func TestUnknownCommand_ShowsBaselineHelp(t *testing.T) {
 
 func TestNilRunPlaceholder_Exit3(t *testing.T) {
 	errlogPath := tempErrlog(t)
+	t.Setenv("TM_ROLE", "")
 
-	// "answer" has nil Run in this build.
-	_, errOut, code := run(t, "answer", "q1", "my answer")
+	// "grade" has nil Run in this build (answer is now implemented).
+	_, errOut, code := run(t, "grade", "q1", "pass", "summary")
 	if code != 3 {
 		t.Fatalf("want exit 3, got %d", code)
 	}
-	if !strings.Contains(errOut, "err: answer is not implemented in this build") {
+	if !strings.Contains(errOut, "err: grade is not implemented in this build") {
 		t.Errorf("want 'not implemented' err; got:\n%s", errOut)
 	}
-	if !strings.Contains(errOut, "fix: tm answer") {
+	if !strings.Contains(errOut, "fix: tm grade") {
 		t.Errorf("want 'fix:' with usage; got:\n%s", errOut)
 	}
 
