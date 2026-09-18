@@ -113,14 +113,32 @@ func answerRun(ctx *Context) int {
 			}
 		}
 
-		// Exit 1: concept is gated (§7); --override clears gate and proceeds.
+		// Exit 1: concept is gated (§7); --override clears gate FIRST then
+		// evaluates remaining refusals against post-clear state (Fix 3, dec#9).
+		//
+		// Per owner ruling: if a subsequent refusal fires, the gate-clear row must
+		// NOT be persisted. The gate-clear is part of this same (not-yet-committed)
+		// transaction; returning a non-nil refusal causes the engine to discard the
+		// whole mutation and write nothing.
 		cs := s.ConceptStatus(conceptID)
-		if cs.Gated && overrideReason == "" {
-			return nil, nil, &ops.Refusal{
-				Err:  fmt.Sprintf("%s is gated", conceptID),
-				Fix:  fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID),
-				Exit: 1,
+		var gateRow *eventlog.Row
+		if cs.Gated {
+			if overrideReason == "" {
+				return nil, nil, &ops.Refusal{
+					Err:  fmt.Sprintf("%s is gated", conceptID),
+					Fix:  fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID),
+					Exit: 1,
+				}
 			}
+			// Clear gate first, reload state, recompute concept status.
+			if clearedG, gr, cleared := ops.ClearGate(g, s, conceptID, "override", overrideReason); cleared {
+				g = clearedG
+				s = state.LoadFromGraph(g, cfg)
+				cs = s.ConceptStatus(conceptID)
+				rowCopy := gr
+				gateRow = &rowCopy
+			}
+			// If !cleared: gate resolved between check and lock (race-safe no-op).
 		}
 
 		allBatches := s.ConceptBatches(conceptID)
@@ -128,7 +146,7 @@ func answerRun(ctx *Context) int {
 		// The remaining refusals depend on whether the question is in a probe
 		// or teach batch. These predicates mirror ask.go's batch-selection logic
 		// (see askRun / emitAskForConcept) so that answer and ask agree on what
-		// is answerable.
+		// is answerable. They are evaluated against the post-clear state.
 
 		if graph.IsProbeClass(batchClass) {
 			// Exit 1: batch is fallback probes and a teach batch is unresolved (§7).
@@ -151,16 +169,22 @@ func answerRun(ctx *Context) int {
 				}
 			}
 
-			// Exit 1: latest teach batch not all pass and teaching not spent (§7).
-			// Mirrors the OpenTargets+!TeachingSpent check in ask.go.
-			if len(cs.OpenTargets) > 0 && !cs.TeachingSpent {
-				openTarget := cs.OpenTargets[0]
-				return nil, nil, &ops.Refusal{
-					Err: fmt.Sprintf("teaching round for %s is not complete", conceptID),
-					Fix: fmt.Sprintf("add a teach question for %s with tm q %s ... --teach --re %s",
-						openTarget, conceptID, openTarget),
+			// Exit 1: latest teach batch not all pass and teaching not spent (§7,
+			// §8.6–8.9). Mirrors the condition in ask.go (Fix 2).
+			if len(cs.FailedProbeBatches) > 0 && !cs.TeachingSpent && cs.LatestTeachNotAllPass {
+				var openTarget string
+				if len(cs.OpenTargets) > 0 {
+					openTarget = cs.OpenTargets[0]
+				}
+				ref := &ops.Refusal{
+					Err:  fmt.Sprintf("teaching round for %s is not complete", conceptID),
 					Exit: 1,
 				}
+				if openTarget != "" {
+					ref.Fix = fmt.Sprintf("add a teach question for %s with tm q %s ... --teach --re %s",
+						openTarget, conceptID, openTarget)
+				}
+				return nil, nil, ref
 			}
 
 			// Exit 1: min count check, with replacement batch exemption (§7, Q4).
@@ -203,7 +227,8 @@ func answerRun(ctx *Context) int {
 		qN := graph.QuestionN(qid)
 		aid := fmt.Sprintf("a%d", qN)
 
-		// Build new graph (copy-on-write).
+		// Build new graph (copy-on-write) on top of g (= clearedG when gate was
+		// cleared, original g otherwise).
 		newG := *g
 		newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
 			A: &graph.AnswerNode{
@@ -218,21 +243,20 @@ func answerRun(ctx *Context) int {
 			To:   aid,
 		})
 
-		row := eventlog.NewRow("answer", map[string]any{
+		answerRow := eventlog.NewRow("answer", map[string]any{
 			"q":     qid,
 			"raw":   rawAnswer,
 			"asked": askedWording,
 		})
-		// Gate clearing via --override (spec §7 line 278, Q3/Q7).
-		rows := []eventlog.Row{row}
-		finalG := &newG
-		if overrideReason != "" && cs.Gated {
-			if clearedG, gateRow, ok := ops.ClearGate(finalG, s, conceptID, "override", overrideReason); ok {
-				finalG = clearedG
-				rows = append([]eventlog.Row{gateRow}, rows...)
-			}
+		// Gate row (if any) must precede the answer row in the event log (spec §7,
+		// dec#9; mirrors the ordering in ask.go's --override path).
+		var rows []eventlog.Row
+		if gateRow != nil {
+			rows = append(rows, *gateRow)
 		}
-		return finalG, rows, nil
+		rows = append(rows, answerRow)
+
+		return &newG, rows, nil
 	}
 
 	return runMutation(ctx, apply)
