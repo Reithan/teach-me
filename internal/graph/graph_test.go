@@ -705,3 +705,31 @@ func TestParseBlankLineInsideBlock(t *testing.T) {
 		t.Errorf("unexpected concept IDs: %v, %v", g.PassedConcepts[0].ID, g.PassedConcepts[1].ID)
 	}
 }
+
+// TestMultiCiteRoundTrip verifies that multiple citations on a concept node are
+// written as a single comma-separated field (§4.4) and parsed back correctly.
+func TestMultiCiteRoundTrip(t *testing.T) {
+	cites := []string{"a.txt:1-10", "b.txt:20-30", "c.txt:5-15"}
+	cn := &ConceptNode{
+		ID:    "alpha",
+		Scope: "Alpha concept",
+		Cites: cites,
+		Block: BlockUntested,
+	}
+	label := conceptLabel(cn)
+	// The cites must appear as exactly one field (no bare "<br/>" between individual cites).
+	parts := strings.Split(label, "<br/>")
+	if len(parts) != 2 {
+		t.Fatalf("want 2 label fields (scope + cites), got %d: %v", len(parts), parts)
+	}
+	// Round-trip: parse produces the same Cites slice.
+	got := parseConceptNode("alpha", BlockUntested, label, nil)
+	if len(got.Cites) != len(cites) {
+		t.Fatalf("cites after round-trip: want %v, got %v", cites, got.Cites)
+	}
+	for i, c := range cites {
+		if got.Cites[i] != c {
+			t.Errorf("cites[%d]: want %q, got %q", i, c, got.Cites[i])
+		}
+	}
+}

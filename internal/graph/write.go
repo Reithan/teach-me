@@ -131,7 +131,9 @@ func conceptLabel(cn *ConceptNode) string {
 	if cn.GAP != "" {
 		parts = append(parts, "GAP: "+Escape(cn.GAP))
 	}
-	parts = append(parts, cn.Cites...)
+	if len(cn.Cites) > 0 {
+		parts = append(parts, strings.Join(cn.Cites, ", "))
+	}
 	return strings.Join(parts, "<br/>")
 }
 
