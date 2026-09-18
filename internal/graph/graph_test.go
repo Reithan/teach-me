@@ -723,7 +723,7 @@ func TestMultiCiteRoundTrip(t *testing.T) {
 		t.Fatalf("want 2 label fields (scope + cites), got %d: %v", len(parts), parts)
 	}
 	// Round-trip: parse produces the same Cites slice.
-	got := parseConceptNode("alpha", BlockUntested, label, nil)
+	got := parseConceptNode("alpha", BlockUntested, label, "", nil)
 	if len(got.Cites) != len(cites) {
 		t.Fatalf("cites after round-trip: want %v, got %v", cites, got.Cites)
 	}
