@@ -173,7 +173,13 @@ func gradeRun(ctx *Context) int {
 
 			if allPass {
 				// UnblockedBy uses the pre-pass state (conceptID still untested).
+				// Normalize nil to a non-nil empty slice so the pass event's
+				// unblocked field serializes as [] (matching the add event's
+				// children/parents convention) rather than null.
 				unblocked := s.UnblockedBy(conceptID)
+				if unblocked == nil {
+					unblocked = []string{}
+				}
 
 				rst, newG2 := ops.RemoveTestingSubtree(newG, s, conceptID)
 				newG3 := ops.MoveToPassed(newG2, conceptID)
