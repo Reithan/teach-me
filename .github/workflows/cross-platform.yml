@@ -2,15 +2,44 @@ name: Cross-Platform Tests
 
 # macOS and Windows runners bill at 10x and 2x the Linux minute rate, so the
 # per-PR CI (ci.yml) runs Linux only. This workflow exercises the race suite on
-# macOS and Windows on a weekly schedule, and on demand via workflow_dispatch.
+# macOS and Windows weekly -- but ONLY when main advanced in the past week (i.e.
+# a PR merged) -- and on demand via workflow_dispatch (which always runs).
 on:
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
   workflow_dispatch:
 
 jobs:
+  guard:
+    name: Check for recent merges to main
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        name: Did main advance in the last 7 days?
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch: running cross-platform tests."
+            exit 0
+          fi
+          last=$(git log -1 --format=%ct HEAD)
+          now=$(date +%s)
+          age=$((now - last))
+          if [ "$age" -lt 604800 ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "main last advanced $((age / 3600))h ago -- running cross-platform tests."
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "main idle for $((age / 86400))d -- skipping (no PR merged this week)."
+          fi
+
   test:
     name: Test (${{ matrix.os }})
+    needs: guard
+    if: needs.guard.outputs.should_run == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

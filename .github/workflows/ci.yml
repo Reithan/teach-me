@@ -1,5 +1,11 @@
 name: CI
 
+# Cancel an in-flight run when the same ref is pushed again (e.g. a rebased
+# stack branch), so redundant runs do not pile up and burn minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
   push:
