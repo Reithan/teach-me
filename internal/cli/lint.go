@@ -26,10 +26,11 @@ import (
 // On exit 3 (file errors), ctx.ErrMsg and ctx.FixMsg are populated for
 // the same reason.
 func lintRun(ctx *Context) int {
-	// Resolve the graph file via §3 precedence. The optional positional comes
-	// first; state.ResolveFile falls back to $TM_FILE then .tmconfig.
-	flagFile := ""
-	if len(ctx.Positionals) > 0 {
+	// Resolve the graph file via §3 precedence. The global --file flag (stored
+	// in ctx.FileFlag by the dispatcher) wins; the optional positional serves
+	// as the next fallback; state.ResolveFile falls back to $TM_FILE then .tmconfig.
+	flagFile := ctx.FileFlag
+	if flagFile == "" && len(ctx.Positionals) > 0 {
 		flagFile = ctx.Positionals[0]
 	}
 
