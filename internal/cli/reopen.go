@@ -26,7 +26,7 @@ func reopenRun(ctx *Context) int {
 
 	usageLine := FindCommand("reopen").Usage()
 
-	apply := func(g *graph.Graph, _ *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
+	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		// Build node membership sets.
 		allConcepts := make(map[string]bool)
 		passedSet := make(map[string]bool)
@@ -113,7 +113,26 @@ func reopenRun(ctx *Context) int {
 			"gap":     gap,
 		})
 
-		return &newG, []eventlog.Row{row}, nil
+		// Gate clearing for gated direct children of the reopened concept (Q2 /
+		// spec §7 line 278). Reopening P re-blocks its direct children via the
+		// frontier rule; if any direct child C is currently gated, write the gate
+		// line + gate event for C via=reopen.
+		rows := []eventlog.Row{row}
+		currentG := &newG
+		for _, e := range g.Edges {
+			if e.From != concept {
+				continue
+			}
+			childID := e.To
+			if !allConcepts[childID] {
+				continue
+			}
+			if clearedG, gateRow, ok := ops.ClearGate(currentG, s, childID, "reopen", ""); ok {
+				currentG = clearedG
+				rows = append(rows, gateRow)
+			}
+		}
+		return currentG, rows, nil
 	}
 
 	return runMutation(ctx, apply)
