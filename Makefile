@@ -63,12 +63,13 @@ fuzz:
 		done; \
 	done
 
-## conformance: run the Mermaid conformance suite (no-op if not present).
+## conformance: generate the corpus then run the Mermaid conformance suite.
 conformance:
 	@if [ ! -d conformance ]; then \
 		echo "conformance: not present, skipping"; \
 		exit 0; \
 	fi
+	go run ./internal/tools/corpus -out conformance/corpus
 	node conformance/parse.mjs
 
 ## vuln: run govulncheck.

@@ -26,6 +26,7 @@ linters:
             - "**/*_test.go"
           allow:
             - $gostd
+            - github.com/reithan/teach-me
 
 formatters:
   enable:

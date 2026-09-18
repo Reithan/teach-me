@@ -41,3 +41,6 @@ coverage.xml
 
 # Conformance corpus (generated)
 conformance/corpus/
+
+# Node dependencies (conformance suite)
+node_modules/
