@@ -48,7 +48,7 @@ type ConceptStatusResult struct {
 	// above some failed probe batch's N, sorted by batch N ascending.
 	FallbackProbes []string
 
-	// OpenTargets lists the probe question IDs that are teaching targets with
+	// OpenTargets lists the failed probe question IDs (teaching targets) with
 	// no passing, in-scope teach question targeting them yet, sorted ascending.
 	OpenTargets []string
 
@@ -401,8 +401,11 @@ func (s *State) ConceptStatus(conceptID string) ConceptStatusResult {
 		}
 	}
 
-	// Open targets: failed or unclear probe questions above base with no
-	// passing, in-scope teach question targeting them.
+	// Open targets: failed probe questions above base with no passing,
+	// in-scope teach question targeting them. Only failed probes need a
+	// teaching round (§8.6); an unclear probe takes a replacement probe
+	// instead (§8.5, no teaching), and an unclear that recurs is recorded
+	// as fail (§8.2), so it re-enters here via its fail class.
 	//
 	// Build a set of probe question IDs that already have a passing in-scope
 	// teach question.
@@ -426,7 +429,7 @@ func (s *State) ConceptStatus(conceptID string) ConceptStatusResult {
 			if a == nil {
 				continue
 			}
-			if a.Class == "fail" || a.Class == "unclear" {
+			if a.Class == "fail" {
 				if !targetHasPass[q.ID] {
 					r.OpenTargets = append(r.OpenTargets, q.ID)
 				}

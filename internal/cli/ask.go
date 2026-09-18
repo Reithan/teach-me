@@ -161,6 +161,7 @@ func askRun(ctx *Context) int {
 	// §8.5: replacement batches (all questions incoming from answers, not concepts)
 	// are exempt from ProbeMin.
 	qCount := askBatchQuestionCount(g, selectedBatch)
+	// Replacement batches (§8.5) are min-exempt per Q4/§11.9.
 	if graph.IsProbeClass(selectedBatch) && !askBatchIsReplacement(g, selectedBatch) && qCount < cfg.ProbeMin {
 		ctx.ErrMsg = fmt.Sprintf("batch %s has too few questions (need at least %d)", selectedBatch, cfg.ProbeMin)
 		ctx.FixMsg = fmt.Sprintf("add more questions with tm q %s", conceptID)
@@ -412,7 +413,8 @@ func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code in
 		return 0, "", ""
 	}
 	qCount := askBatchQuestionCount(g, selectedBatch)
-	if graph.IsProbeClass(selectedBatch) && qCount < cfg.ProbeMin {
+	// Replacement batches (§8.5) are min-exempt per Q4/§11.9.
+	if graph.IsProbeClass(selectedBatch) && !askBatchIsReplacement(g, selectedBatch) && qCount < cfg.ProbeMin {
 		return 1,
 			fmt.Sprintf("batch %s has too few questions (need at least %d)", selectedBatch, cfg.ProbeMin),
 			fmt.Sprintf("add more questions with tm q %s", conceptID)
