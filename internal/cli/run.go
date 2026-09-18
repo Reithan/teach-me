@@ -21,7 +21,7 @@ func Run(args []string) int {
 // (stdout); errOut receives err:/fix: diagnostic lines (stderr).
 //
 // Output routing policy:
-//   - Requested help (bare --help, specific --help, --version): stdout.
+//   - Requested help (bare tm/--help, specific --help, --version): stdout.
 //   - err:/fix: diagnostics on bad input or invariant refusal: stderr.
 //   - Baseline help shown alongside an unknown-subcommand error: stdout.
 //
@@ -32,9 +32,14 @@ func Run(args []string) int {
 //	2  graph fails lint
 //	3  usage error, unknown command, or not-yet-implemented command
 func RunWithWriters(args []string, out, errOut io.Writer) int {
+	// Role is read at the top so every logging path below can include it.
+	role := os.Getenv("TM_ROLE")
+
 	// ── No args: bare tm invocation → baseline help, exit 0 (same as --help).
 	if len(args) == 0 {
-		baselineHelp(out)
+		if mismatch := baselineHelp(out); mismatch != "" {
+			appendErrLog(role, args, 0, mismatch, nil)
+		}
 		return 0
 	}
 
@@ -48,7 +53,9 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 
 	// ── Bare --help / -h (no command) → baseline help, exit 0 ───────────────
 	if (first == "--help" || first == "-h") && len(args) == 1 {
-		baselineHelp(out)
+		if mismatch := baselineHelp(out); mismatch != "" {
+			appendErrLog(role, args, 0, mismatch, nil)
+		}
 		return 0
 	}
 
@@ -56,8 +63,10 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 	if (first == "--help" || first == "-h") && len(args) >= 2 {
 		cmd := findCommand(args[1])
 		if cmd == nil {
-			writeUnknown(errOut, args[1], args)
-			baselineHelp(out)
+			writeUnknown(errOut, args[1], args, role)
+			if mismatch := baselineHelp(out); mismatch != "" {
+				appendErrLog(role, args, 3, mismatch, nil)
+			}
 			return 3
 		}
 		flagArg := ""
@@ -71,8 +80,10 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 	// ── Dispatch on first token as command name ──────────────────────────────
 	cmd := findCommand(first)
 	if cmd == nil {
-		writeUnknown(errOut, first, args)
-		baselineHelp(out)
+		writeUnknown(errOut, first, args, role)
+		if mismatch := baselineHelp(out); mismatch != "" {
+			appendErrLog(role, args, 3, mismatch, nil)
+		}
 		return 3
 	}
 
@@ -89,7 +100,6 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 	}
 
 	// ── Role guard (§7) ─────────────────────────────────────────────────────
-	role := os.Getenv("TM_ROLE")
 	if code := checkRole(cmd, role, args, errOut); code != 0 {
 		return code
 	}
@@ -264,11 +274,11 @@ func writeErrFix(w io.Writer, errMsg, fixMsg string) {
 	}
 }
 
-// writeUnknown prints the unknown-command error and logs one row.
-func writeUnknown(errOut io.Writer, name string, argv []string) {
+// writeUnknown prints the unknown-command error to errOut and logs one row.
+func writeUnknown(errOut io.Writer, name string, argv []string, role string) {
 	errMsg := fmt.Sprintf("unknown command %q", name)
 	_, _ = fmt.Fprintf(errOut, "err: %s\n", errMsg)
-	appendErrLog(os.Getenv("TM_ROLE"), argv, 3, errMsg, nil)
+	appendErrLog(role, argv, 3, errMsg, nil)
 }
 
 // appendErrLog logs one error row to ERRORS.jsonl for dispatcher-level errors

@@ -9,24 +9,26 @@ import (
 	"github.com/reithan/teach-me/internal/version"
 )
 
-// baselineHelp writes the baseline help output to out (stdout). It is invoked
-// for bare `tm`, `tm --help`, and unknown subcommands.
+// baselineHelp writes the baseline help output to out (stdout) and returns
+// the docver mismatch err string (without the "err: " prefix) when $TM_DOC
+// carries a marker that is missing or differs from the CLI's own marker.
+// It returns "" when there is no mismatch or when $TM_DOC is unset.
 //
-// With $TM_DOC set, it prints only:
+// The caller is responsible for logging the mismatch to ERRORS.jsonl with
+// the exit code that the surrounding call path returns (§10.1). Keeping the
+// log call in run.go means each site can supply the correct exit code (0 for
+// bare tm / --help, 3 for the unknown-subcommand path).
+//
+// With $TM_DOC set, prints only:
 //
 //	see <path> (tm <version>)
 //
-// and, when the doc's tm-version marker is missing or differs from the CLI's
-// own marker, appends:
+// and, on a mismatch:
 //
 //	err: <path> is for tm <x>, this is tm <y>
 //
-// These lines go to out (stdout) because they are requested help, not
-// diagnostic errors. They are NOT logged to ERRORS.jsonl (they are not
-// command-invocation errors).
-//
-// Without $TM_DOC, it prints one usage line per §6 command.
-func baselineHelp(out io.Writer) {
+// Without $TM_DOC, prints one usage line per §6 command.
+func baselineHelp(out io.Writer) string {
 	docPath := os.Getenv("TM_DOC")
 	ver := version.Version()
 
@@ -38,21 +40,29 @@ func baselineHelp(out io.Writer) {
 		if err == nil {
 			marker := docver.Marker()
 			docVer, ok := docver.DocVersion(data)
+
+			var mismatch string
 			if !ok {
 				// Missing marker: use "?" as the document's reported version.
-				_, _ = fmt.Fprintf(out, "err: %s is for tm ?, this is tm %s\n", docPath, marker)
+				mismatch = fmt.Sprintf("%s is for tm ?, this is tm %s", docPath, marker)
 			} else if docVer != marker {
-				_, _ = fmt.Fprintf(out, "err: %s is for tm %s, this is tm %s\n", docPath, docVer, marker)
+				mismatch = fmt.Sprintf("%s is for tm %s, this is tm %s", docPath, docVer, marker)
+			}
+
+			if mismatch != "" {
+				_, _ = fmt.Fprintf(out, "err: %s\n", mismatch)
+				return mismatch
 			}
 		}
 		// If the file cannot be read, skip the version check silently (best-effort).
-		return
+		return ""
 	}
 
 	// No TM_DOC: print one usage line per command.
 	for _, cmd := range Table {
 		_, _ = fmt.Fprintln(out, cmd.Usage())
 	}
+	return ""
 }
 
 // specificHelp writes the usage line for the named command to out. When
