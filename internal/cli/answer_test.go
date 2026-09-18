@@ -507,12 +507,12 @@ func TestAnswer_ReplacementBatch_MinExempt(t *testing.T) {
 	// answerable even when ProbeMin=2. The replacement probe's incoming edge
 	// is from an unclear answer (a1 is unclear in this graph).
 	//
-	// TM_MAX_TEACH=0 sets TeachingSpent=true (TeachCount=0 >= MaxTeach=0)
-	// so the OpenTargets+!TeachingSpent check does not fire for q1's unclear
-	// answer — we reach the min-count check, which q3 is exempt from.
+	// This is the genuine §8.5 flow: probe_1 graded unclear+pass (no fail),
+	// so there is no teaching round and OpenTargets is empty (fail-only).
+	// answer q3 reaches the min-count check, which the replacement batch is
+	// exempt from — no env hacks needed.
 	dir, _ := answerSetupDir(t)
 	t.Setenv("TM_PROBE_MIN", "2")
-	t.Setenv("TM_MAX_TEACH", "0")
 	mmd := qFrontmatter + `flowchart TB
     subgraph passed["Concepts User understands"]
     end
@@ -548,6 +548,52 @@ func TestAnswer_ReplacementBatch_MinExempt(t *testing.T) {
 	}
 
 	lintFile(t, file, dir)
+}
+
+// TestAsk_ReplacementBatch_Emitted is a regression test for the §8.5 flow:
+// after a probe batch grades unclear+pass (no fail), tm ask must emit the
+// replacement batch (probe_2) — not refuse with "teaching round not complete"
+// (unclear probes take a replacement, not a teaching round; OpenTargets is
+// fail-only) and not refuse on min (replacement batches are min-exempt).
+func TestAsk_ReplacementBatch_Emitted(t *testing.T) {
+	dir, _ := answerSetupDir(t)
+	t.Setenv("TM_PROBE_MIN", "2")
+	mmd := qFrontmatter + `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        mycon["My concept<br/>src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        a1["ambiguous"]:::unclear
+        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        a2["correct"]:::pass
+        q3["Replacement probe<br/>src.txt:1-2"]:::probe_2
+        mycon --> q1
+        q1 --> a1
+        mycon --> q2
+        q2 --> a2
+        a1 --> q3
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef probe_2 stroke:#4aa3ff
+    classDef unclear stroke:#d29922
+    classDef pass stroke:#3fb950
+`
+	answerWriteGraph(t, dir, mmd)
+
+	out, errOut, code := run(t, "ask", "mycon")
+	if code != 0 {
+		t.Fatalf("want exit 0 (emit replacement batch), got %d; stderr:\n%s", code, errOut)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) < 2 || lines[0] != "probe_2" {
+		t.Fatalf("want first line 'probe_2', got %q", out)
+	}
+	if !strings.HasPrefix(lines[1], "q3 |") {
+		t.Errorf("want q3 emitted, got %q", lines[1])
+	}
 }
 
 // ── tm check ASKED line test ──────────────────────────────────────────────────
