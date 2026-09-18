@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/reithan/teach-me/internal/cite"
+	"github.com/reithan/teach-me/internal/errlog"
+	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
+	"github.com/reithan/teach-me/internal/ops"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -45,6 +49,10 @@ func askRun(ctx *Context) int {
 		format = v[0]
 	}
 	wantSrcText := len(ctx.Flags["src-text"]) > 0
+	overrideReason := ""
+	if v := ctx.Flags["override"]; len(v) > 0 {
+		overrideReason = v[0]
+	}
 
 	// Resolve graph file.
 	file, err := state.ResolveFile(ctx.FileFlag)
@@ -96,13 +104,62 @@ func askRun(ctx *Context) int {
 		}
 	}
 
-	// §7: refuse when concept is gated.
+	// §7: refuse when concept is gated; --override clears gate and proceeds
+	// (ask becomes a mutation under --override only; dec#6 preserved otherwise).
 	cs := s.ConceptStatus(conceptID)
 	if cs.Gated {
-		ctx.ErrMsg = fmt.Sprintf("%s is gated", conceptID)
-		ctx.FixMsg = fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
-		return 1
+		if overrideReason == "" {
+			ctx.ErrMsg = fmt.Sprintf("%s is gated", conceptID)
+			ctx.FixMsg = fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID)
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+			return 1
+		}
+		// Route through lock+mutation engine to write gate line + gate event.
+		gateApply := func(innerG *graph.Graph, innerS *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
+			innerCS := innerS.ConceptStatus(conceptID)
+			if !innerCS.Gated {
+				// No longer gated between check and lock (race-safe); no-op.
+				return innerG, nil, nil
+			}
+			newG, gateRow, ok := ops.ClearGate(innerG, innerS, conceptID, "override", overrideReason)
+			if !ok {
+				return innerG, nil, nil
+			}
+			return newG, []eventlog.Row{gateRow}, nil
+		}
+		askLintCfg := buildLintConfig(file)
+		_, gateRefusal, gateEngErr := ops.Mutate(file, cfg, askLintCfg, errlog.RealClock, gateApply)
+		if gateEngErr != nil {
+			ctx.ErrMsg = fmt.Sprintf("cannot mutate %s: %v", filepath.Base(file), gateEngErr)
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+			return 3
+		}
+		if gateRefusal != nil {
+			ctx.ErrMsg = gateRefusal.Err
+			ctx.FixMsg = gateRefusal.Fix
+			writeErrFix(ctx.ErrOut, gateRefusal.Err, gateRefusal.Fix)
+			return gateRefusal.Exit
+		}
+		// Reload state from the updated graph file and rebuild derived values.
+		s, loadErr = state.Load(file, cfg)
+		if loadErr != nil {
+			ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+			return 3
+		}
+		g = s.Graph()
+		passedSet = make(map[string]bool, len(g.PassedConcepts))
+		for _, c := range g.PassedConcepts {
+			passedSet[c.ID] = true
+		}
+		allConceptSet = make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts))
+		for k := range passedSet {
+			allConceptSet[k] = true
+		}
+		for _, c := range g.UntestedConcepts {
+			allConceptSet[c.ID] = true
+		}
+		cs = s.ConceptStatus(conceptID)
 	}
 
 	// Collect all batches for this concept (sorted by N ascending) by scanning

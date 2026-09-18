@@ -145,6 +145,7 @@ var Table = []Command{
 		Flags: []FlagSpec{
 			{Name: "format", TakesValue: true, ValueName: "lines|json", Values: []string{"lines", "json"}},
 			{Name: "src-text"},
+			{Name: "override", TakesValue: true, ValueName: `"<reason>"`}, // gate-clearing: ask becomes mutation under --override
 		},
 		ForbidGrader: true,
 		Run:          askRun,

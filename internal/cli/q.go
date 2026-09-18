@@ -47,7 +47,10 @@ func qRun(ctx *Context) int {
 	}
 	isTeach := len(ctx.Flags["teach"]) > 0
 
-	// --override gate-clearing wired in m6e; value accepted but not acted on here.
+	overrideReason := ""
+	if v := ctx.Flags["override"]; len(v) > 0 {
+		overrideReason = v[0]
+	}
 
 	usageLine := FindCommand("q").Usage()
 
@@ -133,9 +136,9 @@ func qRun(ctx *Context) int {
 			}
 		}
 
-		// Exit 1: concept is gated (--override gate-clearing wired in m6e).
+		// Exit 1: concept is gated (§7); --override clears gate and proceeds.
 		cs := s.ConceptStatus(conceptID)
-		if cs.Gated {
+		if cs.Gated && overrideReason == "" {
 			return nil, nil, &ops.Refusal{
 				Err:  conceptID + " is gated",
 				Fix:  fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID),
@@ -259,7 +262,16 @@ func qRun(ctx *Context) int {
 				"src":     citeStr,
 				"re":      re,
 			})
-			return &newG, []eventlog.Row{row}, nil
+			// Gate clearing via --override (spec §7 line 278, Q3/Q7).
+			rows := []eventlog.Row{row}
+			finalG := &newG
+			if overrideReason != "" && cs.Gated {
+				if clearedG, gateRow, ok := ops.ClearGate(finalG, s, conceptID, "override", overrideReason); ok {
+					finalG = clearedG
+					rows = append([]eventlog.Row{gateRow}, rows...)
+				}
+			}
+			return finalG, rows, nil
 		}
 
 		// ── Teach question ────────────────────────────────────────────────────
@@ -414,7 +426,16 @@ func qRun(ctx *Context) int {
 			"src":     citeStr,
 			"re":      reQID,
 		})
-		return &newG, []eventlog.Row{row}, nil
+		// Gate clearing via --override (spec §7 line 278, Q3/Q7).
+		rows := []eventlog.Row{row}
+		finalG := &newG
+		if overrideReason != "" && cs.Gated {
+			if clearedG, gateRow, ok := ops.ClearGate(finalG, s, conceptID, "override", overrideReason); ok {
+				finalG = clearedG
+				rows = append([]eventlog.Row{gateRow}, rows...)
+			}
+		}
+		return finalG, rows, nil
 	}
 
 	stateCfg := state.ConfigFromEnv()
