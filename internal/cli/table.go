@@ -146,7 +146,7 @@ var Table = []Command{
 			{Name: "src-text"},
 		},
 		ForbidGrader: true,
-		Run:          nil,
+		Run:          askRun,
 	},
 	{
 		Name: "answer",
@@ -167,7 +167,7 @@ var Table = []Command{
 			{Name: "<qid>"},
 		},
 		ForbidGrader: false,
-		Run:          nil,
+		Run:          checkRun,
 	},
 	{
 		// grade is exempt from the grader ban but refuses TM_ROLE=teacher (§7).
