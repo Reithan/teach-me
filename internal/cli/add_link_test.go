@@ -38,7 +38,7 @@ func newGraph(t *testing.T, dir string) string {
 
 // buildMinimalGraph writes a minimal .mmd file containing one passed concept
 // and one untested concept, then sets TM_FILE to the path.
-func buildMinimalGraph(t *testing.T, dir string) string {
+func buildMinimalGraph(t *testing.T, dir string) {
 	t.Helper()
 	file := filepath.Join(dir, "g.mmd")
 	mmd := `---
@@ -65,7 +65,6 @@ flowchart TB
 		t.Fatal(err)
 	}
 	t.Setenv("TM_FILE", file)
-	return file
 }
 
 // readEventLog reads and parses all lines from the event log for the given file.
@@ -316,8 +315,7 @@ func TestAdd_IDExists_Passed(t *testing.T) {
 	setupSrcFile(t, dir)
 
 	// Build a graph with a passed concept.
-	file := buildMinimalGraph(t, dir)
-	_ = file
+	buildMinimalGraph(t, dir)
 
 	_, errOut, code := run(t, "add", "passed_c", "src.txt:1-5", "scope")
 	if code != 1 {
