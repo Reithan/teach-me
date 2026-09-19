@@ -45,11 +45,10 @@ back here.
 
 Delegate every verdict to a grader sub-agent; never grade an answer yourself. The
 grader's isolation is what keeps your pass-bias out of the score, so spawn one
-grader per answer and put in its prompt only the question ID and the instruction
-to run `tm check <qid>` then `tm grade <qid> ...`. `tm check` inlines the cited
-source and the raw answer, so the grader needs no file access; never pass the
-learner's other answers, the teaching history, or your read of their
-comprehension.
+`teach-me-grader` sub-agent per answer and put in its prompt only the question ID
+and the instruction to grade it. `tm check` inlines the cited source and the raw
+answer for the grader, so it needs no file access; never pass the learner's other
+answers, the teaching history, or your read of their comprehension.
 
 When a failed probe opens a teaching round, target your teach questions at the
 misunderstanding recorded in the concept's `GAP` field; never re-ask the literal
@@ -73,8 +72,8 @@ move. The full state machine is spec §12; the phases:
 5. **Answer.** Put the emitted questions to the learner and record each with
    `tm answer <qid>`, piping raw text via `-`. The first recorded answer locks the
    batch.
-6. **Grade.** Spawn one grader per answer per the grader-isolation rule above,
-   then read the verdicts with `tm status --concept <id>`.
+6. **Grade.** Spawn one `teach-me-grader` per answer per the grader-isolation
+   rule above, then read the verdicts with `tm status --concept <id>`.
 7. **Act on the verdict** (`tm` runs the transitions of spec §8):
    - all pass → the concept passes automatically; its tests clear and it moves to
      the passed block.

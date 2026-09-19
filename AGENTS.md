@@ -30,3 +30,18 @@ make tools hooks
 ## Spec
 
 Full specification: `docs/spec.md`
+
+## Adapters
+
+Harness-specific adapters drive the CLI (spec §2.1); the CLI itself names no
+model or agent. Reference adapters for a harness with skills and sub-agents ship
+under `skill/teach-me/`:
+
+| Adapter | File | Install to |
+|---|---|---|
+| Teacher | `skill/teach-me/SKILL.md` | `.claude/skills/teach-me/` |
+| Grader | `skill/teach-me/agents/teach-me-grader.md` | `.claude/agents/` |
+
+The teacher drives the session and spawns one `teach-me-grader` sub-agent per
+answer; the grader scores that answer in isolation through `tm check` and
+`tm grade`.
