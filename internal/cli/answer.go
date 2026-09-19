@@ -187,7 +187,7 @@ func answerRun(ctx *Context) int {
 				return nil, nil, ref
 			}
 
-			// Exit 1: min count check, with replacement batch exemption (§7, Q4).
+			// Exit 1: min count check, with replacement batch exemption (§8.5; lint §11.9; decision #7).
 			// A replacement batch (containing ≥1 replacement probe) is min-exempt.
 			qCount := len(s.BatchQuestions(batchClass))
 			if qCount < cfg.ProbeMin && !answerBatchIsReplacement(g, batchClass) {
@@ -264,7 +264,7 @@ func answerRun(ctx *Context) int {
 
 // answerBatchIsReplacement reports whether the probe batch batchClass contains
 // at least one replacement probe — a probe whose single incoming edge comes
-// from an unclear answer node. Replacement batches are min-exempt per Q4.
+// from an unclear answer node. Replacement batches are min-exempt per §8.5 / lint §11.9 (decision #7).
 func answerBatchIsReplacement(g *graph.Graph, batchClass string) bool {
 	// Build answer-by-ID index from graph.
 	aByID := make(map[string]*graph.AnswerNode)
