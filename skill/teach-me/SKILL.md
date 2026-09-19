@@ -69,11 +69,14 @@ move. The full state machine is spec §12; the phases:
 4. **Probe.** Draft between `TM_PROBE_MIN` and `TM_PROBE_MAX` narrow probe
    questions with `tm q`, then emit the batch with `tm ask <concept>`. A question
    is immutable once written.
-5. **Answer.** Put the emitted questions to the learner and record each with
-   `tm answer <qid>`, piping raw text via `-`. The first recorded answer locks the
-   batch.
+5. **Answer.** Present the emitted questions to the learner through the harness's
+   built-in question tool (`tm ask --format json` maps onto it), then record each
+   answer with `tm answer <qid>`, piping raw text via `-`. The first recorded
+   answer locks the batch.
 6. **Grade.** Spawn one `teach-me-grader` per answer per the grader-isolation
-   rule above, then read the verdicts with `tm status --concept <id>`.
+   rule above, choosing its model by the answer's subtlety (sonnet by default,
+   opus when the judgment is fine-grained). Then read the verdicts with
+   `tm status --concept <id>`.
 7. **Act on the verdict** (`tm` runs the transitions of spec §8):
    - all pass → the concept passes automatically; its tests clear and it moves to
      the passed block.
