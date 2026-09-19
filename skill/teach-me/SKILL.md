@@ -1,96 +1,99 @@
 ---
 name: teach-me
-description: Teacher agent adapter for the tm CLI. Drives a teaching session — orient, probe, grade, teach — over a Mermaid graph of what a learner understands.
+description: Drive a teaching session with the tm CLI: diagnose what a learner understands over a Mermaid concept graph, probe and grade their answers via grader sub-agents, and teach each diagnosed gap.
 metadata:
   tm-version: "0.1"
 ---
 
 # teach-me skill
 
-You are the **teacher agent** for the `tm` CLI (spec §2.1, `docs/spec.md`). This
-file is your starting point: what `tm` is, your role, the loop you run, and the
-command reference.
+## Task
 
-## What tm is
+Drive a human learner toward mastery of a body of concepts with the `tm` CLI:
+diagnose what they already understand, test the frontier of what they do not, and
+teach each gap a wrong answer reveals. This file is the teacher adapter of spec
+§2.1 (`docs/spec.md`); it carries the procedure the CLI cannot enforce.
 
-`tm` reads and edits a single Mermaid flowchart that records what a human learner
-has shown they understand. The graph file is the only state — every command
-re-parses it. You never read the raw Mermaid; you pay tokens only for `tm`
-output, which is terse and agent-facing (a bare `ok`, an ID, or a few lines).
+## Goal
+
+Move every in-scope concept into the graph's passed block, each pass earned by
+probe answers a grader scored against the source, never by your own read of the
+learner. The session is done when `untested` holds no concept you intend to test.
+
+## Context
+
+`tm` reads and edits one Mermaid flowchart that records what the learner has shown
+they understand. That file is the entire session state; every command re-parses
+it. Read the graph only through `tm` output, which is terse and built for an agent
+(a bare `ok`, an allocated ID, or a few lines); never open the raw `.mmd`.
 
 Three parties share the file:
 
 | Who | Reads | Writes |
 |---|---|---|
-| **You (teacher)** | `tm` output, cited source files | every command except `check` and `grade` |
+| You (teacher) | `tm` output, cited source files | every command except `check` and `grade` |
 | Grader sub-agent | `tm check` output only | `tm grade` |
 | Human learner | the rendered graph, your questions | answers; hand-edits |
 
-## Your role
-
-Drive the session. Diagnose what the learner knows, decide which concept to test,
-write questions, and delegate scoring to grader sub-agents. You do **not** grade
-answers yourself — that is the grader's job, kept separate so your read of the
-learner cannot bias the verdict.
-
-Set `TM_DOC` to this file's path so `tm`'s baseline help points back here.
 Citations are `file:START-END`, resolved against `$TM_SRC_ROOT` (defaults to the
 graph's directory).
 
-## The loop
+## Rules
 
-`tm status` is your dashboard; the `fix:` line on any refusal tells you the next
-move. The full state machine is spec §12 — the phases:
+Set `TM_DOC` to this file's path at session start, so `tm`'s baseline help points
+back here.
 
-1. **Orient** — `tm load <file>`, then `tm status`, `tm find`, `tm show` to see
-   what is passed, open, blocked, and the *frontier* (untested concepts whose
+Delegate every verdict to a grader sub-agent; never grade an answer yourself. The
+grader's isolation is what keeps your pass-bias out of the score, so spawn one
+grader per answer and put in its prompt only the question ID and the instruction
+to run `tm check <qid>` then `tm grade <qid> ...`. `tm check` inlines the cited
+source and the raw answer, so the grader needs no file access; never pass the
+learner's other answers, the teaching history, or your read of their
+comprehension.
+
+When a failed probe opens a teaching round, target your teach questions at the
+misunderstanding recorded in the concept's `GAP` field; never re-ask the literal
+scope of the locked probe batch.
+
+## Workflow
+
+`tm status` is your dashboard, and the `fix:` line on any refusal names your next
+move. The full state machine is spec §12; the phases:
+
+1. **Orient.** Run `tm load <file>`, then `tm status`, `tm find`, `tm show` to see
+   what is passed, open, blocked, and the frontier (untested concepts whose
    prerequisites are all passed).
-2. **Map** (as needed) — `tm add` / `tm link` to fill in missing prerequisite
-   concepts. `tm edit` / `tm drop` only touch concepts with no questions yet.
+2. **Map**, when the frontier is thin or a prerequisite is missing. Use `tm add`
+   and `tm link` to fill in concepts; `tm edit` and `tm drop` touch only concepts
+   that have no questions yet.
 3. **Pick** a frontier concept.
-4. **Probe** — `tm q` to draft narrow probe questions (batch of `MIN`–`MAX`),
-   then `tm ask <concept>` to emit the batch to put to the learner. Questions are
-   immutable once written.
-5. **Answer** — put the questions to the human; record each with `tm answer <qid>`
-   (pipe raw text via `-`; the first answer locks the batch).
-6. **Grade** — spawn one grader sub-agent per answer (see below). Then read the
-   verdicts with `tm status --concept <id>`.
-7. **Verdict** (`tm` runs the transitions in spec §8):
-   - **all pass** → the concept passes automatically; its tests are cleared and
-     it moves to the passed block.
-   - **some unclear, no fail** → `tm q --re <qid>` one replacement per unclear
+4. **Probe.** Draft between `TM_PROBE_MIN` and `TM_PROBE_MAX` narrow probe
+   questions with `tm q`, then emit the batch with `tm ask <concept>`. A question
+   is immutable once written.
+5. **Answer.** Put the emitted questions to the learner and record each with
+   `tm answer <qid>`, piping raw text via `-`. The first recorded answer locks the
+   batch.
+6. **Grade.** Spawn one grader per answer per the grader-isolation rule above,
+   then read the verdicts with `tm status --concept <id>`.
+7. **Act on the verdict** (`tm` runs the transitions of spec §8):
+   - all pass → the concept passes automatically; its tests clear and it moves to
+     the passed block.
+   - no fail, some unclear → add one `tm q --re <qid>` replacement per unclear
      question, then `tm ask` again.
-   - **any fail** → a **teaching round**: `tm gap` to record the diagnosed
-     misunderstanding, then `tm q --teach --re <qid>` targeting that gap. Get the
-     teach batch to all-pass and the locked fallback probes become answerable.
-8. Repeat until `untested` is empty.
+   - any fail → open a teaching round: record the gap with `tm gap`, then teach
+     with `tm q --teach --re <qid>`. Once the teach batch resolves all pass, the
+     locked fallback probes become answerable.
+8. Repeat from step 3 until `untested` holds no concept you intend to test.
 
 ## Command reference
 
-Generated from the CLI (`tm <command> --help` for one command or flag):
+Generated from the CLI; for one command or flag, run `tm <command> --help`:
 
 !`env -u TM_DOC tm --help`
 
-## Grading: spawning graders
-
-Spawn one grader sub-agent per answer, probe or teach. The spawn prompt carries
-**only** the question ID and the instruction to run `tm check <qid>` then
-`tm grade <qid> ...`. `tm check` inlines the cited source lines and the raw
-answer, so the grader needs no file access and no context from you.
-
-## Behaviors the CLI cannot enforce (spec §12)
-
-These are yours to uphold; nothing in `tm` checks them.
-
-1. **Teach questions target the diagnosed gap.** Address the misunderstanding in
-   the concept's `GAP` field, not the literal scope of the failed probe batch.
-2. **The grader's spawn prompt carries the question ID and nothing about the
-   user.** No prior answers, no teaching history, no assessment of comprehension —
-   the grader must score from `tm check` alone.
-
 ## Reference
 
-- Full command semantics, invariants, and transitions: `docs/spec.md`.
-- Key sections: §8 transitions, §9 grader protocol, §5 derived state, §13
-  configuration (batch sizes and gate limits: `TM_PROBE_MIN/MAX`,
-  `TM_TEACH_MIN/MAX`, `TM_MAX_FAILS`, `TM_MAX_TEACH`, `TM_MAX_STALL`).
+Read `docs/spec.md` for full command semantics, invariants, and edge cases. Key
+sections: §8 transitions, §9 grader protocol, §5 derived state, and §13
+configuration (batch sizes and gate limits: `TM_PROBE_MIN`/`MAX`,
+`TM_TEACH_MIN`/`MAX`, `TM_MAX_FAILS`, `TM_MAX_TEACH`, `TM_MAX_STALL`).
