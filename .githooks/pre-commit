@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+if [ "$branch" = "main" ]; then
+    printf 'err: direct commit to main is not allowed\nfix: work on a feature branch\n' >&2
+    exit 1
+fi
+
+exec make precommit

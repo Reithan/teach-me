@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+
+has_non_tag=false
+has_refs=false
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+    has_refs=true
+    case "$remote_ref" in
+        refs/heads/main)
+            printf 'err: direct push to main is not allowed\nfix: open a pull request\n' >&2
+            exit 1
+            ;;
+        refs/tags/*)
+            ;;
+        *)
+            has_non_tag=true
+            ;;
+    esac
+done
+
+# Nothing pushed, or tags-only push: skip make check.
+if ! $has_refs || ! $has_non_tag; then
+    exit 0
+fi
+
+exec make check

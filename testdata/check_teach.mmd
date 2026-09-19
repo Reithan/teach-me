@@ -1,0 +1,32 @@
+---
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---
+flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        mycon["My concept scope<br/>GAP: missed the term check<br/>src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["Probe scope question<br/>src.txt:1-3"]:::probe_1
+        q2["Second probe scope<br/>src.txt:2-4"]:::probe_1
+        a1["fail answer - missing something"]:::fail
+        q3["Teach scope question<br/>src.txt:1-3"]:::teach_2
+        a3["pending teach answer"]:::pending
+        mycon --> q1
+        mycon --> q2
+        q1 --> a1
+        a1 --> q3
+        q3 --> a3
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef teach_2 stroke:#c9a227
+    classDef fail stroke:#f85149
+    classDef pending stroke-dasharray:4 3

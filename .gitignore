@@ -30,3 +30,27 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local tools (installed by make tools)
+.tools/
+.tools/bin/
+
+# Coverage artifacts
+coverage.out
+coverage.xml
+
+# Conformance corpus (generated)
+conformance/corpus/
+
+# Node dependencies (conformance suite)
+node_modules/
+
+# GoReleaser output
+dist/
+
+# tm runtime sidecars at repo root (never commit; leaked by manual runs)
+/.tmconfig
+/ERRORS.jsonl
+/*.mmd.jsonl
+/*.mmd.lock
+/*.mmd.tmp.*

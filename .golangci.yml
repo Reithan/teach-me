@@ -1,0 +1,38 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - depguard
+    - errcheck
+    - gocritic
+    - godot
+    - misspell
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    depguard:
+      rules:
+        non-test:
+          files:
+            - "!**/*_test.go"
+          allow:
+            - $gostd
+            - github.com/reithan/teach-me
+        test-files:
+          files:
+            - "**/*_test.go"
+          allow:
+            - $gostd
+            - github.com/reithan/teach-me
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/reithan/teach-me

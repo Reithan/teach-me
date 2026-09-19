@@ -1,0 +1,67 @@
+version: 2
+
+builds:
+  - id: tm
+    main: ./cmd/tm
+    binary: tm
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "tm_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - docs/spec.md
+      - skill/teach-me/SKILL.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*feat(\(.+\))?\!?:.*'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*fix(\(.+\))?\!?:.*'
+      order: 1
+    - title: Documentation
+      regexp: '^.*docs(\(.+\))?\!?:.*'
+      order: 2
+    - title: Tests
+      regexp: '^.*test(\(.+\))?\!?:.*'
+      order: 3
+    - title: CI
+      regexp: '^.*ci(\(.+\))?\!?:.*'
+      order: 4
+    - title: Refactoring
+      regexp: '^.*refactor(\(.+\))?\!?:.*'
+      order: 5
+    - title: Chore
+      regexp: '^.*chore(\(.+\))?\!?:.*'
+      order: 6
+    - title: Others
+      order: 999
+
+release:
+  prerelease: auto
