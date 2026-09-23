@@ -215,7 +215,7 @@ var Table = []Command{
 	{
 		Name: "report",
 		PosArgs: []PosArg{
-			{Name: "<concept>"},
+			{Name: "[<concept>]", Optional: true},
 		},
 		Flags: []FlagSpec{
 			{Name: "hops", TakesValue: true, ValueName: "N"},

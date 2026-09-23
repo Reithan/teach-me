@@ -12,26 +12,38 @@ import (
 
 // reportRun is the Run handler for
 //
-//	tm report <concept> [--hops N] [--fulltext] [--passed-only]
+//	tm report [<concept>] [--hops N] [--fulltext] [--passed-only]
 //
-// Read-only. Walks parent edges from concept and emits a Markdown report on
-// stdout. hops defaults to unbounded for outline mode and 2 for --fulltext.
-// --hops 0 returns only the start concept; --hops N limits the walk to N hops.
+// Read-only. Emits a Markdown report on stdout.
+//
+// With a concept: walks parent (prerequisite) edges from that concept. hops
+// defaults to unbounded for outline mode, 2 for --fulltext. --hops 0 returns
+// only the start concept.
+//
+// Without a concept: emits the whole graph, starting from roots (concepts with
+// no prerequisites), following child edges. Default depth limit is 5.
+// --hops N overrides (--hops 0 = roots only).
 //
 // Exit codes:
 //
 //	0  ok
 //	3  unknown concept, bad --hops value, or file error
 func reportRun(ctx *Context) int {
-	conceptID := ctx.Positionals[0]
+	hasConcept := len(ctx.Positionals) > 0
+	var conceptID string
+	if hasConcept {
+		conceptID = ctx.Positionals[0]
+	}
 
 	fulltext := len(ctx.Flags["fulltext"]) > 0
 	passedOnly := len(ctx.Flags["passed-only"]) > 0
 
-	// hops: -1 = unbounded (internal sentinel); user passes N >= 0.
-	hops := -1 // unbounded by default
-	if fulltext {
-		hops = 2 // default hops for --fulltext
+	// hops/depth: sentinel -1 means "use default for the chosen mode".
+	// With concept: default -1 (unbounded) for outline, 2 for --fulltext.
+	// Without concept: default -1 (WalkAll substitutes 5 internally).
+	hops := -1
+	if hasConcept && fulltext {
+		hops = 2
 	}
 	if v := ctx.Flags["hops"]; len(v) > 0 {
 		n, err := strconv.Atoi(v[0])
@@ -62,12 +74,22 @@ func reportRun(ctx *Context) int {
 	g := s.Graph()
 	srcRoot := cite.SrcRoot(filepath.Dir(file))
 
-	concepts, walkErr := report.Walk(g, s, conceptID, hops)
-	if walkErr != nil {
-		ctx.ErrMsg = walkErr.Error()
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg,
-			"tm status to see known concept ids")
-		return 3
+	var concepts []report.ConceptInfo
+	if hasConcept {
+		concepts, err = report.Walk(g, s, conceptID, hops)
+		if err != nil {
+			ctx.ErrMsg = err.Error()
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg,
+				"tm status to see known concept ids")
+			return 3
+		}
+	} else {
+		concepts, err = report.WalkAll(g, s, hops)
+		if err != nil {
+			ctx.ErrMsg = err.Error()
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+			return 3
+		}
 	}
 
 	opts := report.Options{
