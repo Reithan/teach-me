@@ -95,13 +95,15 @@ move. The full state machine is spec §12; the phases:
    - When a citation refuses for want of a converter: read
      `skill/teach-me/reference/setup.md`, advise the user on the config lines,
      run a test conversion, and confirm with the user before writing the config.
-   - **File-access rule (repeated).** Tell the user to configure harness deny
-     rules for `*.mmd`, `*.mmd.jsonl`, and `*.mmd.lock`, and point at
-     `skill/teach-me/reference/setup.md`. Once the user confirms or declines,
-     run `tm new`. Declining is allowed; the rule above still binds.
+   - Run `tm new`.
+   - **File-access rule (repeated).** Before the first `tm add`, tell the user
+     to configure harness deny rules for `*.mmd`, `*.mmd.jsonl`, and
+     `*.mmd.lock`, and point at `skill/teach-me/reference/setup.md`. Continue
+     once the user confirms or declines. Declining is allowed; the rule above
+     still binds.
 
-   On `tm load` (resuming): run `tm load <file>`, then `tm report` before each
-   teaching round.
+   On `tm load` (resuming): run `tm load <file>`, then `tm report` before
+   continuing.
 
 2. **Orient.** Run `tm status`, `tm find`, `tm show` to see what is passed, open,
    blocked, and the frontier (untested concepts whose prerequisites are all
@@ -137,9 +139,10 @@ move. The full state machine is spec §12; the phases:
      the passed block.
    - no fail, some unclear → add one `tm q --re <qid>` replacement per unclear
      question, then `tm ask` again.
-   - any fail → open a teaching round: record the gap with `tm gap`, then teach
-     with `tm q --teach --re <qid>`. Once the teach batch resolves all pass, the
-     locked fallback probes become answerable.
+   - any fail → open a teaching round: run `tm report <concept>` so the teach
+     questions build on the passed foundations, record the gap with `tm gap`,
+     then teach with `tm q --teach --re <qid>`. Once the teach batch resolves
+     all pass, the locked fallback probes become answerable.
 
 9. Repeat from step 4 until `untested` holds no concept you intend to test.
 
@@ -156,7 +159,7 @@ cycle.
   run `tm recite`. Otherwise spawn a `teach-me-grader` with the concept ID and
   the instruction to recheck it; the grader runs `tm check --drift` and decides
   `keep` or `reopen`. The teacher never decides whether a pass survives a source
-  change.
+  change. Descendants stay passed either way.
 - **Replaced source or revealed missing prerequisite**: spawn the
   `teach-me-planner` in `errata for <concepts>` mode.
 - **Disputed verdict**: not errata. Re-probe with `--re`; the grader decides.
