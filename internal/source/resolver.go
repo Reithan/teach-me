@@ -201,33 +201,15 @@ func (r *Resolver) readPath(c cite.Citation) (string, Meta, error) {
 		return "", Meta{Commit: commit}, fmt.Errorf("citation %q: %w", c.File, readErr)
 	}
 
-	return r.convertAndSlice(c, raw, mime, path, commit)
+	return r.convertAndSlice(c, raw, mime, commit)
 }
 
 // tryGitBlob attempts to retrieve a missing file from git HEAD.
 // If git is not configured or the blob doesn't exist, it returns an error
 // with the §13.1 refusal text.
 func (r *Resolver) tryGitBlob(c cite.Citation, absPath, commit string) (string, Meta, error) {
-	// Find the git repo.
+	// FindGitRepo walks up from absPath (handling nonexistent paths via Stat).
 	repoDir, _ := FindGitRepo(absPath)
-
-	// Walk up from absPath to find an existing ancestor.
-	if repoDir == "" {
-		// Walk up to find repo manually.
-		dir := filepath.Dir(absPath)
-		for {
-			repoDir2, _ := FindGitRepo(dir)
-			if repoDir2 != "" {
-				repoDir = repoDir2
-				break
-			}
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-			dir = parent
-		}
-	}
 
 	configPath := r.Cfg.ConfigPath
 
@@ -257,7 +239,7 @@ func (r *Resolver) tryGitBlob(c cite.Citation, absPath, commit string) (string, 
 	ext := strings.ToLower(filepath.Ext(absPath))
 	mime := r.Cfg.ExtToMIME(ext)
 
-	text, meta, err := r.convertAndSlice(c, raw, mime, absPath, commit)
+	text, meta, err := r.convertAndSlice(c, raw, mime, commit)
 	return text, meta, err
 }
 
@@ -289,14 +271,54 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 	// Record the final URL after redirects.
 	finalURL := resp.Request.URL.String()
 
-	// Determine MIME: Content-Type first, then URL path extension.
+	// Determine MIME and converter.
+	// §13.1: converter matched by MIME type first, then by URL path extension.
 	ctMIME := stripMIMEParams(resp.Header.Get("Content-Type"))
-	mime := ctMIME
-	if mime == "" {
-		// Fall back to URL path extension.
-		ext := strings.ToLower(filepath.Ext(resp.Request.URL.Path))
-		if m := r.Cfg.ExtToMIME(ext); m != "" {
-			mime = m
+	urlExt := strings.ToLower(filepath.Ext(resp.Request.URL.Path))
+	extMIME := r.Cfg.ExtToMIME(urlExt)
+
+	isRawMIME := func(m string) bool {
+		return m == mimeTextPlain || m == mimeTextMarkdown
+	}
+
+	var mime string
+	var isRaw bool
+	var convCmds []string
+
+	switch {
+	case isRawMIME(ctMIME):
+		mime, isRaw = ctMIME, true
+	case ctMIME != "":
+		if cmds := r.Cfg.ConverterFor(ctMIME); len(cmds) > 0 {
+			mime, convCmds = ctMIME, cmds
+		} else if isRawMIME(extMIME) {
+			// CT has no converter; URL ext maps to a raw type.
+			mime, isRaw = extMIME, true
+		} else if extMIME != "" {
+			if cmds := r.Cfg.ConverterFor(extMIME); len(cmds) > 0 {
+				mime, convCmds = extMIME, cmds
+			} else {
+				return "", Meta{URL: finalURL, MIME: ctMIME, FetchedAt: fetchedAt},
+					r.noConverterErr(c.File, ctMIME)
+			}
+		} else {
+			return "", Meta{URL: finalURL, MIME: ctMIME, FetchedAt: fetchedAt},
+				r.noConverterErr(c.File, ctMIME)
+		}
+	default:
+		// No Content-Type: fall back to URL extension.
+		if isRawMIME(extMIME) {
+			mime, isRaw = extMIME, true
+		} else if extMIME != "" {
+			if cmds := r.Cfg.ConverterFor(extMIME); len(cmds) > 0 {
+				mime, convCmds = extMIME, cmds
+			} else {
+				// Extension known but no converter: treat as plain text.
+				isRaw = true
+			}
+		} else {
+			// No CT, no extension: treat as plain text.
+			isRaw = true
 		}
 	}
 
@@ -310,33 +332,16 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 		return "", Meta{}, r.fetchFailure(c.File, "response exceeds 16 MiB size cap")
 	}
 
-	// Determine if raw (text/plain or text/markdown) or needs converter.
-	isRaw := mime == mimeTextPlain || mime == mimeTextMarkdown ||
-		strings.HasPrefix(mime, "text/plain") || strings.HasPrefix(mime, "text/markdown")
-
-	if !isRaw {
-		cmds := r.Cfg.ConverterFor(mime)
-		if len(cmds) == 0 && mime != "" {
-			return "", Meta{URL: finalURL, MIME: mime, FetchedAt: fetchedAt},
-				r.noConverterErr(c.File, mime)
-		}
-		if len(cmds) == 0 {
-			// No mime at all — treat as text/plain.
-			isRaw = true
-		}
-	}
-
 	var converted []byte
 	var converterName, converterVer string
 
 	if !isRaw {
-		cmds := r.Cfg.ConverterFor(mime)
-		cv, verLine, convErr := r.runConverter(cmds, raw)
+		cv, verLine, convErr := r.runConverter(convCmds, raw)
 		if convErr != nil {
 			return "", Meta{URL: finalURL, MIME: mime, FetchedAt: fetchedAt}, convErr
 		}
 		converted = cv
-		converterName = cmds[0]
+		converterName = convCmds[0]
 		converterVer = verLine
 	} else {
 		converted = raw
@@ -454,7 +459,7 @@ func (r *Resolver) checkVersion(program string) (string, error) {
 // convertAndSlice converts raw bytes with the appropriate converter for mime
 // (or reads raw if mime is empty/"text/plain"/"text/markdown"), then slices
 // to the line range in c. Returns the text and metadata.
-func (r *Resolver) convertAndSlice(c cite.Citation, raw []byte, mime, _ string, commit string) (string, Meta, error) {
+func (r *Resolver) convertAndSlice(c cite.Citation, raw []byte, mime string, commit string) (string, Meta, error) {
 	meta := Meta{Commit: commit}
 
 	isRaw := mime == "" || mime == mimeTextPlain || mime == mimeTextMarkdown
