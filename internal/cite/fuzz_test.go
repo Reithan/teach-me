@@ -59,7 +59,7 @@ func FuzzParse(f *testing.F) {
 				t.Fatalf("Parse(%q): hash length = %d, want 12", s, len(c.Hash))
 			}
 			for _, ch := range c.Hash {
-				if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+				if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
 					t.Fatalf("Parse(%q): hash %q contains non-hex char %q", s, c.Hash, ch)
 				}
 			}
