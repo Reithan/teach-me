@@ -136,8 +136,15 @@ func TestRehash_HashlessToHashed(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	if strings.TrimSpace(out) != "ok" {
-		t.Errorf("want 'ok', got %q", out)
+	// Output must include one change line and then "ok".
+	// The hash for lines 1-5 of src.txt is f5ca3875b379.
+	wantCite := "f5ca3875b379@src.txt:1-5"
+	wantLine := "mycon src.txt:1-5 -> " + wantCite
+	if !strings.Contains(out, wantLine) {
+		t.Errorf("want change line %q; got:\n%s", wantLine, out)
+	}
+	if !strings.Contains(out, "ok") {
+		t.Errorf("want 'ok' in output; got:\n%s", out)
 	}
 
 	// Verify the graph now has a hashed citation.
@@ -156,8 +163,6 @@ func TestRehash_HashlessToHashed(t *testing.T) {
 	if len(mycon.Cites) != 1 {
 		t.Fatalf("want 1 cite, got %d", len(mycon.Cites))
 	}
-	// The hash for "line 1\nline 2\nline 3\nline 4\nline 5" (lines 1-5) is f5ca3875b379.
-	wantCite := "f5ca3875b379@src.txt:1-5"
 	if mycon.Cites[0] != wantCite {
 		t.Errorf("want cite %q, got %q", wantCite, mycon.Cites[0])
 	}
@@ -252,13 +257,14 @@ func TestRehash_HashlessPassedAndQuestion(t *testing.T) {
 	t.Setenv("TM_SRC_ROOT", dir)
 
 	// Legacy graph: passed concept + question both have hashless citations.
+	// Concept-to-concept edges require a relation label (check10).
 	graphContent := `flowchart TB
     subgraph passed["Concepts User understands"]
         pc1["Passed concept<br/>src.txt:1-3"]
     end
     subgraph untested["Concepts User has not been tested on"]
         uc1["Untested concept"]
-        pc1 --> uc1
+        pc1 --"enables"--> uc1
     end
     subgraph testing["Open tests validating and teaching User understanding"]
         q1["Question text<br/>src.txt:1-5"]:::probe_1
@@ -277,8 +283,18 @@ func TestRehash_HashlessPassedAndQuestion(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	if strings.TrimSpace(out) != "ok" {
-		t.Errorf("want 'ok', got %q", out)
+	// src.txt:1-3 → "line 1\nline 2\nline 3" → cd3f27ccd149
+	// src.txt:1-5 → "line 1\nline 2\nline 3\nline 4\nline 5" → f5ca3875b379
+	wantPassedCite := "cd3f27ccd149@src.txt:1-3"
+	wantQCite := "f5ca3875b379@src.txt:1-5"
+	if !strings.Contains(out, "pc1 src.txt:1-3 -> "+wantPassedCite) {
+		t.Errorf("want passed concept change line; got:\n%s", out)
+	}
+	if !strings.Contains(out, "q1 src.txt:1-5 -> "+wantQCite) {
+		t.Errorf("want question change line; got:\n%s", out)
+	}
+	if !strings.Contains(out, "ok") {
+		t.Errorf("want 'ok' in output; got:\n%s", out)
 	}
 
 	data, err := os.ReadFile(graphPath)
@@ -294,15 +310,11 @@ func TestRehash_HashlessPassedAndQuestion(t *testing.T) {
 	if len(g.PassedConcepts) == 0 {
 		t.Fatal("no passed concepts after rehash")
 	}
-	// src.txt:1-3 → "line 1\nline 2\nline 3" → cd3f27ccd149
-	wantPassedCite := "cd3f27ccd149@src.txt:1-3"
 	if got := g.PassedConcepts[0].Cites[0]; got != wantPassedCite {
 		t.Errorf("passed concept cite: want %q, got %q", wantPassedCite, got)
 	}
 
 	// Question must now have a hashed citation.
-	// src.txt:1-5 → "line 1\nline 2\nline 3\nline 4\nline 5" → f5ca3875b379
-	wantQCite := "f5ca3875b379@src.txt:1-5"
 	var foundQCite string
 	for _, item := range g.TestingItems {
 		if item.Q != nil && item.Q.ID == "q1" {
@@ -335,10 +347,11 @@ func TestLintDrift_ParseError_Exit3(t *testing.T) {
 	}
 }
 
-// TestLintDrift_CitationFileNotFound_Exit3 verifies exit 3 when a hashed
-// citation points to a file that does not exist under the src root
-// (covers lint.go lines 123-127: CheckDrift error path in lintDrift).
-func TestLintDrift_CitationFileNotFound_Exit3(t *testing.T) {
+// TestLintDrift_CitationReadError_Exit1 verifies that a hashed citation
+// pointing to a missing file is reported as an err: line and exits 1 (not 3)
+// because lint --drift collects all failures and continues.
+// Covers lint.go: CheckDrift error path in lintDrift.
+func TestLintDrift_CitationReadError_Exit1(t *testing.T) {
 	tempErrlog(t)
 	dir := t.TempDir()
 	t.Setenv("TM_FILE", "")
@@ -362,8 +375,12 @@ func TestLintDrift_CitationFileNotFound_Exit3(t *testing.T) {
 	}
 
 	_, errOut, code := run(t, "lint", "--drift", graphPath)
-	if code != 3 {
-		t.Fatalf("want exit 3, got %d; stderr:\n%s", code, errOut)
+	// Read errors set anyProblem=true → exit 1 (not 3) so all errors are collected first.
+	if code != 1 {
+		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "err: ") {
+		t.Errorf("want err: line in stderr; got:\n%s", errOut)
 	}
 }
 

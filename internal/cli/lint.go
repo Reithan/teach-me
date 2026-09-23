@@ -89,8 +89,9 @@ func lintRun(ctx *Context) int {
 }
 
 // lintDrift checks all local citations for content drift.
-// It prints "DRIFT <cite>" for each mismatched citation and exits 1 if any are
-// found, 0 if all citations match.
+// It prints "DRIFT <cite>" for hash mismatches and "err: <msg>" for read
+// failures, collecting all problems before exiting. Exits 1 if any drift or
+// read errors were found; exits 0 if all citations match.
 func lintDrift(ctx *Context, data []byte, file string) int {
 	g, parseErr := graph.Parse(data)
 	if parseErr != nil {
@@ -101,7 +102,7 @@ func lintDrift(ctx *Context, data []byte, file string) int {
 	}
 
 	srcRoot := cite.SrcRoot(filepath.Dir(file))
-	anyDrift := false
+	anyProblem := false
 
 	// Collect all citations: concept Cites and question Cite fields.
 	var citations []string
@@ -117,21 +118,22 @@ func lintDrift(ctx *Context, data []byte, file string) int {
 		}
 	}
 
+	// Check every citation; continue past read errors so all problems are reported.
 	for _, citeStr := range citations {
 		drifted, err := cite.CheckDrift(citeStr, srcRoot)
 		if err != nil {
 			errMsg := fmt.Sprintf("citation %q: %v", citeStr, err)
 			writeErrFix(ctx.ErrOut, errMsg, "")
-			ctx.ErrMsg = errMsg
-			return 3
+			anyProblem = true
+			continue
 		}
 		if drifted {
 			_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", citeStr)
-			anyDrift = true
+			anyProblem = true
 		}
 	}
 
-	if anyDrift {
+	if anyProblem {
 		return 1
 	}
 	_, _ = fmt.Fprintln(ctx.Out, "ok")

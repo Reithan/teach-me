@@ -784,9 +784,7 @@ func check11(g *graph.Graph, _ Config) []Violation {
 		if c.Hash == "" {
 			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: citation %q is missing a hash; use tm rehash or supply <hash>@<locator>:START-END", prefix, citeStr)})
 		}
-		// §11: raw '"' in a locator is not allowed (Mermaid label delimiter);
-		// it is parsed away by Parse already, but the check is belt-and-suspenders.
-		// The Parse function rejects raw '"' so this path is normally unreachable.
+		// §11: raw '"' in a locator is rejected by Parse, so it cannot reach here.
 	}
 
 	for _, c := range g.PassedConcepts {
