@@ -8,6 +8,7 @@ import (
 	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/lint"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -101,7 +102,7 @@ func lintDrift(ctx *Context, data []byte, file string) int {
 		return 3
 	}
 
-	srcRoot := cite.SrcRoot(filepath.Dir(file))
+	resolver := source.MustResolver(filepath.Dir(file))
 	anyProblem := false
 
 	// Collect all citations: concept Cites and question Cite fields.
@@ -120,7 +121,7 @@ func lintDrift(ctx *Context, data []byte, file string) int {
 
 	// Check every citation; continue past read errors so all problems are reported.
 	for _, citeStr := range citations {
-		drifted, err := cite.CheckDrift(citeStr, srcRoot)
+		drifted, _, err := resolver.CheckDrift(citeStr)
 		if err != nil {
 			errMsg := fmt.Sprintf("citation %q: %v", citeStr, err)
 			writeErrFix(ctx.ErrOut, errMsg, "")
