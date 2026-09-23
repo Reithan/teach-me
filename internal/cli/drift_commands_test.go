@@ -7,1012 +7,833 @@ import (
 	"testing"
 )
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── Shared fixture ────────────────────────────────────────────────────────────
 
-// setupDriftFixture builds a minimal graph in dir with:
-//   - src.txt (5 lines)
-//   - g.mmd with one concept and one hashed question citation
+// driftPassedFixture builds a fully-graded session (concept passed, grade event
+// logged) in a fresh temp dir and returns the graph file path and the src dir so
+// callers can modify src.txt to simulate drift.
 //
-// Returns the graph path and the src path.
-// Caller must set TM_FILE=graphPath and TM_PROBE_MIN=1.
-func setupDriftFixture(t *testing.T, dir string) (graphPath, srcPath string) {
+// Sets TM_FILE, TM_SRC_ROOT, TM_PROBE_MIN=1.
+func driftPassedFixture(t *testing.T) (graphFile, srcDir string) {
 	t.Helper()
-
-	// Write src.txt.
-	srcContent := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-	srcPath = filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
+	dir := t.TempDir()
+	// Same content as setupCheckSrcRoot so hashes are consistent.
+	content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TM_SRC_ROOT", dir)
+	t.Setenv("TM_PROBE_MIN", "1")
 
-	// Create graph.
-	graphPath = filepath.Join(dir, "g.mmd")
-	out, errOut, code := run(t, "new", graphPath)
-	if code != 0 {
-		t.Fatalf("new: want 0, got %d; stdout=%s stderr=%s", code, out, errOut)
+	gfile := filepath.Join(dir, "g.mmd")
+	if _, _, code := run(t, "new", gfile); code != 0 {
+		t.Fatalf("new: exit %d", code)
 	}
-
-	t.Setenv("TM_FILE", graphPath)
-
-	// Add concept with citation to lines 1-5.
-	out, errOut, code = run(t, "add", "mycon", "src.txt:1-5", "My concept scope")
-	if code != 0 {
-		t.Fatalf("add: want 0, got %d; stdout=%s stderr=%s", code, out, errOut)
+	t.Setenv("TM_FILE", gfile)
+	if _, _, code := run(t, "add", "mycon", "src.txt:1-5", "My concept scope"); code != 0 {
+		t.Fatalf("add: exit %d", code)
 	}
-
-	// Add one question (TM_PROBE_MIN=1).
-	out, errOut, code = run(t, "q", "mycon", "src.txt:1-3", "What does line 1 say")
-	if code != 0 {
-		t.Fatalf("q: want 0, got %d; stdout=%s stderr=%s", code, out, errOut)
+	if _, _, code := run(t, "q", "mycon", "src.txt:1-3", "What does line 1 say"); code != 0 {
+		t.Fatalf("q: exit %d", code)
 	}
-	return graphPath, srcPath
-}
-
-// driftSrc modifies line 1 of src.txt in dir so hashes no longer match.
-func driftSrc(t *testing.T, srcPath string) {
-	t.Helper()
-	modified := "line 1 MODIFIED\nline 2\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(srcPath, []byte(modified), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// buildPassedConceptSession builds a full session and returns the qid and
-// concept ID that has been passed. The caller should have set TM_PROBE_MIN=1.
-//
-// State: concept passed, grade event logged, src.txt still original.
-func buildPassedConceptSession(t *testing.T, dir string) (graphPath, srcPath string) {
-	t.Helper()
-
-	graphPath, srcPath = setupDriftFixture(t, dir)
-
-	// Determine qid from the graph.
 	out, _, code := run(t, "ask", "mycon")
 	if code != 0 {
-		t.Fatalf("ask: want 0, got %d; out=%s", code, out)
+		t.Fatalf("ask: exit %d", code)
 	}
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) < 2 {
-		t.Fatalf("ask: want at least 2 lines; got %q", out)
+		t.Fatalf("ask: want ≥2 lines; got %q", out)
 	}
-	// Format: "probe_1\nq1 | ..."
 	qid := strings.Fields(lines[1])[0]
+	if _, _, code = run(t, "answer", qid, "My answer"); code != 0 {
+		t.Fatalf("answer: exit %d", code)
+	}
+	if _, _, code = run(t, "grade", qid, "pass", "Good"); code != 0 {
+		t.Fatalf("grade: exit %d", code)
+	}
+	return gfile, dir
+}
 
-	// Answer the question.
-	out, errOut, code := run(t, "answer", qid, "My answer here")
+// driftSrc overwrites line 1 of src.txt so stored hashes no longer match.
+func driftSrc(t *testing.T, dir string) {
+	t.Helper()
+	content := "line 1 MODIFIED\nline 2\nline 3\nline 4\nline 5\n"
+	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// qidFromAsk returns the first question ID from `tm ask <concept>` output.
+func qidFromAsk(t *testing.T) string {
+	t.Helper()
+	out, _, code := run(t, "ask", "mycon")
 	if code != 0 {
-		t.Fatalf("answer: want 0, got %d; stdout=%s stderr=%s", code, out, errOut)
+		t.Fatalf("ask mycon: exit %d", code)
 	}
-
-	// Grade it pass (grade does not require TM_ROLE=grader when not set).
-	out, errOut, code = run(t, "grade", qid, "pass", "Good answer")
-	if code != 0 {
-		t.Fatalf("grade: want 0, got %d; stdout=%s stderr=%s", code, out, errOut)
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("ask mycon: want ≥2 lines; got %q", out)
 	}
-
-	return graphPath, srcPath
+	return strings.Fields(lines[1])[0]
 }
 
-// ── answer drift refusal ──────────────────────────────────────────────────────
+// ── TestDrift_AnswerAndCheckRefusal ───────────────────────────────────────────
 
-// TestAnswer_DriftRefusal verifies that tm answer refuses with exit 1 and the
-// correct err:/fix: lines when the question's citation has drifted.
-func TestAnswer_DriftRefusal(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-
-	setupDriftFixture(t, dir)
-
-	// Find the question ID.
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-
-	// Verify answer works before drift.
-	outBefore, errBefore, codeBefore := run(t, "answer", qid, "Test answer")
-	if codeBefore != 0 {
-		t.Fatalf("answer before drift: want 0, got %d; stdout=%s stderr=%s", codeBefore, outBefore, errBefore)
+// TestDrift_AnswerAndCheckRefusal verifies that both tm answer and tm check
+// refuse with exit 1 when the question's citation has drifted, and pass
+// through normally when it has not.
+func TestDrift_AnswerAndCheckRefusal(t *testing.T) {
+	cases := []struct {
+		name     string
+		doDrift  bool   // modify src.txt before the command
+		cmd      string // "answer" or "check"
+		wantCode int
+		wantErr  string // non-empty only when wantCode != 0
+		wantFix  string
+	}{
+		{
+			name: "answer passes through on clean citation",
+			cmd:  "answer", doDrift: false, wantCode: 0,
+		},
+		{
+			name: "answer refuses with exit 1 on drifted citation",
+			cmd:  "answer", doDrift: true, wantCode: 1,
+			wantErr: "citation has drifted",
+			wantFix: "tm drop",
+		},
+		{
+			name: "check passes through on clean citation",
+			cmd:  "check", doDrift: false, wantCode: 0,
+		},
+		{
+			name: "check refuses with exit 1 on drifted citation",
+			cmd:  "check", doDrift: true, wantCode: 1,
+			wantErr: "citation has drifted",
+			wantFix: "tm drop",
+		},
 	}
 
-	// We need a fresh question without an answer to test the drift refusal.
-	// Re-create the session with a different question.
-	dir2 := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath2, srcPath2 := setupDriftFixture(t, dir2)
-	t.Setenv("TM_FILE", graphPath2)
-	t.Setenv("TM_SRC_ROOT", dir2)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			dir := t.TempDir()
+			content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+			if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("TM_SRC_ROOT", dir)
+			t.Setenv("TM_PROBE_MIN", "1")
+			gfile := filepath.Join(dir, "g.mmd")
+			run(t, "new", gfile)
+			t.Setenv("TM_FILE", gfile)
+			run(t, "add", "mycon", "src.txt:1-5", "My concept")
+			run(t, "q", "mycon", "src.txt:1-3", "What does line 1 say")
+			qid := qidFromAsk(t)
 
-	out2, _, _ := run(t, "ask", "mycon")
-	lines2 := strings.Split(strings.TrimSpace(out2), "\n")
-	qid2 := strings.Fields(lines2[1])[0]
+			if tc.cmd == "check" {
+				// check requires a pending answer.
+				run(t, "answer", qid, "pending answer")
+			}
+			if tc.doDrift {
+				driftSrc(t, dir)
+			}
 
-	// Drift the source.
-	driftSrc(t, srcPath2)
+			var args []string
+			if tc.cmd == "answer" {
+				args = []string{"answer", qid, "My response"}
+			} else {
+				args = []string{"check", qid}
+			}
 
-	_, errOut, code := run(t, "answer", qid2, "My drifted answer")
-	if code != 1 {
-		t.Fatalf("answer after drift: want 1, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, qid2+" citation has drifted") {
-		t.Errorf("want drift refusal message; got: %s", errOut)
-	}
-	if !strings.Contains(errOut, "tm drop "+qid2) {
-		t.Errorf("want fix line with 'tm drop %s'; got: %s", qid2, errOut)
-	}
-}
-
-// TestAnswer_NoDriftPassthrough verifies that tm answer succeeds when the
-// citation has not drifted.
-func TestAnswer_NoDriftPassthrough(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	setupDriftFixture(t, dir)
-
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-
-	_, errOut, code := run(t, "answer", qid, "My answer")
-	if code != 0 {
-		t.Fatalf("answer without drift: want 0, got %d; stderr=%s", code, errOut)
-	}
-}
-
-// ── check drift refusal ───────────────────────────────────────────────────────
-
-// TestCheck_DriftRefusal verifies that tm check refuses with exit 1 when the
-// question's citation has drifted.
-func TestCheck_DriftRefusal(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-
-	// Answer (before drift).
-	_, _, _ = run(t, "answer", qid, "My answer")
-
-	// Now drift the source.
-	driftSrc(t, srcPath)
-
-	_, errOut, code := run(t, "check", qid)
-	if code != 1 {
-		t.Fatalf("check after drift: want 1, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, qid+" citation has drifted") {
-		t.Errorf("want drift refusal; got: %s", errOut)
-	}
-	if !strings.Contains(errOut, "tm drop "+qid) {
-		t.Errorf("want fix line with 'tm drop'; got: %s", errOut)
+			_, errOut, code := run(t, args...)
+			if code != tc.wantCode {
+				t.Fatalf("exit: want %d, got %d; stderr=%s", tc.wantCode, code, errOut)
+			}
+			if tc.wantErr != "" && !strings.Contains(errOut, tc.wantErr) {
+				t.Errorf("want %q in stderr; got: %s", tc.wantErr, errOut)
+			}
+			if tc.wantFix != "" && !strings.Contains(errOut, tc.wantFix) {
+				t.Errorf("want %q in fix line; got: %s", tc.wantFix, errOut)
+			}
+		})
 	}
 }
 
-// TestCheck_NoDriftPassthrough verifies that tm check succeeds when no drift.
-func TestCheck_NoDriftPassthrough(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
+// ── TestDrift_DropQuestion ────────────────────────────────────────────────────
 
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
+// TestDrift_DropQuestion covers every row of the drop-question-drift spec
+// (§7): accept on drifted+ungraded, refuse on graded or non-drifted, and
+// verify that the unclear answer enables the --re replacement path.
+func TestDrift_DropQuestion(t *testing.T) {
+	type row struct {
+		name       string
+		setup      func(t *testing.T, gfile, srcDir string) (dropArg string)
+		wantCode   int
+		wantErr    string
+		checkEvent func(t *testing.T, gfile string)
+	}
 
-	_, _, _ = run(t, "answer", qid, "My answer")
+	cases := []row{
+		{
+			name: "accepts drifted ungraded question and logs reason:drift",
+			setup: func(t *testing.T, _ string, srcDir string) string {
+				qid := qidFromAsk(t)
+				driftSrc(t, srcDir)
+				return qid
+			},
+			wantCode: 0,
+			checkEvent: func(t *testing.T, gfile string) {
+				t.Helper()
+				rows := readEventLog(t, gfile)
+				var found map[string]any
+				for _, r := range rows {
+					if r["ev"] == "drop" {
+						found = r
+					}
+				}
+				if found == nil {
+					t.Fatal("no drop event")
+				}
+				if found["reason"] != "drift" {
+					t.Errorf("reason: want 'drift', got %v", found["reason"])
+				}
+				n, _ := found["node"].(map[string]any)
+				if n == nil {
+					t.Error("drop event missing node")
+				}
+			},
+		},
+		{
+			name: "refuses already-graded question",
+			setup: func(t *testing.T, _ string, srcDir string) string {
+				qid := qidFromAsk(t)
+				run(t, "answer", qid, "My answer")
+				run(t, "grade", qid, "fail", "Wrong")
+				driftSrc(t, srcDir)
+				return qid
+			},
+			wantCode: 1,
+			wantErr:  "already graded",
+		},
+		{
+			name: "refuses when citation has not drifted",
+			setup: func(t *testing.T, _, _ string) string {
+				return qidFromAsk(t)
+			},
+			wantCode: 1,
+			wantErr:  "citation has not drifted",
+		},
+	}
 
-	_, errOut, code := run(t, "check", qid)
-	if code != 0 {
-		t.Fatalf("check without drift: want 0, got %d; stderr=%s", code, errOut)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			dir := t.TempDir()
+			content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+			if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("TM_SRC_ROOT", dir)
+			t.Setenv("TM_PROBE_MIN", "1")
+			gfile := filepath.Join(dir, "g.mmd")
+			run(t, "new", gfile)
+			t.Setenv("TM_FILE", gfile)
+			run(t, "add", "mycon", "src.txt:1-5", "My concept")
+			run(t, "q", "mycon", "src.txt:1-3", "What does line 1 say")
+
+			dropArg := tc.setup(t, gfile, dir)
+			_, errOut, code := run(t, "drop", dropArg)
+			if code != tc.wantCode {
+				t.Fatalf("exit: want %d, got %d; stderr=%s", tc.wantCode, code, errOut)
+			}
+			if tc.wantErr != "" && !strings.Contains(errOut, tc.wantErr) {
+				t.Errorf("want %q in stderr; got: %s", tc.wantErr, errOut)
+			}
+			if tc.checkEvent != nil {
+				tc.checkEvent(t, gfile)
+			}
+		})
 	}
 }
 
-// ── drop question drift ───────────────────────────────────────────────────────
-
-// TestDrop_Question_Drifted verifies that tm drop <qid> succeeds on a drifted
-// ungraded question, emits exit 0, and logs a drop event with reason: drift.
-func TestDrop_Question_Drifted(t *testing.T) {
+// TestDrift_DropQuestion_ReAfterDrop verifies that after a drift-drop the
+// unclear answer enables --re and the replacement batch resolves cleanly.
+func TestDrift_DropQuestion_ReAfterDrop(t *testing.T) {
 	tempErrlog(t)
 	dir := t.TempDir()
+	// src.txt: "line 1…5" + "line 1…5 (dup)" so replacement cite hashes fine.
+	content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_SRC_ROOT", dir)
 	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
+	gfile := filepath.Join(dir, "g.mmd")
+	run(t, "new", gfile)
+	t.Setenv("TM_FILE", gfile)
+	run(t, "add", "mycon", "src.txt:1-5", "My concept")
+	run(t, "q", "mycon", "src.txt:1-3", "What does line 1 say")
+	qid := qidFromAsk(t)
 
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-
-	// Drift the source BEFORE dropping.
-	driftSrc(t, srcPath)
-
-	outDrop, errOut, code := run(t, "drop", qid)
-	if code != 0 {
-		t.Fatalf("drop drifted question: want 0, got %d; stdout=%s stderr=%s", code, outDrop, errOut)
-	}
-	if strings.TrimSpace(outDrop) != "ok" {
-		t.Errorf("want 'ok', got %q", outDrop)
+	// Drift the source then drop the question.
+	driftSrc(t, dir)
+	if _, errOut, code := run(t, "drop", qid); code != 0 {
+		t.Fatalf("drop: exit %d; stderr=%s", code, errOut)
 	}
 
-	// Verify the event log has a drop event with reason: drift.
-	rows := readEventLog(t, graphPath)
-	var dropRow map[string]any
-	for _, r := range rows {
-		if r["ev"] == "drop" {
-			dropRow = r
-			break
-		}
-	}
-	if dropRow == nil {
-		t.Fatal("no drop event in event log")
-	}
-	if dropRow["id"] != qid {
-		t.Errorf("drop event id: want %q, got %v", qid, dropRow["id"])
-	}
-	if dropRow["reason"] != "drift" {
-		t.Errorf("drop event reason: want 'drift', got %v", dropRow["reason"])
-	}
-	node, ok := dropRow["node"].(map[string]any)
-	if !ok {
-		t.Fatalf("drop event node is not a map: %T", dropRow["node"])
-	}
-	if node["scope"] == "" {
-		t.Error("drop event node.scope is empty")
-	}
-}
-
-// TestDrop_Question_Graded_Refuse verifies that tm drop refuses a graded
-// question (already graded, drift doesn't matter).
-func TestDrop_Question_Graded_Refuse(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-
-	// Answer and grade the question.
-	_, _, _ = run(t, "answer", qid, "My answer")
-	_, _, _ = run(t, "grade", qid, "fail", "Not quite right")
-
-	// Now drift the source.
-	driftSrc(t, srcPath)
-
-	_, errOut, code := run(t, "drop", qid)
-	if code != 1 {
-		t.Fatalf("drop graded question: want 1, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "already graded") {
-		t.Errorf("want 'already graded' err; got: %s", errOut)
-	}
-}
-
-// TestDrop_Question_NotDrifted_Refuse verifies that tm drop refuses when
-// the citation has not drifted (already covered but explicit).
-func TestDrop_Question_NotDrifted_Refuse(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-
-	_, errOut, code := run(t, "drop", qid)
-	if code != 1 {
-		t.Fatalf("drop non-drifted: want 1, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "citation has not drifted") {
-		t.Errorf("want 'citation has not drifted'; got: %s", errOut)
-	}
-}
-
-// ── --re after drop restores batch ───────────────────────────────────────────
-
-// TestDrop_QuestionDrift_ReAfterDrop verifies that after dropping a drifted
-// question, tm q --re <qid> works and creates a replacement question, and
-// grading it pass completes the batch without any verdict consequences.
-func TestDrop_QuestionDrift_ReAfterDrop(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	// Write a second (non-drifting) src range for the replacement question.
-	// Lines 4-5 won't be affected when we drift line 1.
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-
-	// Drift the source.
-	driftSrc(t, srcPath)
-
-	// Drop the drifted question.
-	_, errOut, code := run(t, "drop", qid)
-	if code != 0 {
-		t.Fatalf("drop: want 0, got %d; stderr=%s", code, errOut)
-	}
-
-	// Restore src.txt so the replacement question's citation can be hashed.
-	// Use lines 4-5 which were not modified.
-	restoredContent := "line 1 MODIFIED\nline 2\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(srcPath, []byte(restoredContent), 0o644); err != nil {
+	// Restore modified content so new question cite hashes.
+	content2 := "line 1 MODIFIED\nline 2\nline 3\nline 4\nline 5\n"
+	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content2), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Add replacement question with --re targeting the dropped question.
+	// Add replacement question targeting lines 4-5.
 	outQ, errOut, code := run(t, "q", "mycon", "src.txt:4-5", "Replacement question", "--re", qid)
 	if code != 0 {
-		t.Fatalf("q --re: want 0, got %d; stdout=%s stderr=%s", code, outQ, errOut)
+		t.Fatalf("q --re: exit %d; stdout=%s stderr=%s", code, outQ, errOut)
 	}
 	newQID := strings.TrimSpace(outQ)
 
-	// Answer and grade the replacement question.
-	_, _, _ = run(t, "answer", newQID, "Replacement answer")
-	outGrade, errOut, code := run(t, "grade", newQID, "pass", "Good")
-	if code != 0 {
-		t.Fatalf("grade replacement: want 0, got %d; stdout=%s stderr=%s", code, outGrade, errOut)
+	run(t, "answer", newQID, "Replacement answer")
+	if _, errOut, code := run(t, "grade", newQID, "pass", "Good"); code != 0 {
+		t.Fatalf("grade replacement: exit %d; stderr=%s", code, errOut)
 	}
 
-	// Verify status: concept should now be passed.
-	outStatus, _, code := run(t, "status")
-	if code != 0 {
-		t.Fatalf("status: want 0, got %d", code)
-	}
-	// After pass, the passed count should be 1.
+	// Concept must now be passed with no fail consequences from the drop.
+	outStatus, _, _ := run(t, "status")
 	if !strings.Contains(outStatus, "passed 1") {
 		t.Errorf("want concept passed; status: %s", outStatus)
 	}
 }
 
-// ── recite ───────────────────────────────────────────────────────────────────
+// ── TestDrift_Recite ──────────────────────────────────────────────────────────
 
-// TestRecite_HashMatch verifies that tm recite succeeds when the new range
-// hashes to the same content as an existing citation.
-func TestRecite_HashMatch(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-
-	// Write src.txt: original at lines 1-3, new at lines 6-8 (same text).
-	// Lines 1-3: "line 1\nline 2\nline 3"
-	// Lines 6-8: same text moved to different position.
-	srcContent := "line 1\nline 2\nline 3\nline 4\nline 5\nline 1\nline 2\nline 3\n"
-	srcPath := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	graphPath := filepath.Join(dir, "g.mmd")
-	run(t, "new", graphPath)
-	t.Setenv("TM_FILE", graphPath)
-
-	// Add concept with citation at lines 1-3.
-	run(t, "add", "mycon", "src.txt:1-3", "My concept")
-
-	// Recite to lines 6-8 (same content, so same hash).
-	outRecite, errOut, code := run(t, "recite", "mycon", "src.txt:6-8")
-	if code != 0 {
-		t.Fatalf("recite: want 0, got %d; stdout=%s stderr=%s", code, outRecite, errOut)
-	}
-	if strings.TrimSpace(outRecite) != "ok" {
-		t.Errorf("recite: want 'ok', got %q", outRecite)
-	}
-
-	// Verify event log has recite event with before/after.
-	rows := readEventLog(t, graphPath)
-	var reciteRow map[string]any
-	for _, r := range rows {
-		if r["ev"] == "recite" {
-			reciteRow = r
-			break
-		}
-	}
-	if reciteRow == nil {
-		t.Fatal("no recite event in log")
-	}
-	if reciteRow["id"] != "mycon" {
-		t.Errorf("recite event id: want 'mycon', got %v", reciteRow["id"])
-	}
-	before, _ := reciteRow["before"].(string)
-	after, _ := reciteRow["after"].(string)
-	if before == "" {
-		t.Error("recite event before is empty")
-	}
-	if after == "" {
-		t.Error("recite event after is empty")
-	}
-	// The after citation should point to lines 6-8.
-	if !strings.Contains(after, "src.txt:6-8") {
-		t.Errorf("recite after should contain src.txt:6-8; got %q", after)
-	}
-}
-
-// TestRecite_HashMismatch verifies that tm recite refuses with exit 1 and the
-// correct error when the new range has different content.
-func TestRecite_HashMismatch(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-
-	srcContent := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-	srcPath := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	graphPath := filepath.Join(dir, "g.mmd")
-	run(t, "new", graphPath)
-	t.Setenv("TM_FILE", graphPath)
-	run(t, "add", "mycon", "src.txt:1-3", "My concept")
-
-	// Try recite to a range with different content.
-	_, errOut, code := run(t, "recite", "mycon", "src.txt:3-5")
-	if code != 1 {
-		t.Fatalf("recite mismatch: want 1, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "recite hash mismatch") {
-		t.Errorf("want 'recite hash mismatch'; got: %s", errOut)
-	}
-	if !strings.Contains(errOut, "tm reopen") {
-		t.Errorf("want fix suggesting tm reopen; got: %s", errOut)
-	}
-}
-
-// TestRecite_MultiCitation verifies that tm recite selects the correct
-// citation by hash when a concept has multiple citations.
-func TestRecite_MultiCitation(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-
-	// src.txt: two distinct blocks; each appears twice (moved).
-	// Block A: "line 1\nline 2" at :1-2 and at :7-8
-	// Block B: "line 3\nline 4" at :3-4 and at :5-6
-	srcContent := "line 1\nline 2\nline 3\nline 4\nline 3\nline 4\nline 1\nline 2\n"
-	srcPath := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	// Create a graph manually with two citations on mycon.
-	// We need to use tm add with one cite, then edit manually to add a second.
-	// Alternatively, write the graph directly.
-	graphContent := `flowchart TB
-    subgraph passed["Concepts User understands"]
-    end
-    subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-2<br/>src.txt:3-4"]
-    end
-    subgraph testing["Open tests validating and teaching User understanding"]
-    end
-    classDef pending stroke-dasharray:4 3
-`
-	graphPath := filepath.Join(dir, "g.mmd")
-	if err := os.WriteFile(graphPath, []byte(graphContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Rehash the graph to add hashes.
-	outRehash, errOut, code := run(t, "rehash", graphPath)
-	if code != 0 {
-		t.Fatalf("rehash: want 0, got %d; stdout=%s stderr=%s", code, outRehash, errOut)
-	}
-	t.Setenv("TM_FILE", graphPath)
-
-	// Recite the second citation (src.txt:3-4) to its new location (src.txt:5-6).
-	// Hash of "line 3\nline 4" should match both :3-4 and :5-6.
-	outRecite, errOut, code := run(t, "recite", "mycon", "src.txt:5-6")
-	if code != 0 {
-		t.Fatalf("recite second cite: want 0, got %d; stdout=%s stderr=%s", code, outRecite, errOut)
-	}
-	if strings.TrimSpace(outRecite) != "ok" {
-		t.Errorf("want 'ok', got %q", outRecite)
+// TestDrift_Recite covers all recite behaviors: hash match on an untested and a
+// passed concept, mismatch, multi-citation selection, unknown concept, and hash
+// error on a nonexistent file.
+func TestDrift_Recite(t *testing.T) {
+	cases := []struct {
+		name string
+		// setup returns: graphFile, newRange to pass to recite, and a boolean
+		// indicating whether the concept should be graded to passed first.
+		setup    func(t *testing.T, dir string) (gfile, reciteArg string)
+		wantCode int
+		wantErr  string
+		// wantAfter is a substring that should appear in the recite event's "after" field.
+		wantAfter string
+	}{
+		{
+			name: "re-points untested concept citation to duplicate range",
+			setup: func(t *testing.T, dir string) (string, string) {
+				// src.txt: "line A\nline B" at :1-2 and at :5-6.
+				content := "line A\nline B\nline C\nline D\nline A\nline B\n"
+				if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TM_SRC_ROOT", dir)
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				run(t, "add", "mycon", "src.txt:1-2", "My concept")
+				return gfile, "src.txt:5-6"
+			},
+			wantCode: 0, wantAfter: "src.txt:5-6",
+		},
+		{
+			name: "re-points passed concept citation to duplicate range",
+			setup: func(t *testing.T, dir string) (string, string) {
+				// :1-2 and :5-6 share the same content; concept gets graded to passed.
+				content := "line A\nline B\nline C\nline D\nline A\nline B\n"
+				if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TM_SRC_ROOT", dir)
+				t.Setenv("TM_PROBE_MIN", "1")
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				run(t, "add", "mycon", "src.txt:1-2", "My concept")
+				run(t, "q", "mycon", "src.txt:3-4", "Question on lines 3-4")
+				qid := qidFromAsk(t)
+				run(t, "answer", qid, "My answer")
+				run(t, "grade", qid, "pass", "Good")
+				return gfile, "src.txt:5-6"
+			},
+			wantCode: 0, wantAfter: "src.txt:5-6",
+		},
+		{
+			name: "refuses with exit 1 when new range content differs",
+			setup: func(t *testing.T, dir string) (string, string) {
+				content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+				if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TM_SRC_ROOT", dir)
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				run(t, "add", "mycon", "src.txt:1-2", "My concept")
+				return gfile, "src.txt:3-4" // different content → hash mismatch
+			},
+			wantCode: 1, wantErr: "recite hash mismatch",
+		},
+		{
+			name: "selects the correct citation from a multi-citation concept",
+			setup: func(t *testing.T, dir string) (string, string) {
+				// Block A at :1-2 and :5-6; block B at :3-4 (duplicated at :7-8 in setup).
+				content := "line A\nline B\nline C\nline D\nline A\nline B\nline C\nline D\n"
+				if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TM_SRC_ROOT", dir)
+				// Write a two-citation graph manually and rehash it.
+				mmd := "flowchart TB\n    subgraph passed[\"Passed\"]\n    end\n    subgraph untested[\"Untested\"]\n        mycon[\"My concept<br/>src.txt:1-2<br/>src.txt:3-4\"]\n    end\n    subgraph testing[\"Testing\"]\n    end\n    classDef pending stroke-dasharray:4 3\n"
+				gfile := filepath.Join(dir, "g.mmd")
+				if err := os.WriteFile(gfile, []byte(mmd), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				run(t, "rehash", gfile)
+				t.Setenv("TM_FILE", gfile)
+				// Recite the second citation (src.txt:3-4 → "line C\nline D") to :7-8.
+				return gfile, "src.txt:7-8"
+			},
+			wantCode: 0,
+		},
+		{
+			name: "refuses with exit 3 for unknown concept",
+			setup: func(t *testing.T, dir string) (string, string) {
+				content := "line 1\nline 2\n"
+				if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TM_SRC_ROOT", dir)
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				return gfile, "src.txt:1-2"
+			},
+			// Override concept arg in test body below.
+			wantCode: 3, wantErr: "unknown concept",
+		},
+		{
+			name: "refuses with exit 3 when target file does not exist",
+			setup: func(t *testing.T, dir string) (string, string) {
+				content := "line 1\nline 2\n"
+				if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TM_SRC_ROOT", dir)
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				run(t, "add", "mycon", "src.txt:1-2", "My concept")
+				return gfile, "nonexistent.txt:1-2"
+			},
+			wantCode: 3, wantErr: "cannot hash",
+		},
 	}
 
-	// Recite the first citation (src.txt:1-2) to its new location (src.txt:7-8).
-	outRecite2, errOut, code := run(t, "recite", "mycon", "src.txt:7-8")
-	if code != 0 {
-		t.Fatalf("recite first cite: want 0, got %d; stdout=%s stderr=%s", code, outRecite2, errOut)
-	}
-}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			dir := t.TempDir()
+			gfile, reciteArg := tc.setup(t, dir)
 
-// ── reopen --src ──────────────────────────────────────────────────────────────
+			concept := "mycon"
+			if tc.wantErr == "unknown concept" {
+				concept = "no_such_concept"
+			}
 
-// TestReopen_WithSrc verifies that tm reopen --src updates the citation and
-// logs src_before and src_after in the reopen event.
-func TestReopen_WithSrc(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := buildPassedConceptSession(t, dir)
-	_, _ = graphPath, srcPath
-	t.Setenv("TM_FILE", graphPath)
-
-	// Write a new source file for the updated citation.
-	newSrc := "new line 1\nnew line 2\nnew line 3\n"
-	newSrcPath := filepath.Join(dir, "new_src.txt")
-	if err := os.WriteFile(newSrcPath, []byte(newSrc), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Reopen with --src pointing to new_src.txt:1-3.
-	_, errOut, code := run(t, "reopen", "mycon", "GAP: source updated", "--src", "new_src.txt:1-3")
-	if code != 0 {
-		t.Fatalf("reopen --src: want 0, got %d; stderr=%s", code, errOut)
-	}
-
-	// Verify event log has reopen event with src_before and src_after.
-	rows := readEventLog(t, graphPath)
-	var reopenRow map[string]any
-	for _, r := range rows {
-		if r["ev"] == "reopen" {
-			reopenRow = r
-		}
-	}
-	if reopenRow == nil {
-		t.Fatal("no reopen event in log")
-	}
-	srcBefore, _ := reopenRow["src_before"].(string)
-	srcAfter, _ := reopenRow["src_after"].(string)
-	if srcBefore == "" {
-		t.Error("reopen event missing src_before")
-	}
-	if srcAfter == "" {
-		t.Error("reopen event missing src_after")
-	}
-	if !strings.Contains(srcAfter, "new_src.txt:1-3") {
-		t.Errorf("src_after should contain new_src.txt:1-3; got %q", srcAfter)
+			_, errOut, code := run(t, "recite", concept, reciteArg)
+			if code != tc.wantCode {
+				t.Fatalf("exit: want %d, got %d; stderr=%s", tc.wantCode, code, errOut)
+			}
+			if tc.wantErr != "" && !strings.Contains(errOut, tc.wantErr) {
+				t.Errorf("want %q in stderr; got: %s", tc.wantErr, errOut)
+			}
+			if tc.wantAfter != "" {
+				rows := readEventLog(t, gfile)
+				var found map[string]any
+				for _, r := range rows {
+					if r["ev"] == "recite" {
+						found = r
+					}
+				}
+				if found == nil {
+					t.Fatal("no recite event logged")
+				}
+				after, _ := found["after"].(string)
+				if !strings.Contains(after, tc.wantAfter) {
+					t.Errorf("recite event after: want %q, got %q", tc.wantAfter, after)
+				}
+			}
+		})
 	}
 }
 
-// TestReopen_WithoutSrc verifies reopen without --src still works (no regression).
-func TestReopen_WithoutSrc(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := buildPassedConceptSession(t, dir)
-	t.Setenv("TM_FILE", graphPath)
+// ── TestDrift_ReopenSrc ───────────────────────────────────────────────────────
 
-	_, errOut, code := run(t, "reopen", "mycon", "Some gap")
-	if code != 0 {
-		t.Fatalf("reopen: want 0, got %d; stderr=%s", code, errOut)
+// TestDrift_ReopenSrc verifies that reopen --src updates the citation and
+// logs src_before/src_after, while reopen without --src logs neither field.
+func TestDrift_ReopenSrc(t *testing.T) {
+	cases := []struct {
+		name       string
+		withSrc    bool
+		wantBefore bool
+		wantAfter  bool
+	}{
+		{
+			name:    "reopen without --src omits src_before and src_after",
+			withSrc: false, wantBefore: false, wantAfter: false,
+		},
+		{
+			name:    "reopen with --src logs src_before and src_after in event",
+			withSrc: true, wantBefore: true, wantAfter: true,
+		},
 	}
 
-	// Verify no src_before/src_after in event.
-	rows := readEventLog(t, graphPath)
-	var reopenRow map[string]any
-	for _, r := range rows {
-		if r["ev"] == "reopen" {
-			reopenRow = r
-		}
-	}
-	if reopenRow == nil {
-		t.Fatal("no reopen event")
-	}
-	if _, ok := reopenRow["src_before"]; ok {
-		t.Error("reopen without --src should not have src_before")
-	}
-	if _, ok := reopenRow["src_after"]; ok {
-		t.Error("reopen without --src should not have src_after")
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			gfile, dir := driftPassedFixture(t)
+
+			var args []string
+			if tc.withSrc {
+				// Write a new source file for the re-pointed citation.
+				newContent := "new line 1\nnew line 2\nnew line 3\n"
+				if err := os.WriteFile(filepath.Join(dir, "new_src.txt"), []byte(newContent), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				args = []string{"reopen", "mycon", "Gap: source updated", "--src", "new_src.txt:1-3"}
+			} else {
+				args = []string{"reopen", "mycon", "Gap: some gap"}
+			}
+
+			_, errOut, code := run(t, args...)
+			if code != 0 {
+				t.Fatalf("reopen: exit %d; stderr=%s", code, errOut)
+			}
+
+			rows := readEventLog(t, gfile)
+			var ev map[string]any
+			for _, r := range rows {
+				if r["ev"] == "reopen" {
+					ev = r
+				}
+			}
+			if ev == nil {
+				t.Fatal("no reopen event")
+			}
+			_, hasBefore := ev["src_before"]
+			_, hasAfter := ev["src_after"]
+			if hasBefore != tc.wantBefore {
+				t.Errorf("src_before present=%v, want %v", hasBefore, tc.wantBefore)
+			}
+			if hasAfter != tc.wantAfter {
+				t.Errorf("src_after present=%v, want %v", hasAfter, tc.wantAfter)
+			}
+		})
 	}
 }
 
-// ── check --drift ─────────────────────────────────────────────────────────────
+// ── TestDrift_CheckDrift ──────────────────────────────────────────────────────
 
-// TestCheckDrift_Payload verifies that tm check --drift prints the §9.1 recheck
-// payload. Builds a passed concept from scratch, then drifts the source.
-func TestCheckDrift_Payload(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := buildPassedConceptSession(t, dir)
-	t.Setenv("TM_FILE", graphPath)
+// TestDrift_CheckDrift verifies the §9.1 recheck payload produced by
+// tm check --drift, including missing-log and unknown-concept refusals.
+func TestDrift_CheckDrift(t *testing.T) {
+	cases := []struct {
+		name     string
+		setup    func(t *testing.T) (gfile, concept string)
+		wantCode int
+		wantOut  []string
+		wantErr  string
+	}{
+		{
+			name: "missing event log exits 1 with no-event-log message",
+			setup: func(t *testing.T) (string, string) {
+				dir := t.TempDir()
+				content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+				os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644) //nolint:errcheck
+				t.Setenv("TM_SRC_ROOT", dir)
+				t.Setenv("TM_PROBE_MIN", "1")
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				run(t, "add", "mycon", "src.txt:1-5", "My concept")
+				os.Remove(gfile + ".jsonl") //nolint:errcheck
+				return gfile, "mycon"
+			},
+			wantCode: 1, wantErr: "no event log for mycon",
+		},
+		{
+			name: "unknown concept exits 3",
+			setup: func(t *testing.T) (string, string) {
+				gfile, _ := driftPassedFixture(t)
+				return gfile, "no_such_concept"
+			},
+			wantCode: 3, wantErr: "unknown concept",
+		},
+		{
+			name: "clean source emits Q/CITE/SRC_GRADED/SRC_CURRENT/A/VERDICT blocks without DRIFT",
+			setup: func(t *testing.T) (string, string) {
+				gfile, _ := driftPassedFixture(t)
+				return gfile, "mycon"
+			},
+			wantCode: 0,
+			wantOut:  []string{"Q ", "CITE ", "SRC_GRADED", "SRC_CURRENT", "A: ", "VERDICT: "},
+		},
+		{
+			name: "drifted source adds DRIFT line before the affected block",
+			setup: func(t *testing.T) (string, string) {
+				gfile, srcDir := driftPassedFixture(t)
+				driftSrc(t, srcDir)
+				return gfile, "mycon"
+			},
+			wantCode: 0,
+			wantOut:  []string{"DRIFT ", "tm grade --drift mycon"},
+		},
+	}
 
-	// Before drift: check --drift should show matching SRC_GRADED and SRC_CURRENT.
-	outBefore, errOut, code := run(t, "check", "--drift", "mycon")
-	if code != 0 {
-		t.Fatalf("check --drift before drift: want 0, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(outBefore, "Q ") {
-		t.Errorf("want Q line in payload; got:\n%s", outBefore)
-	}
-	if !strings.Contains(outBefore, "CITE ") {
-		t.Errorf("want CITE line in payload; got:\n%s", outBefore)
-	}
-	if !strings.Contains(outBefore, "SRC_GRADED") {
-		t.Errorf("want SRC_GRADED in payload; got:\n%s", outBefore)
-	}
-	if !strings.Contains(outBefore, "SRC_CURRENT") {
-		t.Errorf("want SRC_CURRENT in payload; got:\n%s", outBefore)
-	}
-	if !strings.Contains(outBefore, "A: ") {
-		t.Errorf("want A: line in payload; got:\n%s", outBefore)
-	}
-	if !strings.Contains(outBefore, "VERDICT: ") {
-		t.Errorf("want VERDICT: line in payload; got:\n%s", outBefore)
-	}
-	// No DRIFT line before modification.
-	if strings.Contains(outBefore, "DRIFT ") {
-		t.Errorf("no DRIFT expected before source modification; got:\n%s", outBefore)
-	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			gfile, concept := tc.setup(t)
+			t.Setenv("TM_FILE", gfile)
 
-	// Drift the source.
-	driftSrc(t, srcPath)
-
-	// After drift: DRIFT line should appear before the drifted block.
-	outAfter, errOut, code := run(t, "check", "--drift", "mycon")
-	if code != 0 {
-		t.Fatalf("check --drift after drift: want 0, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(outAfter, "DRIFT ") {
-		t.Errorf("want DRIFT line after source modification; got:\n%s", outAfter)
-	}
-	// Rubric and grade command line must be present.
-	if !strings.Contains(outAfter, "tm grade --drift mycon") {
-		t.Errorf("want grade --drift command line; got:\n%s", outAfter)
+			out, errOut, code := run(t, "check", "--drift", concept)
+			if code != tc.wantCode {
+				t.Fatalf("exit: want %d, got %d; stderr=%s", tc.wantCode, code, errOut)
+			}
+			if tc.wantErr != "" && !strings.Contains(errOut, tc.wantErr) {
+				t.Errorf("want %q in stderr; got: %s", tc.wantErr, errOut)
+			}
+			for _, want := range tc.wantOut {
+				if !strings.Contains(out, want) {
+					t.Errorf("want %q in output; got:\n%s", want, out)
+				}
+			}
+		})
 	}
 }
 
-// TestCheckDrift_MissingLog verifies that tm check --drift exits 1 with
-// "no event log" when the log file does not exist.
-func TestCheckDrift_MissingLog(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
+// ── TestDrift_GradeDrift ──────────────────────────────────────────────────────
 
-	// Delete the event log if it exists.
-	_ = os.Remove(graphPath + ".jsonl")
-
-	_, errOut, code := run(t, "check", "--drift", "mycon")
-	if code != 1 {
-		t.Fatalf("check --drift no log: want 1, got %d; stderr=%s", code, errOut)
+// TestDrift_GradeDrift covers all grade --drift behaviors: keep and reopen on
+// passed and untested concepts, verdict validation, and role/unknown-concept refusals.
+func TestDrift_GradeDrift(t *testing.T) {
+	cases := []struct {
+		name     string
+		setup    func(t *testing.T) string // returns graphFile
+		args     []string                  // positionals after "grade"
+		wantCode int
+		wantErr  string
+		check    func(t *testing.T, gfile string)
+	}{
+		{
+			name: "keep rehashes passed-concept citations and logs recheck event",
+			setup: func(t *testing.T) string {
+				gfile, srcDir := driftPassedFixture(t)
+				driftSrc(t, srcDir)
+				return gfile
+			},
+			args:     []string{"--drift", "mycon", "keep", "Source changed but scope holds"},
+			wantCode: 0,
+			check: func(t *testing.T, gfile string) {
+				rows := readEventLog(t, gfile)
+				var ev map[string]any
+				for _, r := range rows {
+					if r["ev"] == "recheck" {
+						ev = r
+					}
+				}
+				if ev == nil {
+					t.Fatal("no recheck event")
+				}
+				if ev["verdict"] != "keep" {
+					t.Errorf("verdict: want 'keep', got %v", ev["verdict"])
+				}
+				if ev["concept"] != "mycon" {
+					t.Errorf("concept: want 'mycon', got %v", ev["concept"])
+				}
+			},
+		},
+		{
+			name: "reopen moves passed concept to untested and logs recheck event",
+			setup: func(t *testing.T) string {
+				gfile, srcDir := driftPassedFixture(t)
+				driftSrc(t, srcDir)
+				return gfile
+			},
+			args:     []string{"--drift", "mycon", "reopen", "Scope no longer valid"},
+			wantCode: 0,
+			check: func(t *testing.T, gfile string) {
+				rows := readEventLog(t, gfile)
+				var ev map[string]any
+				for _, r := range rows {
+					if r["ev"] == "recheck" {
+						ev = r
+					}
+				}
+				if ev == nil {
+					t.Fatal("no recheck event")
+				}
+				if ev["verdict"] != "reopen" {
+					t.Errorf("verdict: want 'reopen', got %v", ev["verdict"])
+				}
+				// Concept must be back in untested.
+				outStatus, _, _ := run(t, "status")
+				if strings.Contains(outStatus, "passed 1") {
+					t.Error("concept should be untested after reopen")
+				}
+			},
+		},
+		{
+			name: "keep on untested concept succeeds and logs recheck event",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+				os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644) //nolint:errcheck
+				t.Setenv("TM_SRC_ROOT", dir)
+				t.Setenv("TM_PROBE_MIN", "1")
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				run(t, "add", "mycon", "src.txt:1-5", "My concept")
+				run(t, "q", "mycon", "src.txt:1-3", "Q1")
+				qid := qidFromAsk(t)
+				run(t, "answer", qid, "My answer")
+				run(t, "grade", qid, "fail", "Wrong")
+				driftSrc(t, dir)
+				return gfile
+			},
+			args:     []string{"--drift", "mycon", "keep", "Source drift; scope unchanged"},
+			wantCode: 0,
+		},
+		{
+			name: "reopen on untested concept refuses with exit 1 not-passed",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+				os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644) //nolint:errcheck
+				t.Setenv("TM_SRC_ROOT", dir)
+				t.Setenv("TM_PROBE_MIN", "1")
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				run(t, "add", "mycon", "src.txt:1-5", "My concept")
+				run(t, "q", "mycon", "src.txt:1-3", "Q1")
+				qid := qidFromAsk(t)
+				run(t, "answer", qid, "My answer")
+				run(t, "grade", qid, "fail", "Wrong")
+				return gfile
+			},
+			args:     []string{"--drift", "mycon", "reopen", "Summary"},
+			wantCode: 1, wantErr: "not passed",
+		},
+		{
+			name: "unknown concept exits 3",
+			setup: func(t *testing.T) string {
+				gfile, _ := driftPassedFixture(t)
+				return gfile
+			},
+			args:     []string{"--drift", "no_such", "keep", "Summary"},
+			wantCode: 3, wantErr: "unknown concept",
+		},
+		{
+			name: "verdict keep without --drift exits 3 with invalid-verdict message",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+				os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644) //nolint:errcheck
+				t.Setenv("TM_SRC_ROOT", dir)
+				t.Setenv("TM_PROBE_MIN", "1")
+				gfile := filepath.Join(dir, "g.mmd")
+				run(t, "new", gfile)
+				t.Setenv("TM_FILE", gfile)
+				run(t, "add", "mycon", "src.txt:1-5", "My concept")
+				run(t, "q", "mycon", "src.txt:1-3", "Q1")
+				qid := qidFromAsk(t)
+				run(t, "answer", qid, "My answer")
+				return gfile
+			},
+			// Pass qid as first positional (not --drift concept).
+			args:     []string{"q1", "keep", "Summary"},
+			wantCode: 3, wantErr: "verdict must be pass, fail, or unclear",
+		},
+		{
+			name: "verdict pass with --drift exits 3 with must-be-keep-or-reopen message",
+			setup: func(t *testing.T) string {
+				gfile, _ := driftPassedFixture(t)
+				return gfile
+			},
+			args:     []string{"--drift", "mycon", "pass", "Summary"},
+			wantCode: 3, wantErr: "--drift verdict must be keep or reopen",
+		},
 	}
-	if !strings.Contains(errOut, "no event log for mycon") {
-		t.Errorf("want 'no event log' message; got: %s", errOut)
-	}
-	if !strings.Contains(errOut, "tm reopen") {
-		t.Errorf("want fix suggesting tm reopen; got: %s", errOut)
-	}
-}
 
-// ── grade --drift ─────────────────────────────────────────────────────────────
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			gfile := tc.setup(t)
+			t.Setenv("TM_FILE", gfile)
 
-// TestGradeDrift_Keep verifies that tm grade --drift <concept> keep re-hashes
-// the concept citation and logs a recheck event.
-func TestGradeDrift_Keep(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := buildPassedConceptSession(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	// Drift the source.
-	driftSrc(t, srcPath)
-
-	// grade --drift keep.
-	_, errOut, code := run(t, "grade", "--drift", "mycon", "keep", "Source change does not affect the scope")
-	if code != 0 {
-		t.Fatalf("grade --drift keep: want 0, got %d; stderr=%s", code, errOut)
-	}
-
-	// Verify a recheck event was logged.
-	rows := readEventLog(t, graphPath)
-	var recheckRow map[string]any
-	for _, r := range rows {
-		if r["ev"] == "recheck" {
-			recheckRow = r
-		}
-	}
-	if recheckRow == nil {
-		t.Fatal("no recheck event in log")
-	}
-	if recheckRow["concept"] != "mycon" {
-		t.Errorf("recheck concept: want 'mycon', got %v", recheckRow["concept"])
-	}
-	if recheckRow["verdict"] != "keep" {
-		t.Errorf("recheck verdict: want 'keep', got %v", recheckRow["verdict"])
-	}
-}
-
-// TestGradeDrift_Reopen verifies that tm grade --drift <concept> reopen
-// moves the concept back to untested and logs a recheck event.
-func TestGradeDrift_Reopen(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := buildPassedConceptSession(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	// Drift the source.
-	driftSrc(t, srcPath)
-
-	// grade --drift reopen.
-	_, errOut, code := run(t, "grade", "--drift", "mycon", "reopen", "Answer no longer holds")
-	if code != 0 {
-		t.Fatalf("grade --drift reopen: want 0, got %d; stderr=%s", code, errOut)
-	}
-
-	// Verify recheck event.
-	rows := readEventLog(t, graphPath)
-	var recheckRow map[string]any
-	for _, r := range rows {
-		if r["ev"] == "recheck" {
-			recheckRow = r
-		}
-	}
-	if recheckRow == nil {
-		t.Fatal("no recheck event in log")
-	}
-	if recheckRow["verdict"] != "reopen" {
-		t.Errorf("recheck verdict: want 'reopen', got %v", recheckRow["verdict"])
-	}
-
-	// Verify concept is now untested (status shows it as open/blocked).
-	outStatus, _, _ := run(t, "status")
-	if strings.Contains(outStatus, "passed 1") {
-		t.Errorf("concept should no longer be passed after reopen; status: %s", outStatus)
-	}
-}
-
-// ── role checks ───────────────────────────────────────────────────────────────
-
-// TestRecite_GraderBanned verifies that TM_ROLE=grader cannot run recite.
-func TestRecite_GraderBanned(t *testing.T) {
-	tempErrlog(t)
-	t.Setenv("TM_ROLE", "grader")
-	_, errOut, code := run(t, "recite", "mycon", "src.txt:1-3")
-	if code != 1 {
-		t.Fatalf("recite as grader: want 1, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "not available when TM_ROLE=grader") {
-		t.Errorf("want role refusal; got: %s", errOut)
-	}
-}
-
-// TestGradeDrift_TeacherBanned verifies that TM_ROLE=teacher cannot run grade --drift.
-func TestGradeDrift_TeacherBanned(t *testing.T) {
-	tempErrlog(t)
-	t.Setenv("TM_ROLE", "teacher")
-	_, errOut, code := run(t, "grade", "--drift", "mycon", "keep", "Summary")
-	if code != 1 {
-		t.Fatalf("grade --drift as teacher: want 1, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "not available when TM_ROLE=teacher") {
-		t.Errorf("want role refusal; got: %s", errOut)
-	}
-}
-
-// TestGradeDrift_InvalidVerdict verifies that grade --drift with an invalid
-// verdict exits 3.
-func TestGradeDrift_InvalidVerdict(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := buildPassedConceptSession(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	_, errOut, code := run(t, "grade", "--drift", "mycon", "pass", "Summary")
-	if code != 3 {
-		t.Fatalf("grade --drift invalid verdict: want 3, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "--drift verdict must be keep or reopen") {
-		t.Errorf("want verdict error; got: %s", errOut)
-	}
-}
-
-// ── additional edge-case coverage ────────────────────────────────────────────
-
-// TestGrade_KeepWithoutDrift verifies that grade with verdict "keep" (not a
-// standard pass|fail|unclear) exits 3 with an err about invalid verdict.
-func TestGrade_KeepWithoutDrift(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-	_, _, _ = run(t, "answer", qid, "My answer")
-
-	_, errOut, code := run(t, "grade", qid, "keep", "Summary")
-	if code != 3 {
-		t.Fatalf("grade keep without --drift: want 3, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "verdict must be pass, fail, or unclear") {
-		t.Errorf("want invalid verdict message; got: %s", errOut)
-	}
-}
-
-// TestCheckDrift_UnknownConcept verifies that check --drift on an unknown
-// concept exits 3 with an unknown concept message.
-func TestCheckDrift_UnknownConcept(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := buildPassedConceptSession(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	_, errOut, code := run(t, "check", "--drift", "no_such_concept")
-	if code != 3 {
-		t.Fatalf("check --drift unknown: want 3, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "unknown concept") {
-		t.Errorf("want unknown concept; got: %s", errOut)
+			args := append([]string{"grade"}, tc.args...)
+			_, errOut, code := run(t, args...)
+			if code != tc.wantCode {
+				t.Fatalf("exit: want %d, got %d; stderr=%s", tc.wantCode, code, errOut)
+			}
+			if tc.wantErr != "" && !strings.Contains(errOut, tc.wantErr) {
+				t.Errorf("want %q in stderr; got: %s", tc.wantErr, errOut)
+			}
+			if tc.check != nil {
+				tc.check(t, gfile)
+			}
+		})
 	}
 }
 
-// TestGradeDrift_UnknownConcept verifies that grade --drift on an unknown
-// concept exits 3 from inside the apply closure.
-func TestGradeDrift_UnknownConcept(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := buildPassedConceptSession(t, dir)
-	t.Setenv("TM_FILE", graphPath)
+// ── TestDrift_Roles ───────────────────────────────────────────────────────────
 
-	_, errOut, code := run(t, "grade", "--drift", "no_such", "keep", "Summary")
-	if code != 3 {
-		t.Fatalf("grade --drift unknown: want 3, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "unknown concept") {
-		t.Errorf("want unknown concept; got: %s", errOut)
-	}
-}
-
-// TestRecite_UnknownConcept verifies that recite on a nonexistent concept exits 3.
-func TestRecite_UnknownConcept(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	srcContent := "line 1\nline 2\nline 3\n"
-	srcPath := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	graphPath := filepath.Join(dir, "g.mmd")
-	run(t, "new", graphPath)
-	t.Setenv("TM_FILE", graphPath)
-
-	_, errOut, code := run(t, "recite", "no_such", "src.txt:1-2")
-	if code != 3 {
-		t.Fatalf("recite unknown concept: want 3, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "unknown concept") {
-		t.Errorf("want unknown concept; got: %s", errOut)
-	}
-}
-
-// TestRecite_HashError verifies that recite refuses with exit 3 when the
-// target file does not exist (cite.HashCitation fails).
-func TestRecite_HashError(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	srcContent := "line 1\nline 2\nline 3\n"
-	srcPath := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	graphPath := filepath.Join(dir, "g.mmd")
-	run(t, "new", graphPath)
-	t.Setenv("TM_FILE", graphPath)
-	run(t, "add", "mycon", "src.txt:1-2", "My concept")
-
-	_, errOut, code := run(t, "recite", "mycon", "nonexistent.txt:1-2")
-	if code != 3 {
-		t.Fatalf("recite bad file: want 3, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "cannot hash") {
-		t.Errorf("want hash error; got: %s", errOut)
-	}
-}
-
-// TestRecite_PassedConcept verifies that recite works on a passed concept
-// (exercises the passed branch in the graph update).
-func TestRecite_PassedConcept(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-
-	// Lines 1-2 appear twice: at :1-2 and at :5-6.
-	srcContent := "line 1\nline 2\nline 3\nline 4\nline 1\nline 2\n"
-	srcPath := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-	t.Setenv("TM_PROBE_MIN", "1")
-
-	graphPath := filepath.Join(dir, "g.mmd")
-	run(t, "new", graphPath)
-	t.Setenv("TM_FILE", graphPath)
-	run(t, "add", "mycon", "src.txt:1-2", "My concept")
-	// Add a probe question so tm ask can build a batch.
-	_, _, _ = run(t, "q", "mycon", "src.txt:3-4", "What is on line 3")
-
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) < 2 {
-		t.Fatalf("ask: expected at least 2 lines; got %q", out)
-	}
-	qid := strings.Fields(lines[1])[0]
-	_, _, _ = run(t, "answer", qid, "My answer")
-	_, _, _ = run(t, "grade", qid, "pass", "Good")
-
-	outStatus, _, _ := run(t, "status")
-	if !strings.Contains(outStatus, "passed 1") {
-		t.Fatalf("concept not passed before recite; status: %s", outStatus)
+// TestDrift_Roles verifies that the recite and grade --drift commands enforce
+// the expected role guards.
+func TestDrift_Roles(t *testing.T) {
+	cases := []struct {
+		name     string
+		role     string
+		args     []string
+		wantCode int
+		wantErr  string
+	}{
+		{
+			name: "grader cannot run recite",
+			role: "grader", args: []string{"recite", "mycon", "src.txt:1-3"},
+			wantCode: 1, wantErr: "not available when TM_ROLE=grader",
+		},
+		{
+			name: "teacher cannot run grade --drift",
+			role: "teacher", args: []string{"grade", "--drift", "mycon", "keep", "Summary"},
+			wantCode: 1, wantErr: "not available when TM_ROLE=teacher",
+		},
 	}
 
-	outRecite, errOut, code := run(t, "recite", "mycon", "src.txt:5-6")
-	if code != 0 {
-		t.Fatalf("recite passed concept: want 0, got %d; stdout=%s stderr=%s", code, outRecite, errOut)
-	}
-	if strings.TrimSpace(outRecite) != "ok" {
-		t.Errorf("recite: want 'ok', got %q", outRecite)
-	}
-}
-
-// TestGradeDrift_KeepUntestedConcept verifies that grade --drift keep on an
-// untested concept succeeds (exercises the untested branch in keep).
-func TestGradeDrift_KeepUntestedConcept(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, srcPath := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-	_, _, _ = run(t, "answer", qid, "My answer")
-	_, _, _ = run(t, "grade", qid, "fail", "Not good")
-	driftSrc(t, srcPath)
-
-	_, errOut, code := run(t, "grade", "--drift", "mycon", "keep", "Source updated")
-	if code != 0 {
-		t.Fatalf("grade --drift keep untested: want 0, got %d; stderr=%s", code, errOut)
-	}
-}
-
-// TestGradeDrift_ReopenUntested verifies that grade --drift reopen refuses
-// exit 1 when the concept is not passed.
-func TestGradeDrift_ReopenUntested(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_PROBE_MIN", "1")
-	graphPath, _ := setupDriftFixture(t, dir)
-	t.Setenv("TM_FILE", graphPath)
-
-	out, _, _ := run(t, "ask", "mycon")
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	qid := strings.Fields(lines[1])[0]
-	_, _, _ = run(t, "answer", qid, "My answer")
-	_, _, _ = run(t, "grade", qid, "fail", "Not good")
-
-	_, errOut, code := run(t, "grade", "--drift", "mycon", "reopen", "Summary")
-	if code != 1 {
-		t.Fatalf("grade --drift reopen untested: want 1, got %d; stderr=%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "not passed") {
-		t.Errorf("want 'not passed' error; got: %s", errOut)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			t.Setenv("TM_ROLE", tc.role)
+			_, errOut, code := run(t, tc.args...)
+			if code != tc.wantCode {
+				t.Fatalf("exit: want %d, got %d; stderr=%s", tc.wantCode, code, errOut)
+			}
+			if !strings.Contains(errOut, tc.wantErr) {
+				t.Errorf("want %q in stderr; got: %s", tc.wantErr, errOut)
+			}
+		})
 	}
 }
