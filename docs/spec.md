@@ -242,7 +242,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm grade <qid> pass\|fail\|unclear "<summary>" [--guided] [--oos]` | grader: write the verdict, run the transitions in section 8 | `ok` |
 | `tm lint [<file>]` | check the graph (section 11) | `ok`, or every violation |
 | `tm lint --drift` | resolve local citations; list mismatches one per line; exit 1 if any. Does not block mutations | mismatches or `ok` |
-| `tm report <concept> [--hops N] [--fulltext] [--passed-only]` | read-only: walk parent edges up to `N` hops, emit foundations as Markdown; `--fulltext` inlines cited text (default 2 hops); `--passed-only` drops open and blocked concepts | Markdown on stdout |
+| `tm report [<concept>] [--hops N] [--fulltext] [--passed-only]` | read-only: with concept, walk parent edges up to `N` hops, emit foundations as Markdown; without concept, emit whole graph from roots (depth ≤ 5 by default, `--hops` overrides); `--fulltext` inlines cited text (default 2 hops with concept); `--passed-only` drops open and blocked concepts | Markdown on stdout |
 | `tm rehash [<file>]` | for every citation without a hash: resolve the text, write the hash, log a `rehash` event | `ok`, or one line per updated citation |
 | `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
 | `tm check --drift <concept>` | grader: for a passed concept, read its `grade` events, resolve each question citation against the current source, and emit per-question pairs for judging whether the pass survives | the recheck payload |

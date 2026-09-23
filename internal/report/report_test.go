@@ -44,8 +44,9 @@ func TestWalk(t *testing.T) {
 		passed   []string
 		untested []string
 		edges    [][2]string
-		start    string
-		hops     int
+		start    string   // used when allMode=false
+		hops     int      // hops for Walk; depth for WalkAll
+		allMode  bool     // use WalkAll instead of Walk
 		want     []string // nil means expect error
 	}{
 		{
@@ -95,20 +96,62 @@ func TestWalk(t *testing.T) {
 			start:    "nope", hops: -1,
 			want: nil,
 		},
+		// WalkAll rows
+		{
+			name:     "WalkAll default depth 5 excludes depth-6 concept",
+			untested: []string{"a", "b", "c", "d", "e", "f", "g"},
+			edges: [][2]string{
+				{"a", "b"},
+				{"b", "c"},
+				{"c", "d"},
+				{"d", "e"},
+				{"e", "f"},
+				{"f", "g"},
+			},
+			hops: -1, allMode: true,
+			want: []string{"a", "b", "c", "d", "e", "f"},
+		},
+		{
+			name:     "WalkAll depth limit excludes deep concepts",
+			untested: []string{"a", "b", "c", "d"},
+			edges:    [][2]string{{"a", "b"}, {"b", "c"}, {"c", "d"}},
+			hops:     1, allMode: true,
+			want: []string{"a", "b"},
+		},
+		{
+			name:     "WalkAll hops zero returns roots only",
+			untested: []string{"a", "b", "c"},
+			edges:    [][2]string{{"a", "b"}, {"b", "c"}},
+			hops:     0, allMode: true,
+			want: []string{"a"},
+		},
+		{
+			name:     "WalkAll multi-root ordering",
+			untested: []string{"a", "b", "c"},
+			edges:    [][2]string{{"a", "c"}, {"b", "c"}},
+			hops:     -1, allMode: true,
+			want: []string{"a", "b", "c"},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := buildGraph(tc.passed, tc.untested, tc.edges)
 			s := state.LoadFromGraph(g, state.Config{})
-			got, err := report.Walk(g, s, tc.start, tc.hops)
-			if tc.want == nil {
-				if err == nil {
-					t.Fatal("expected error, got nil")
+			var got []report.ConceptInfo
+			if tc.allMode {
+				got = report.WalkAll(g, s, tc.hops)
+			} else {
+				var err error
+				got, err = report.Walk(g, s, tc.start, tc.hops)
+				if tc.want == nil {
+					if err == nil {
+						t.Fatal("expected error, got nil")
+					}
+					return
 				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
 			}
 			if strings.Join(ids(got), ",") != strings.Join(tc.want, ",") {
 				t.Errorf("got %v, want %v", ids(got), tc.want)
