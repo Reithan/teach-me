@@ -68,6 +68,28 @@ func TestReport(t *testing.T) {
 			role:      "grader",
 			wantCode:  1,
 		},
+		// No-concept (whole-graph) rows
+		{
+			name:      "no-concept outline: all concepts in topo order",
+			extraArgs: []string{},
+			contains: []string{
+				"## leader_election:", "## replicated_log:",
+				"## log_matching:", "## commit_rules:",
+				"state: passed", "state: open", "state: blocked",
+			},
+		},
+		{
+			name:      "no-concept --hops 1: excludes depth-2 concept",
+			extraArgs: []string{"--hops", "1"},
+			contains:  []string{"## leader_election:", "## replicated_log:", "## log_matching:"},
+			absent:    []string{"## commit_rules:"},
+		},
+		{
+			name:      "no-concept --passed-only: only passed concepts",
+			extraArgs: []string{"--passed-only"},
+			contains:  []string{"## leader_election:", "## replicated_log:"},
+			absent:    []string{"## log_matching:", "## commit_rules:"},
+		},
 	}
 
 	for _, c := range cases {
