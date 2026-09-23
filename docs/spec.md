@@ -287,8 +287,15 @@ fix: pass log_matching first
 | `add` | ID exists (`fix: tm reopen` when it is passed), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
 | `link` | unknown ID, non-concept endpoint, or cycle |
 | `edit` | the ID is a question or answer; the concept is passed or has any question |
-| `drop` | the ID is a question or answer; the concept is passed, has children, or has any question |
+| `drop` | the ID is a question or answer (unless the CLI verifies drift on an ungraded question); the concept is passed, has children, or has any question; a drifted-question `drop` when the question is already graded; a drifted-question `drop` when the citation has not drifted |
 | `reopen` | the concept is not in `passed` |
+| `add`, `q` | the cited file cannot be fetched (URI locator, fetch failed) |
+| `add`, `q` | a converter is required for the MIME type or extension and none is configured |
+| `add`, `q`, `recite` | the configured converter's version does not match its pinned value |
+| `add`, `q` | the path is not in the working tree and git is not configured (sparse checkout or deleted file) |
+| `recite` | the new range does not hash to the existing citation hash |
+| `check --drift` | the event log is missing or unreadable (`fix: tm reopen`) |
+| `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |
 | `q` | the concept is passed or gated; the draft batch is at max; a probe question while a probe batch under the concept is locked or open; a teach question while a teach batch under the concept is open; `--teach` without `--re`; `--teach` once teaching is spent; `--teach` while the concept has no GAP; `--teach` with no failed probe batch above `base`; `--teach` without a fallback probe batch at min size that has no answers yet; `--re` on a probe whose target is not an `unclear` probe; `--re` on a teach question whose target is not a `fail` or `unclear` answer, or is flagged `OOS` |
 | `ask`, `answer` | the batch is under min; any parent of the concept is outside `passed`; the concept is gated; the batch is the fallback probes and any teach batch under the concept is unresolved; or the latest one is not all `pass` and teaching is not spent |
 | `answer` | the question already has an answer |
@@ -331,6 +338,8 @@ Teach verdicts control the exit from teaching. They never count toward the conce
 
 Questions and answers stay in the graph until the concept passes. By construction, every question under a passing concept has been answered and graded. Nothing leaves the graph without a log event.
 
+A question dropped for drift (section 6) counts as `unclear` for batch accounting: it produces exactly one `--re` replacement (steps 5 or 7 above apply as if the verdict were `unclear`) and carries none of the verdict consequences — it does not increment the failed-probe count and does not trigger step 2. Graded questions are never touched by `tm drop`; their verdicts were recorded against the text in the log.
+
 ## 9. Grader protocol
 
 The teacher spawns one grader per answer, probe or teach. The spawn prompt holds the question ID and the instruction to run `tm check <qid>` and then `tm grade`. The raw answer reaches the grader through the CLI, not through the prompt.
@@ -363,6 +372,30 @@ If Q teaches something outside TARGET and GAP, add --oos.
 The teacher sees the flag in `tm status --concept <id>` as `q7 pass oos`. It means: stop extending that line of questions and get back to the open targets or the locked probes.
 
 The instruction block comes last so it lands after the parent's prompt in the grader's context. The CLI inlines the cited lines, so the grader needs no file access.
+
+### 9.1 Recheck payload
+
+`tm check --drift <concept>` reads every `grade` event for the concept from the log, resolves each question citation against the current source, and prints one block per question:
+
+```
+Q <qid>: <question scope>
+CITE <citation>
+SRC_GRADED
+  <src_text from the grade event, verbatim>
+SRC_CURRENT
+  <current text at the citation, verbatim>
+A: <raw answer from the grade event>
+VERDICT: <recorded verdict>
+```
+
+A `DRIFT <cite>` line precedes any block whose citation no longer resolves to the same hash.
+
+Grader rubric for `tm grade --drift <concept> keep|reopen "<summary>"`:
+
+- `keep`: every answer still holds against the current text (the substance is unchanged or the delta does not affect the graded scope). `keep` re-hashes the concept citation and logs a `recheck` event.
+- `reopen`: at least one answer no longer holds, or the grader cannot tell. `reopen` runs `tm reopen` with the summary as the GAP and logs a `recheck` event.
+
+The teacher never makes this call. Its bias runs toward re-testing always or never, depending on the model; the grader sees the logged answers and the current text, not the teacher.
 
 ## 10. Event log
 
