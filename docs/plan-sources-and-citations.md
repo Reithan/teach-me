@@ -219,16 +219,49 @@ Rules:
 - `grade` events keep `src_text`; that is the record of what was judged. `add`
   and `q` events do not copy text: nothing has been judged against a node at
   that point, and the hash covers detection.
-- Errata never edit a node. When drift invalidates a pass, `tm reopen
-  <concept> "<gap>"`; when it reveals a missing prerequisite, `tm add ...
-  --child`. Otherwise the replacement question re-cites.
+- **Concept citations may be updated on drift; questions never.** No verdict
+  is graded against a concept's citation: grading uses the question's
+  citation, questions are immutable, and each grade event stores the text
+  the grader saw. The concept citation is a foundation pointer for `add`,
+  `show`, and `report`, so updating it cannot rewrite what a pass was earned
+  against. The graph is already not add-only (`reopen` moves nodes, `gc`
+  removes them); the protected set is questions and the log. Errata nodes
+  were rejected: a replacement node needs the old node's edges copied and
+  the old node marked superseded, which is more mutation spread wider, for
+  the same effect as `reopen`. Three logged paths:
+  - `tm recite <concept> <locator>:START-END`: re-point, any state, accepted
+    only if the new range hashes to the existing hash. Covers line shifts,
+    moved files, converter reflows. Mechanical; keeps the pass.
+  - `tm reopen <concept> "<gap>" [--src <cite>]`: content changed and the
+    pass is invalid; the one command that already invalidates a pass also
+    re-points the foundation.
+  - **Recheck, judged by a grader.** Content changed on a passed concept and
+    it is unknown whether the pass survives. The teacher spawns a grader
+    with the concept ID only. `tm check --drift <concept>` reads the
+    concept's `grade` events from the log, resolves each logged question
+    citation against the current source, and prints per question: `Q`, the
+    text graded (`src_text` from the log), the current text at that
+    citation, the raw answer, and the recorded verdict. Rubric: `keep` if
+    every answer still holds against the current text; `reopen` otherwise or
+    when it cannot tell. `tm grade --drift <concept> keep|reopen
+    "<summary>"`: `keep` re-hashes the concept citation to the current text
+    and logs it; `reopen` runs `reopen` with the summary as the GAP. The
+    teacher never makes this call: its bias runs toward re-testing always or
+    never, depending on the model. This is the CLI's second log read, beside
+    `show --history`; a missing log refuses with `fix: tm reopen`.
+  - `tm edit --src` on question-less concepts is unchanged.
+- A missing prerequisite revealed by drift or by a learner correction is
+  mapping, not errata: `tm add ... --child` or the mapper in errata mode.
 
 ## 7. Log changes
 
 `add` and `q` events gain, when applicable: `commit` (locator inside a git
 repo), `url` (final URL after redirects), `mime`, `converter`,
 `converter_version`, `fetched_at`. `rehash` is a new event with `id`,
-`before`, `after`. `grade` is unchanged.
+`before`, `after`; `recite` the same. `reopen` gains `src_before` and
+`src_after` when `--src` is given. `recheck` carries `concept`, `verdict`
+(`keep`, `reopen`), `summary`, and per question `q`, `src_text_before`,
+`src_text_after`. `grade` is unchanged.
 
 ## 8. Report
 
@@ -306,8 +339,11 @@ An **Errata** section, since the teacher is who sees drift and disputes:
 
 - `DRIFT` on a question: nothing to do; the grader records `unclear` and the
   replacement re-cites.
-- `DRIFT` on a passed concept whose citation no longer says what was passed:
-  `tm reopen <concept> "<what changed>"`. Descendants stay passed.
+- `DRIFT` on a passed concept: if the current text hashes the same at a new
+  range, `tm recite`. Otherwise spawn a grader with the concept ID and the
+  instruction to recheck it; the grader decides `keep` or `reopen` from the
+  logged answers (section 6). The teacher never decides whether a pass
+  survives a source change. Descendants stay passed either way.
 - A source replaced or a learner correction that shows a missing
   prerequisite: spawn the mapper in errata mode for the affected concepts. It
   may `tm add --child`, `tm link`, and `tm edit` or `tm drop` question-less
@@ -319,7 +355,11 @@ An **Errata** section, since the teacher is who sees drift and disputes:
 
 ### 9.2 Grader agent
 
-One line: `DRIFT` means `unclear`.
+Two additions. `DRIFT` on a question means `unclear`. A recheck prompt
+carries a concept ID instead of a question ID: run `tm check --drift
+<concept>`, judge from the printed pairs of graded and current text alone,
+then `tm grade --drift <concept> keep|reopen "<summary>"`. Tool scoping is
+unchanged, since both are `tm check` and `tm grade`.
 
 ### 9.3 Mapper agent
 
@@ -357,12 +397,12 @@ Grader adapter: one line, `DRIFT` means `unclear`.
 | Section | Change |
 |---|---|
 | 2.1 | narrow "runs no external command" per section 5; adapter table gains the mapper and the setup reference (section 9) |
-| 3 | user config file and `.tmconfig` override |
+| 3 | user config file and `.tmconfig` override; the log-read exception gains `check --drift` |
 | 4.4 | citation field grammar (section 3) |
-| 6 | `report`, `rehash`, `lint --drift`; `check` prints `DRIFT` |
-| 7 | refusals: fetch failed, no converter, version mismatch, not in working tree |
-| 9 | `DRIFT` line and rubric sentence |
-| 10 | new log fields and `rehash` event |
+| 6 | `report`, `rehash`, `recite`, `reopen --src`, `check --drift`, `grade --drift`, `lint --drift`; `check` prints `DRIFT` |
+| 7 | refusals: fetch failed, no converter, version mismatch, not in working tree, `recite` hash mismatch, `check --drift` without a log |
+| 9 | `DRIFT` line and rubric sentence; the recheck payload and its `keep`/`reopen` rubric |
+| 10 | new log fields; `rehash`, `recite`, `recheck` events; `reopen` source fields |
 | 11 | hash presence; `"` in locator; `--drift` |
 | 12 | Source step; Map delegates to the mapper; errata; no-memory rule as the third unenforceable behavior |
 | 13 | config file variables |
@@ -378,7 +418,9 @@ Draft decision rows:
 | 47 | One locator grammar: relative path, absolute path, URI | three source kinds with one parser and one document; the kind is a prefix, not a syntax | sister lookup file of selectors; per-kind citation forms; XPath |
 | 48 | Sources converted by user-configured external converters keyed by MIME and extension, pinned by version and checked at runtime | deterministic per version; zero CLI dependencies; user-extensible to any format | built-in tag stripper; pure-Go HTML library; runtime-loaded modules (Go has none) |
 | 49 | Spec 2.1 narrowed: no external command except configured converters and git | default behavior unchanged; the rule's purpose was harness independence, which a content-only filter keeps | fetch and conversion inside the CLI with dependencies; adapter-side conversion only |
-| 50 | Drift derived at read time; `check` prints `DRIFT` and the rubric says `unclear`; nodes never edited | immutability (21); a rotted question is replaced, not repaired | brittle flag on the node; automatic re-citation |
+| 50 | Drift derived at read time; `check` prints `DRIFT` and the rubric says `unclear`; questions never edited | immutability (21); a rotted question is replaced, not repaired | brittle flag on the node; automatic re-citation |
+| 55 | Concept citations may be updated on drift through `recite` (hash-preserving), `reopen --src`, and a grader recheck; each logged with before and after | no verdict is graded against a concept citation, so updating it rewrites nothing a pass was earned against; the graph is already not add-only | errata nodes with edge transfer and a superseded marker; teacher override with a reason |
+| 56 | Whether a pass survives a source change is a grader's verdict from the logged answers and the current text, never the teacher's | same isolation argument as grading; the teacher's bias runs toward always or never re-testing | teacher `recite --override`; automatic reopen on any drift |
 | 51 | `tm report` walks foundations: outline by default, `--fulltext` bounded by hops | requirement 1 with no model-authored intermediate text | derived study docs verified by a judge agent; anthologies of verbatim passages |
 | 52 | No-memory rule in the teacher adapter | the citation machinery is defeated silently by a notes file written from memory; the rule is the one thing the model will not enforce on itself | trust the model to source honestly |
 | 53 | `grade` keeps `src_text`; `add` and `q` do not copy text | audit needs what was judged; the hash covers detection; bounded log growth | copy every citation on write; filesystem compression |
