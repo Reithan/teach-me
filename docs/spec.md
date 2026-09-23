@@ -210,7 +210,7 @@ Nothing here is stored; the CLI computes it on each call. A question's concept i
 | Teaching spent | teach count >= `TM_MAX_TEACH`, checked when a teach batch resolves |
 | Gated | failed probe batches >= `TM_MAX_FAILS`, or stalled |
 
-Questions are immutable from the moment `tm q` writes them. No command rewrites or removes one. A question leaves the graph only by being answered, graded, and cleared when its concept passes. A badly formed question is asked anyway; it draws an `unclear` verdict and is replaced through `--re`.
+Questions are immutable from the moment `tm q` writes them. No command rewrites or removes one. A question leaves the graph only by being answered, graded, and cleared when its concept passes. A badly formed question is asked anyway; it draws an `unclear` verdict and is replaced through `--re`. The one exception is a drift-drop: the question node stays in the graph and receives an `unclear` tombstone answer so that `--re` can target it exactly as it would any other unclear probe.
 
 Locking therefore governs additions only. Two events close a batch, and both are visible in the graph: the first recorded answer closes its own batch, and the first teach question closes the fallback probes. The second lock keys on the teach batch existing, not on its questions being ungraded, so no probe can be added after the teach answers come back.
 
@@ -231,7 +231,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm add <id> <cite> "<scope>" [--parent <id>:"<rel>"]... [--child <id>:"<rel>"]...` | new concept in `untested`. `--child` inserts a prerequisite above an existing concept | `ok` |
 | `tm link <from> <to> "<rel>"` | edge between existing concepts | `ok` |
 | `tm edit <concept> "<scope>" [--src <cite>]` | rewrite the scope of a concept that has no questions yet | `ok` |
-| `tm drop <id>` | remove an untested leaf concept that has no questions; or remove an ungraded question whose citation the CLI verifies has drifted. Logged | `ok` |
+| `tm drop <id>` | remove an untested leaf concept that has no questions; or, for a drifted ungraded question, add an `unclear` tombstone answer to the graph so `--re` can target it. Logged | `ok` |
 | `tm gap <concept> "<gap>"` | set or replace the GAP field | `ok` |
 | `tm reopen <concept> "<gap>" [--src <cite>]` | move a passed concept to `untested` with a GAP; `--src` re-points the concept citation in the same operation. Descendants stay passed | `ok` |
 | `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe | `qN` |
@@ -339,7 +339,7 @@ Teach verdicts control the exit from teaching. They never count toward the conce
 
 Questions and answers stay in the graph until the concept passes. By construction, every question under a passing concept has been answered and graded. Nothing leaves the graph without a log event.
 
-A question dropped for drift (section 6) counts as `unclear` for batch accounting: it produces exactly one `--re` replacement (steps 5 or 7 above apply as if the verdict were `unclear`) and carries none of the verdict consequences — it does not increment the failed-probe count and does not trigger step 2. Graded questions are never touched by `tm drop`; their verdicts were recorded against the text in the log.
+A question dropped for drift (section 6) stays in the graph and receives an `unclear` answer node labeled `dropped: citation drifted`. `--re` targets it like any unclear probe (steps 5 or 7 above), and step 2 skips it because the tombstone label excludes it from the root-probe-unclear check. The drop carries none of the verdict consequences of a genuine unclear: it does not increment the failed-probe count and does not trigger step 2. Graded questions are never touched by `tm drop`; their verdicts were recorded against the text in the log.
 
 ## 9. Grader protocol
 
@@ -408,7 +408,7 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `add` | `id`, `scope`, `src`, `parents`, `children`; optional: `commit` (when locator is inside a git repo), `url` (final URL after redirects), `mime`, `converter`, `converter_version`, `fetched_at` |
 | `link` | `from`, `to`, `rel` |
 | `edit` | `id`, `before`, `after` |
-| `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and the recorded answer if any |
+| `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and `answer: <pending answer text>` if a pending answer existed |
 | `gap` | `concept`, `before`, `after` |
 | `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
 | `answer` | `q`, `raw`, `asked` |
