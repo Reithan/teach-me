@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -63,17 +62,7 @@ func addRun(ctx *Context) int {
 	}
 	hashedCite, citeMeta, hashErr := resolver.HashCitation(citeStr)
 	if hashErr != nil {
-		var ref *source.RefusalError
-		if errors.As(hashErr, &ref) {
-			ctx.ErrMsg = ref.Err
-			ctx.FixMsg = ref.Fix
-			writeErrFix(ctx.ErrOut, ref.Err, ref.Fix)
-		} else {
-			ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, hashErr)
-			ctx.FixMsg = usageLine
-			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
-		}
-		return 3
+		return citeHashError(ctx, citeStr, hashErr, usageLine)
 	}
 	citeStr = hashedCite
 
