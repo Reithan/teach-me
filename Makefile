@@ -83,7 +83,7 @@ version-sync:
 		exit 0; \
 	fi
 	@ver=$$(cat internal/version/VERSION | tr -d '[:space:]'); \
-	major_minor=$$(echo "$$ver" | sed 's/\.[0-9]*$$//'); \
+	major_minor=$$(echo "$$ver" | sed 's/[-+].*//; s/\.[0-9]*$$//'); \
 	skill_ver=$$(grep 'tm-version:' skill/teach-me/SKILL.md | head -1 \
 		| sed 's/.*tm-version:[[:space:]]*//' | tr -d '"'"'"' '); \
 	if [ "$$major_minor" != "$$skill_ver" ]; then \
