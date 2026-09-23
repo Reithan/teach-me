@@ -119,6 +119,9 @@ var Table = []Command{
 			{Name: "<concept>"},
 			{Name: `"<gap>"`, Stdin: true},
 		},
+		Flags: []FlagSpec{
+			{Name: "src", TakesValue: true, ValueName: "<cite>"},
+		},
 		ForbidGrader: true,
 		Run:          reopenRun,
 	},
@@ -165,24 +168,34 @@ var Table = []Command{
 	},
 	{
 		// check is exempt from the grader ban (§7).
+		// `tm check <qid>` grading payload; `tm check --drift <concept>` recheck payload.
 		Name: "check",
 		PosArgs: []PosArg{
 			{Name: "<qid>"},
+		},
+		Flags: []FlagSpec{
+			{Name: "drift"},
 		},
 		ForbidGrader: false,
 		Run:          checkRun,
 	},
 	{
 		// grade is exempt from the grader ban but refuses TM_ROLE=teacher (§7).
+		// `tm grade <qid> pass|fail|unclear "<summary>"` — standard verdict.
+		// `tm grade --drift <concept> keep|reopen "<summary>"` — recheck verdict.
 		Name: "grade",
 		PosArgs: []PosArg{
 			{Name: "<qid>"},
-			{Name: "pass|fail|unclear", Values: []string{"pass", "fail", "unclear"}},
+			// Values expanded to accept keep|reopen for --drift path; runtime
+			// validation in gradeRun rejects keep|reopen without --drift and
+			// pass|fail|unclear with --drift.
+			{Name: "pass|fail|unclear", Values: []string{"pass", "fail", "unclear", "keep", "reopen"}},
 			{Name: `"<summary>"`, Stdin: true},
 		},
 		Flags: []FlagSpec{
 			{Name: "guided"},
 			{Name: "oos"},
+			{Name: "drift"},
 		},
 		ForbidGrader:  false,
 		ForbidTeacher: true,
@@ -206,6 +219,17 @@ var Table = []Command{
 		},
 		ForbidGrader: true,
 		Run:          rehashRun,
+	},
+	{
+		// recite re-points a concept citation to a new range that hashes to
+		// the same content (text moved, unchanged). Logged as recite event.
+		Name: "recite",
+		PosArgs: []PosArg{
+			{Name: "<concept>"},
+			{Name: "<locator>:START-END"},
+		},
+		ForbidGrader: true,
+		Run:          reciteRun,
 	},
 }
 
