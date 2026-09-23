@@ -98,11 +98,14 @@ func TestWalk(t *testing.T) {
 		},
 		// WalkAll rows
 		{
-			name:     "WalkAll default depth includes all concepts",
-			untested: []string{"a", "b", "c", "d"},
-			edges:    [][2]string{{"a", "b"}, {"b", "c"}, {"c", "d"}},
-			hops:     -1, allMode: true,
-			want: []string{"a", "b", "c", "d"},
+			name:     "WalkAll default depth 5 excludes depth-6 concept",
+			untested: []string{"a", "b", "c", "d", "e", "f", "g"},
+			edges: [][2]string{
+				{"a", "b"}, {"b", "c"}, {"c", "d"},
+				{"d", "e"}, {"e", "f"}, {"f", "g"},
+			},
+			hops: -1, allMode: true,
+			want: []string{"a", "b", "c", "d", "e", "f"},
 		},
 		{
 			name:     "WalkAll depth limit excludes deep concepts",
