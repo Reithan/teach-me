@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -91,10 +90,8 @@ func gradeRun(ctx *Context) int {
 		// src_text: cited source text of the question per §10 grade event.
 		srcText := ""
 		srcRoot := s.Cfg().SrcRoot
-		if cit, citErr := cite.Parse(qn.Cite); citErr == nil {
-			if text, readErr := cite.ReadRange(cit, srcRoot); readErr == nil {
-				srcText = text
-			}
+		if text, readErr := readCiteText(qn.Cite, srcRoot); readErr == nil {
+			srcText = text
 		}
 
 		// Step 2 (§8.2, Q5): if verdict is unclear and the root probe reached by

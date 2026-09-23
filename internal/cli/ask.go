@@ -292,13 +292,9 @@ func askEmitLines(ctx *Context, batch string, questions []*graph.QuestionNode, s
 			if drifted, _, driftErr := resolver.CheckDrift(q.Cite); driftErr == nil && drifted {
 				_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", q.Cite)
 			}
-			cit, citErr := cite.Parse(q.Cite)
-			if citErr == nil {
-				text, _, readErr := resolver.Read(cit)
-				if readErr == nil {
-					for _, l := range strings.Split(text, "\n") {
-						_, _ = fmt.Fprintf(ctx.Out, "  %s\n", l)
-					}
+			if text, readErr := readCiteText(q.Cite, srcRoot); readErr == nil {
+				for _, l := range strings.Split(text, "\n") {
+					_, _ = fmt.Fprintf(ctx.Out, "  %s\n", l)
 				}
 			}
 		}
@@ -336,12 +332,8 @@ func askEmitJSON(ctx *Context, batch string, questions []*graph.QuestionNode, s 
 			}
 		}
 		if wantSrcText {
-			cit, citErr := cite.Parse(q.Cite)
-			if citErr == nil {
-				text, _, readErr := resolver.Read(cit)
-				if readErr == nil {
-					jq.SrcText = text
-				}
+			if text, readErr := readCiteText(q.Cite, srcRoot); readErr == nil {
+				jq.SrcText = text
 			}
 		}
 		qs = append(qs, jq)

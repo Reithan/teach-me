@@ -111,19 +111,13 @@ func checkRun(ctx *Context) int {
 	// SRC <cite>
 	//   <cited lines, verbatim, indented 2 spaces>
 	fmt.Fprintf(&b, "SRC %s\n", qn.Cite)
-	cit, citErr := cite.Parse(qn.Cite)
-	if citErr == nil {
-		lines, _, readErr := resolver.Read(cit)
-		if readErr == nil {
-			for _, l := range strings.Split(lines, "\n") {
-				fmt.Fprintf(&b, "  %s\n", l)
-			}
-		} else {
-			// Keep going; grader needs to know citation is unreadable.
-			fmt.Fprintf(&b, "  [citation unreadable: %v]\n", readErr)
+	if lines, readErr := readCiteText(qn.Cite, srcRoot); readErr == nil {
+		for _, l := range strings.Split(lines, "\n") {
+			fmt.Fprintf(&b, "  %s\n", l)
 		}
 	} else {
-		fmt.Fprintf(&b, "  [citation unreadable: %v]\n", citErr)
+		// Keep going; grader needs to know citation is unreadable.
+		fmt.Fprintf(&b, "  [citation unreadable: %v]\n", readErr)
 	}
 
 	// For teach questions: TARGET and GAP are inserted after the SRC block
