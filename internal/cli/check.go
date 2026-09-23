@@ -77,7 +77,12 @@ func checkRun(ctx *Context) int {
 		return 1
 	}
 
-	resolver := source.MustResolver(filepath.Dir(file))
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
 	isTeach := graph.IsTeachClass(qn.Class)
 
 	var b strings.Builder

@@ -177,7 +177,12 @@ func showConcept(ctx *Context, s *state.State, g *graph.Graph, id string,
 	}
 	if len(concept.Cites) > 0 {
 		_, _ = fmt.Fprintf(ctx.Out, "src: %s\n", strings.Join(concept.Cites, ", "))
-		resolver := source.MustResolver(filepath.Dir(graphFile))
+		resolver, resolverErr := source.NewResolver(filepath.Dir(graphFile))
+		if resolverErr != nil {
+			ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+			return 3
+		}
 		for _, citeStr := range concept.Cites {
 			if drifted, _, driftErr := resolver.CheckDrift(citeStr); driftErr == nil && drifted {
 				_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", citeStr)
@@ -255,7 +260,12 @@ func showQuestion(ctx *Context, s *state.State, _ *graph.Graph, id string,
 	}
 	_, _ = fmt.Fprintf(ctx.Out, "scope: %s\n", q.Scope)
 	_, _ = fmt.Fprintf(ctx.Out, "src: %s\n", q.Cite)
-	resolver := source.MustResolver(filepath.Dir(graphFile))
+	resolver, resolverErr := source.NewResolver(filepath.Dir(graphFile))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
 	if drifted, _, driftErr := resolver.CheckDrift(q.Cite); driftErr == nil && drifted {
 		_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", q.Cite)
 	}

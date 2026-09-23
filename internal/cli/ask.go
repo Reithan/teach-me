@@ -263,7 +263,12 @@ func askRun(ctx *Context) int {
 		}
 	}
 
-	resolver := source.MustResolver(filepath.Dir(file))
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
 
 	if format == "json" {
 		return askEmitJSON(ctx, selectedBatch, unanswered, s, resolver, wantSrcText)

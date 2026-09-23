@@ -89,32 +89,6 @@ func NewResolverWithConfig(cfg *Config, srcRoot string) *Resolver {
 	}
 }
 
-// NewEmptyResolver creates a Resolver with an empty (no-exec, no-fetch) config
-// for graphDir. Used as a fallback when config loading fails.
-func NewEmptyResolver(graphDir string) *Resolver {
-	return &Resolver{
-		Cfg: &Config{
-			Converters:  make(map[string][]string),
-			ExtMIME:     make(map[string]string),
-			Versions:    make(map[string]string),
-			VersionCmds: make(map[string][]string),
-			ConfigPath:  userConfigPath(),
-		},
-		SrcRoot:  cite.SrcRoot(graphDir),
-		verified: make(map[string]versionEntry),
-	}
-}
-
-// MustResolver creates a Resolver for graphDir, falling back to an empty config
-// if loading fails. Suitable for read-only commands where converters are optional.
-func MustResolver(graphDir string) *Resolver {
-	r, err := NewResolver(graphDir)
-	if err != nil {
-		return NewEmptyResolver(graphDir)
-	}
-	return r
-}
-
 // Read resolves citation c, applies any configured converter, and returns the
 // text of lines [c.Start, c.End] along with metadata. The text is suitable for
 // hashing (Normalize is not applied here; cite.Hash calls it internally).

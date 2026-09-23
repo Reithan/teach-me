@@ -102,7 +102,12 @@ func lintDrift(ctx *Context, data []byte, file string) int {
 		return 3
 	}
 
-	resolver := source.MustResolver(filepath.Dir(file))
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
 	anyProblem := false
 
 	// Collect all citations: concept Cites and question Cite fields.
