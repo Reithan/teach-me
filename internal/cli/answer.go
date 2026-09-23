@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -74,6 +75,15 @@ func answerRun(ctx *Context) int {
 				Err:  fmt.Sprintf("unknown question %q", qid),
 				Fix:  usageLine,
 				Exit: 3,
+			}
+		}
+
+		// Exit 1: question's citation has drifted (§7, §14 row 50).
+		if drifted, driftErr := cite.CheckDrift(qn.Cite, s.Cfg().SrcRoot); driftErr == nil && drifted {
+			return nil, nil, &ops.Refusal{
+				Err:  fmt.Sprintf("%s citation has drifted", qid),
+				Fix:  fmt.Sprintf("tm drop %s, then tm q --re %s <cite>", qid, qid),
+				Exit: 1,
 			}
 		}
 

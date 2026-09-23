@@ -11,18 +11,22 @@ import (
 	"github.com/reithan/teach-me/internal/state"
 )
 
-// checkRun is the Run handler for `tm check <qid>`.
+// checkRun is the Run handler for:
 //
-// It resolves the graph file, finds the question and its pending answer, and
-// emits the grading payload described in spec §9 to ctx.Out. The grader runs
-// this output through a model and then calls `tm grade`.
+//   - `tm check <qid>` — emits the grading payload (§9)
+//   - `tm check --drift <concept>` — emits the recheck payload (§9.1)
 //
 // Exit codes:
 //
 //	0  payload emitted
-//	1  invariant refusal: no pending answer (§7 line 266)
+//	1  invariant refusal: no pending answer (§7 line 266); or citation drifted (§7 line 299)
 //	3  usage / load error: unknown question ID or file problem
 func checkRun(ctx *Context) int {
+	// Route to drift-check handler when --drift is supplied.
+	if len(ctx.Flags["drift"]) > 0 {
+		return checkDriftRun(ctx)
+	}
+
 	qid := ctx.Positionals[0]
 
 	// Resolve graph file (global --file > $TM_FILE > .tmconfig per §3).
@@ -67,6 +71,15 @@ func checkRun(ctx *Context) int {
 			an = item.A
 			break
 		}
+	}
+
+	// §7 line 299: refuse when the question's citation has drifted.
+	srcRoot := s.Cfg().SrcRoot
+	if drifted, driftErr := cite.CheckDrift(qn.Cite, srcRoot); driftErr == nil && drifted {
+		ctx.ErrMsg = fmt.Sprintf("%s citation has drifted", qid)
+		ctx.FixMsg = fmt.Sprintf("tm drop %s, then tm q --re %s <cite>", qid, qid)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+		return 1
 	}
 
 	// §7 line 266: refuse when the question has no pending answer.
