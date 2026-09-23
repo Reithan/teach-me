@@ -2,12 +2,9 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/graph"
-	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -75,7 +72,7 @@ func checkRun(ctx *Context) int {
 
 	// §7 line 299: refuse when the question's citation has drifted.
 	srcRoot := s.Cfg().SrcRoot
-	if drifted, driftErr := cite.CheckDrift(qn.Cite, srcRoot); driftErr == nil && drifted {
+	if drifted, driftErr := checkCiteDrift(qn.Cite, srcRoot); driftErr == nil && drifted {
 		ctx.ErrMsg = fmt.Sprintf("%s citation has drifted", qid)
 		ctx.FixMsg = fmt.Sprintf("tm drop %s, then tm q --re %s <cite>", qid, qid)
 		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
@@ -90,12 +87,6 @@ func checkRun(ctx *Context) int {
 		return 1
 	}
 
-	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
-	if resolverErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
 	isTeach := graph.IsTeachClass(qn.Class)
 
 	var b strings.Builder

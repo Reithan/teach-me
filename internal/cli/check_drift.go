@@ -183,7 +183,7 @@ func checkDriftRun(ctx *Context) int {
 		fmt.Fprintf(&b, "CITE %s\n", ge.citeStr)
 
 		// Check drift on the current citation.
-		drifted, _ := cite.CheckDrift(ge.citeStr, srcRoot)
+		drifted, _ := checkCiteDrift(ge.citeStr, srcRoot)
 		if drifted {
 			fmt.Fprintf(&b, "DRIFT %s\n", ge.citeStr)
 		}
@@ -302,7 +302,7 @@ func gradeDriftRun(ctx *Context) int {
 				if cit, parseErr := cite.Parse(citeStr); parseErr == nil && cit.Hash != "" {
 					hashless = fmt.Sprintf("%s:%d-%d", cit.File, cit.Start, cit.End)
 				}
-				hashed, hashErr := cite.HashCitation(hashless, srcRoot)
+				hashed, hashErr := hashCiteText(hashless, srcRoot)
 				if hashErr != nil {
 					return nil, nil, &ops.Refusal{
 						Err:  fmt.Sprintf("cannot resolve citation %q: %v", citeStr, hashErr),

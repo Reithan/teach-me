@@ -69,7 +69,7 @@ func reciteRun(ctx *Context) int {
 
 		// Hash the new range to find which existing citation it matches.
 		// HashCitation reads the text and computes a 12-hex-char hash.
-		newHashed, hashErr := cite.HashCitation(newRangeStr, srcRoot)
+		newHashed, hashErr := hashCiteText(newRangeStr, srcRoot)
 		if hashErr != nil {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("cannot hash %q: %v", newRangeStr, hashErr),

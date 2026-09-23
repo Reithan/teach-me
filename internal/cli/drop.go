@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -208,7 +207,7 @@ func dropQuestionDrift(
 
 	// Refuse if the citation has not drifted (§7 drop-question row).
 	srcRoot := s.Cfg().SrcRoot
-	drifted, driftErr := cite.CheckDrift(qn.Cite, srcRoot)
+	drifted, driftErr := checkCiteDrift(qn.Cite, srcRoot)
 	if driftErr != nil {
 		// Unresolvable citation: keep existing behavior, do not refuse as drift.
 		return nil, nil, &ops.Refusal{

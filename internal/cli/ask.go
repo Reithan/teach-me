@@ -8,12 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
-	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -263,21 +261,16 @@ func askRun(ctx *Context) int {
 		}
 	}
 
-	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
-	if resolverErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
+	srcRoot := s.Cfg().SrcRoot
 
 	if format == "json" {
-		return askEmitJSON(ctx, selectedBatch, unanswered, s, resolver, wantSrcText)
+		return askEmitJSON(ctx, selectedBatch, unanswered, s, srcRoot, wantSrcText)
 	}
-	return askEmitLines(ctx, selectedBatch, unanswered, s, resolver, wantSrcText)
+	return askEmitLines(ctx, selectedBatch, unanswered, s, srcRoot, wantSrcText)
 }
 
 // askEmitLines emits the lines-format output for tm ask.
-func askEmitLines(ctx *Context, batch string, questions []*graph.QuestionNode, s *state.State, resolver *source.Resolver, wantSrcText bool) int {
+func askEmitLines(ctx *Context, batch string, questions []*graph.QuestionNode, s *state.State, srcRoot string, wantSrcText bool) int {
 	_, _ = fmt.Fprintln(ctx.Out, batch)
 	for _, q := range questions {
 		line := q.ID + " | " + q.Scope + " | " + q.Cite
@@ -289,7 +282,7 @@ func askEmitLines(ctx *Context, batch string, questions []*graph.QuestionNode, s
 		_, _ = fmt.Fprintln(ctx.Out, line)
 		if wantSrcText {
 			// DRIFT <cite> — printed when stored hash no longer matches file content.
-			if drifted, _, driftErr := resolver.CheckDrift(q.Cite); driftErr == nil && drifted {
+			if drifted, driftErr := checkCiteDrift(q.Cite, srcRoot); driftErr == nil && drifted {
 				_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", q.Cite)
 			}
 			if text, readErr := readCiteText(q.Cite, srcRoot); readErr == nil {
@@ -318,7 +311,7 @@ type askJSONResponse struct {
 }
 
 // askEmitJSON emits the JSON-format output for tm ask.
-func askEmitJSON(ctx *Context, batch string, questions []*graph.QuestionNode, s *state.State, resolver *source.Resolver, wantSrcText bool) int {
+func askEmitJSON(ctx *Context, batch string, questions []*graph.QuestionNode, s *state.State, srcRoot string, wantSrcText bool) int {
 	qs := make([]askJSONQuestion, 0, len(questions))
 	for _, q := range questions {
 		jq := askJSONQuestion{

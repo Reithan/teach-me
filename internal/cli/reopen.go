@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -87,7 +86,7 @@ func reopenApply(
 	srcAfter := ""
 	if srcCite != "" {
 		srcRoot := s.Cfg().SrcRoot
-		hashedSrc, hashErr := cite.HashCitation(srcCite, srcRoot)
+		hashedSrc, hashErr := hashCiteText(srcCite, srcRoot)
 		if hashErr != nil {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("cannot hash --src %q: %v", srcCite, hashErr),
