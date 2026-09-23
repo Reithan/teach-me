@@ -233,7 +233,7 @@ func TestRender_FulltextBasic(t *testing.T) {
 	s := state.LoadFromGraph(g, state.Config{})
 	concepts, _ := report.Walk(g, s, "a", 0)
 
-	reader := func(citeStr, srcRoot string) (string, error) {
+	reader := func(_, _ string) (string, error) {
 		return "line 1\nline 2\nline 3", nil
 	}
 	out := report.Render(concepts, report.Options{Fulltext: true, SrcRoot: "/any"}, reader)
@@ -259,7 +259,7 @@ func TestRender_FulltextRepeatedCitation(t *testing.T) {
 	concepts, _ := report.Walk(g, s, "b", 0)
 
 	calls := 0
-	reader := func(citeStr, srcRoot string) (string, error) {
+	reader := func(_, _ string) (string, error) {
 		calls++
 		return "cited text", nil
 	}
@@ -288,7 +288,7 @@ func TestRender_FulltextDeduplicatedCitations(t *testing.T) {
 	concepts, _ := report.Walk(g, s, "a", 0)
 
 	calls := 0
-	reader := func(citeStr, srcRoot string) (string, error) {
+	reader := func(_, _ string) (string, error) {
 		calls++
 		return "cited text", nil
 	}

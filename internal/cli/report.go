@@ -65,7 +65,7 @@ func reportRun(ctx *Context) int {
 	if walkErr != nil {
 		ctx.ErrMsg = walkErr.Error()
 		writeErrFix(ctx.ErrOut, ctx.ErrMsg,
-			fmt.Sprintf("tm status to see known concept ids"))
+			"tm status to see known concept ids")
 		return 3
 	}
 
@@ -77,9 +77,7 @@ func reportRun(ctx *Context) int {
 
 	var reader report.TextReader
 	if fulltext {
-		reader = func(citeStr, root string) (string, error) {
-			return readCiteText(citeStr, root)
-		}
+		reader = readCiteText
 	}
 
 	out := report.Render(concepts, opts, reader)

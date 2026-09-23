@@ -63,7 +63,7 @@ func TestReport_Outline_RaftLifecycleFixture(t *testing.T) {
 	if idxRL < 0 || idxLE < 0 || idxLM < 0 || idxCR < 0 {
 		t.Fatalf("missing headings; got:\n%s", out)
 	}
-	if !(idxRL < idxLE && idxLE < idxLM && idxLM < idxCR) {
+	if idxRL >= idxLE || idxLE >= idxLM || idxLM >= idxCR {
 		t.Errorf("topo order wrong: replicated_log=%d leader_election=%d log_matching=%d commit_rules=%d",
 			idxRL, idxLE, idxLM, idxCR)
 	}
