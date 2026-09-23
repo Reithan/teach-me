@@ -43,7 +43,7 @@ What follows from the rule:
 
 ### 2.1 Harness boundary
 
-The CLI is harness-agnostic. It reads arguments, stdin, environment variables, and files; it writes stdout, the graph, and the log. It names no model, harness, or agent, and it runs no external command except user-configured converters and git (section 5).
+The CLI is harness-agnostic. It reads arguments, stdin, environment variables, and files; it writes stdout, the graph, and the log. It names no model, harness, or agent, and it runs no external command except user-configured converters and git (section 13).
 
 Everything harness-specific is an adapter outside the CLI. An adapter may use any feature its harness offers. The CLI surface never changes to suit one.
 
@@ -231,7 +231,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm add <id> <cite> "<scope>" [--parent <id>:"<rel>"]... [--child <id>:"<rel>"]...` | new concept in `untested`. `--child` inserts a prerequisite above an existing concept | `ok` |
 | `tm link <from> <to> "<rel>"` | edge between existing concepts | `ok` |
 | `tm edit <concept> "<scope>" [--src <cite>]` | rewrite the scope of a concept that has no questions yet | `ok` |
-| `tm drop <concept>` | remove an untested leaf concept that has no questions; also accepts a concept or question ID when the CLI verifies the citation has drifted and the question is ungraded. Logged | `ok` |
+| `tm drop <id>` | remove an untested leaf concept that has no questions; or remove an ungraded question whose citation the CLI verifies has drifted. Logged | `ok` |
 | `tm gap <concept> "<gap>"` | set or replace the GAP field | `ok` |
 | `tm reopen <concept> "<gap>" [--src <cite>]` | move a passed concept to `untested` with a GAP; `--src` re-points the concept citation in the same operation. Descendants stay passed | `ok` |
 | `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe | `qN` |
@@ -241,7 +241,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm check <qid>` | grader: emit the grading payload (section 9) | the payload |
 | `tm grade <qid> pass\|fail\|unclear "<summary>" [--guided] [--oos]` | grader: write the verdict, run the transitions in section 8 | `ok` |
 | `tm lint [<file>]` | check the graph (section 11) | `ok`, or every violation |
-| `tm lint --drift [--remote]` | resolve local (and with `--remote`, fetched) citations; list mismatches one per line; exit 1 if any. Does not block mutations | mismatches or `ok` |
+| `tm lint --drift` | resolve local citations; list mismatches one per line; exit 1 if any. Does not block mutations | mismatches or `ok` |
 | `tm report <concept> [--hops N] [--fulltext] [--passed-only]` | read-only: walk parent edges up to `N` hops, emit foundations as Markdown; `--fulltext` inlines cited text (default 2 hops); `--passed-only` drops open and blocked concepts | Markdown on stdout |
 | `tm rehash [<file>]` | for every citation without a hash: resolve the text, write the hash, log a `rehash` event | `ok`, or one line per updated citation |
 | `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
@@ -287,7 +287,8 @@ fix: pass log_matching first
 | `add` | ID exists (`fix: tm reopen` when it is passed), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
 | `link` | unknown ID, non-concept endpoint, or cycle |
 | `edit` | the ID is a question or answer; the concept is passed or has any question |
-| `drop` | the ID is a question or answer (unless the CLI verifies drift on an ungraded question); the concept is passed, has children, or has any question; a drifted-question `drop` when the question is already graded; a drifted-question `drop` when the citation has not drifted |
+| `drop` (concept) | the concept is passed, has children, or has any question |
+| `drop` (question) | the question is already graded; or the citation has not drifted |
 | `reopen` | the concept is not in `passed` |
 | `add`, `q` | the cited file cannot be fetched (URI locator, fetch failed) |
 | `add`, `q` | a converter is required for the MIME type or extension and none is configured |
@@ -458,8 +459,8 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 11. Every citation names an existing file and an in-bounds line range.
 12. Passed concepts have no tests, no GAP, and no gate line.
 13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
-14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode the `"` as `%22``.
-15. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any); `--remote` adds fetched ones.
+14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`.
+15. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
 
 Runtime lint checks the subset grammar only and links no Mermaid parser. Whether the subset is valid Mermaid is a property of the grammar and the writer, so it is proven in CI by the conformance suite (16.6), against the real parser.
 
@@ -556,6 +557,59 @@ Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per pr
 | `version-cmd <program>` | `= <command...>` | version command override (default: `<program> --version`) |
 | `git` | `= <command>` | git executable; enables `HEAD` blob resolution for missing files and commit recording on `add` and `q` |
 
+
+### 13.1 Source resolution
+
+Resolution order: parse the citation into hash, locator, and range; locate the source bytes (path or fetch); convert if a converter matches the MIME type or file extension; slice the line range; compare the computed hash.
+
+**Paths.** When the locator is a relative or absolute path, the file is read raw unless a converter is configured for its extension, in which case it is piped through the converter.
+
+When the path does not exist locally and the path is inside a git repository: walk up from the longest existing ancestor until a `.git` directory or a `gitdir:` file is found (the latter for worktrees and submodules). Compute the repo-relative path. If `git` is configured (section 13), request the blob at `HEAD` through it. If git is not configured, or `HEAD` has no such blob:
+
+```
+err: my-folder/file.txt is not in the working tree
+fix: check it out, or set git in <config> to read it from HEAD
+```
+
+The CLI never talks to a remote git server. A file that exists only on the remote requires the user to fetch, or the teacher cites the remote URL at a commit instead.
+
+**Commit recording.** On `add` and `q`, when the locator is inside a git repo, the CLI reads `HEAD` by reading `.git/HEAD`, then the ref under `refs/heads/` or in `packed-refs`, following `commondir` for worktrees and submodules. This is a direct file read; no git process is exec'd. The resolved commit SHA is written to the `commit` log field.
+
+**URIs.** Fetched with the standard library: follow redirects and record the final URL; apply a timeout and a size cap; assume UTF-8; no script execution. The `Content-Type` header gives the MIME type; a converter is matched by MIME type first, then by the extension of the URL path. `text/plain` and `text/markdown` are read raw. Any other type with no configured converter refuses:
+
+```
+err: fetch https://... failed: no converter for <mime>
+fix: add a convert <mime> line to <config>
+```
+
+A failed fetch (no egress, timeout, non-2xx) refuses:
+
+```
+err: fetch https://... failed: <reason>
+fix: save a static copy under TM_SRC_ROOT and cite it
+```
+
+Dynamic pages are a stated limitation; the correct move is a static copy cited locally.
+
+**One conversion rule.** A converter applies whenever one is configured for the MIME type or for the extension of a local file, regardless of whether the source is local or remote. A local `.html` file is therefore cited by converted line numbers once a converter for it exists. Conversion is deterministic given the same input bytes and the same converter version, so converted output is regenerable and never stored durably.
+
+**PDF.** Handled through the same mechanism, with `pdftotext` as the configured converter. For arXiv, prefer the versioned HTML rendering or the e-print source; PDF is the fallback.
+
+**Converter protocol.** A converter reads source bytes on stdin and writes text on stdout. A non-zero exit refuses the citation with the converter's stderr in the `err:` line.
+
+**Version pin.** Every converter named in a `convert` key must have a `version` line. Before its first use in a process the CLI runs the version command (default `<program> --version`; `version-cmd` overrides it, since some programs use `-v` and write to stderr), takes the first line of combined output, and requires the pinned string to appear as a substring. Mismatch refuses:
+
+```
+err: pandoc is 3.2.0, config pins 3.1.11
+fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may drift
+```
+
+**`git`.** The `git` key enables `HEAD` blob resolution (above) and nothing else.
+
+**No config.** With no config file and no relevant keys, the CLI execs no external command and fetches nothing. The narrowing of §2.1 is additive: the default behavior is unchanged.
+
+**Security.** Converters process untrusted bytes fetched from URLs named in the graph; a hand-edited graph can make the CLI fetch and convert anything it names. The user chooses the converters. The skill has the model advise on the config lines and confirm with the user before writing the config.
+
 ## 14. Decision record
 
 | # | Decision | Reason | Rejected | Status |
@@ -630,7 +684,7 @@ Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per pr
 - Conversion cache (OS temp directory, keyed by input hash, converter, and version).
 - Learner-facing study guide from `tm report` (same walk over the passed block, question text omitted).
 - Remote git fetch.
-- `tm lint --remote` (resolve fetched citations; currently opt-in via `--drift`).
+- `tm lint --remote` (resolve fetched citations).
 - Mermaid size limits under long URIs: measure in M9.
 - Decay and re-test of passed concepts across days.
 - Adapters from `tm ask --format json` to a specific harness's question UI.
