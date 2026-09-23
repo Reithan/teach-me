@@ -203,6 +203,7 @@ func TestSourceCitationWiring(t *testing.T) {
 
 			// Fresh graph file per sub-test.
 			dir := t.TempDir()
+			t.Chdir(dir) // ensure tm new writes .tmconfig to temp dir, not package dir
 			t.Setenv("TM_FILE", "")
 			tempErrlog(t) // activates TM_ERRORS for this sub-test
 
@@ -265,6 +266,7 @@ func TestCLIResolverConfigError(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 
 	dir := t.TempDir()
+	t.Chdir(dir) // ensure tm new writes .tmconfig to temp dir, not package dir
 	mmdFile := filepath.Join(dir, "g.mmd")
 	// Create the graph without the bad config in effect (new doesn't use resolver).
 	if _, errOut, code := run(t, "new", mmdFile); code != 0 {
