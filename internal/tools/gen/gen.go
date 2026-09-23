@@ -11,11 +11,30 @@
 package gen
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"strings"
 
 	"github.com/reithan/teach-me/internal/graph"
 )
+
+// genCite returns a hashed citation string "<hash>@<file>:<start>-<end>".
+// The hash is the SHA-256 prefix (12 hex chars) of the fake content
+// "line start\nline start+1\n...\nline end" (normalized: trailing newline stripped).
+// This produces deterministic, syntactically-valid citations for generated graphs
+// that do not correspond to any real source file.
+func genCite(file string, start, end int) string {
+	var sb strings.Builder
+	for i := start; i <= end; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	text := strings.TrimRight(sb.String(), "\n")
+	sum := sha256.Sum256([]byte(text))
+	h := hex.EncodeToString(sum[:])[:12]
+	return fmt.Sprintf("%s@%s:%d-%d", h, file, start, end)
+}
 
 // defaultFrontmatter is the canonical frontmatter block from spec section 4.
 const defaultFrontmatter = `---
@@ -118,11 +137,11 @@ func GraphRand(r *rand.Rand) *graph.Graph {
 		cn := &graph.ConceptNode{
 			ID:    id,
 			Scope: pick(r, adversarialScopes),
-			Cites: []string{fmt.Sprintf("src.txt:%d-%d", i*20+1, i*20+20)},
+			Cites: []string{genCite("src.txt", i*20+1, i*20+20)},
 			Block: graph.BlockPassed,
 		}
 		if r.Intn(3) == 0 {
-			cn.Cites = append(cn.Cites, fmt.Sprintf("extra.txt:%d-%d", i*5+1, i*5+10))
+			cn.Cites = append(cn.Cites, genCite("extra.txt", i*5+1, i*5+10))
 		}
 		g.PassedConcepts = append(g.PassedConcepts, cn)
 	}
@@ -144,7 +163,7 @@ func GraphRand(r *rand.Rand) *graph.Graph {
 		cn := &graph.ConceptNode{
 			ID:    id,
 			Scope: pick(r, adversarialScopes),
-			Cites: []string{fmt.Sprintf("src.txt:%d-%d", (i+numPassed)*20+1, (i+numPassed)*20+20)},
+			Cites: []string{genCite("src.txt", (i+numPassed)*20+1, (i+numPassed)*20+20)},
 			Block: graph.BlockUntested,
 		}
 		if r.Intn(3) == 0 {
@@ -191,7 +210,7 @@ func GraphRand(r *rand.Rand) *graph.Graph {
 			qn := &graph.QuestionNode{
 				ID:    qID,
 				Scope: pick(r, adversarialScopes),
-				Cite:  fmt.Sprintf("src.txt:%d-%d", qCounter*10+1, qCounter*10+15),
+				Cite:  genCite("src.txt", qCounter*10+1, qCounter*10+15),
 				Class: batchClass,
 			}
 			g.TestingItems = append(g.TestingItems, graph.TestingItem{Q: qn})
