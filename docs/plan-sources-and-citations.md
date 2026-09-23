@@ -254,9 +254,26 @@ the grader surface stays `tm check`.
 - A learner-facing study guide is the same walk over the passed block with
   question text omitted. Deferred (section 12).
 
-## 9. Skill changes
+## 9. Adapter changes
 
-A **Source** step before Orient in `SKILL.md`:
+Today two adapters exist: the teacher skill, which drives the session and
+administers questions, and the grader agent, which scores one answer in
+isolation. Mapping a corpus into concepts is one sentence in the teacher's
+Map phase, and errata handling does not exist. Both become explicit, and
+mapping becomes a third adapter, because it reads far more source than the
+teacher should carry in context and its output is a small set of `tm`
+mutations the teacher can review through `tm status`.
+
+| Adapter | File | Job |
+|---|---|---|
+| Teacher | `skill/teach-me/SKILL.md` | drive the session; source acquisition; delegate mapping and grading; errata |
+| Grader | `skill/teach-me/agents/teach-me-grader.md` | grade one answer in isolation |
+| Mapper | `skill/teach-me/agents/teach-me-mapper.md` | read sources, write concepts and edges with citations |
+| Setup reference | `skill/teach-me/reference/setup.md` | converter and git configuration the teacher reads only when advising the user |
+
+### 9.1 Teacher skill
+
+A **Source** step before Orient:
 
 - Ask the learner for materials first: notes, textbook chapters, docs, a repo,
   papers. Markdown or any line-addressable text. Set `TM_SRC_ROOT`.
@@ -267,13 +284,71 @@ A **Source** step before Orient in `SKILL.md`:
   PDF. Dynamic pages: save a static copy and cite it.
 - No egress: local-only, or ask the learner for citable documents. Not a
   blocker.
-- Converter setup: name pandoc and `pdftotext` as suggested defaults with
-  pinned versions, give the config location and lines, run a test conversion,
-  and confirm with the user before writing the config.
+- Converter setup: when a citation refuses for want of a converter, read the
+  setup reference, advise the user on the config lines, run a test
+  conversion, and confirm with the user before writing the config. The
+  reference lives in its own file so the procedure is loaded only when needed.
 - The no-memory rule, stated as a rule: never author source text from memory;
   if no real source can be obtained, say so and stop.
 - `tm new` for a fresh session. `tm report` when resuming and before a
   teaching round.
+
+The **Map** phase delegates to the mapper. The teacher's spawn prompt carries
+the learning goal as the learner stated it, the source locations, and the
+scope of the request: initial map, extension around a named concept when the
+frontier is thin, or errata against named concepts. For an extension or
+errata request the teacher also passes the output of `tm report <concept>`
+so the mapper sees the existing foundations without reading the graph
+itself. The mapper returns a one-paragraph summary; the teacher reads the
+result through `tm status` and `tm show`, never through the mapper's prose.
+
+An **Errata** section, since the teacher is who sees drift and disputes:
+
+- `DRIFT` on a question: nothing to do; the grader records `unclear` and the
+  replacement re-cites.
+- `DRIFT` on a passed concept whose citation no longer says what was passed:
+  `tm reopen <concept> "<what changed>"`. Descendants stay passed.
+- A source replaced or a learner correction that shows a missing
+  prerequisite: spawn the mapper in errata mode for the affected concepts. It
+  may `tm add --child`, `tm link`, and `tm edit` or `tm drop` question-less
+  concepts; it never touches a concept with questions, which is the CLI's
+  rule already.
+- A learner who disputes a verdict: not errata. Re-probe with `--re`; the
+  grader decides.
+- After any hand edit to the graph, `tm lint`.
+
+### 9.2 Grader agent
+
+One line: `DRIFT` means `unclear`.
+
+### 9.3 Mapper agent
+
+`skill/teach-me/agents/teach-me-mapper.md`, static body like the grader's.
+
+- **Task.** Turn a body of source into concepts the teacher can probe: one
+  `tm add` per concept with a scope and a citation, `tm link` for
+  prerequisite edges, and nothing else. It writes the graph only through
+  `tm`; it never writes files under the source root.
+- **Input.** The spawn prompt carries the learning goal, the source
+  locations, the request scope (initial, extend around `<concept>`, errata
+  for `<concepts>`), and for the latter two the `tm report` output.
+- **Rules.** The no-memory rule: every concept cites source the mapper has
+  read in this session. A scope is probe-sized, meaning two to five narrow
+  probes can test it; anything larger is split. A prerequisite edge is added
+  only where passing the parent is genuinely required to answer probes on the
+  child, since every edge blocks the frontier. Map to a bounded depth around
+  the goal, not the whole corpus; the teacher re-invokes as the frontier
+  thins. `tm edit` and `tm drop` only on concepts with no questions. When the
+  goal or sources are ambiguous, return the question rather than guess.
+- **Tools.** `Bash(tm add *)`, `Bash(tm link *)`, `Bash(tm edit *)`,
+  `Bash(tm drop *)`, `Bash(tm find *)`, `Bash(tm show *)`, `Bash(tm status*)`,
+  file reading, and the harness's fetch tool when it has one. No `tm q`,
+  `tm ask`, `tm answer`, `tm check`, or `tm grade`.
+- **Model.** Sonnet by default; the teacher picks Opus for dense sources.
+- **Completion.** One paragraph: what was added, what was linked, what was
+  left unmapped and why, and any question for the learner. Then stop.
+
+`AGENTS.md` gains the mapper row in its adapter table.
 
 Grader adapter: one line, `DRIFT` means `unclear`.
 
@@ -281,7 +356,7 @@ Grader adapter: one line, `DRIFT` means `unclear`.
 
 | Section | Change |
 |---|---|
-| 2.1 | narrow "runs no external command" per section 5 |
+| 2.1 | narrow "runs no external command" per section 5; adapter table gains the mapper and the setup reference (section 9) |
 | 3 | user config file and `.tmconfig` override |
 | 4.4 | citation field grammar (section 3) |
 | 6 | `report`, `rehash`, `lint --drift`; `check` prints `DRIFT` |
@@ -289,7 +364,7 @@ Grader adapter: one line, `DRIFT` means `unclear`.
 | 9 | `DRIFT` line and rubric sentence |
 | 10 | new log fields and `rehash` event |
 | 11 | hash presence; `"` in locator; `--drift` |
-| 12 | Source step; no-memory rule as the third unenforceable behavior |
+| 12 | Source step; Map delegates to the mapper; errata; no-memory rule as the third unenforceable behavior |
 | 13 | config file variables |
 | 14 | decision rows below |
 | 15 | move resolved items out; add section 12 items |
@@ -338,8 +413,9 @@ Draft decision rows:
 | M9 | citation grammar, hash, normalization, `rehash`, lint rules, golden and corpus regeneration | M8 |
 | M10 | source resolution: config file, converters, version check, fetch, git `HEAD` resolution, commit recording, log fields, `DRIFT` in every read | M9 |
 | M11 | `tm report` | M10 |
-| M12 | skill Source step, converter setup guidance, grader `DRIFT` line | M10, M11 |
-| Gate | end-to-end: a session from an empty directory through web and repo citations, drift, and report | M9 to M12 |
+| M12 | teacher skill: Source step, mapper delegation, errata section, setup reference file; grader `DRIFT` line | M10, M11 |
+| M13 | mapper agent: `teach-me-mapper.md`, tool scoping, `AGENTS.md` adapter row | M11, M12 |
+| Gate | end-to-end: a session from an empty directory through mapping, web and repo citations, drift, errata, and report | M9 to M13 |
 
 M8 is blocked by M7 so the v0.1.0 release is not derailed. The grammar change
 is breaking, so the owner decides whether it lands before or after the tag;
