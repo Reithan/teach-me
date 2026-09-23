@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.17
+# tm: teaching-map CLI, draft spec v0.18
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.16: repository visibility and licensing are settled as a sequence (16.1, row 45). Section 14 records every decision.
+Changes from v0.17: sources and citations folded in; §2.1, §3, §4.4, §6–16 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -43,7 +43,7 @@ What follows from the rule:
 
 ### 2.1 Harness boundary
 
-The CLI is harness-agnostic. It reads arguments, stdin, environment variables, and files; it writes stdout, the graph, and the log. It names no model, harness, or agent, and it runs no external command.
+The CLI is harness-agnostic. It reads arguments, stdin, environment variables, and files; it writes stdout, the graph, and the log. It names no model, harness, or agent, and it runs no external command except user-configured converters and git (section 13).
 
 Everything harness-specific is an adapter outside the CLI. An adapter may use any feature its harness offers. The CLI surface never changes to suit one.
 
@@ -51,17 +51,20 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 |---|---|---|
 | Teacher prompt | the procedure the CLI cannot enforce (section 12); sets `TM_DOC` to its own path | a skill file, an agent file, a section of the harness's instruction file |
 | Grader invocation | carries `check` output to a model and a verdict back to `grade` | a sub-agent the teacher spawns, on any harness with sub-agents and a shell. Automatic spawning is deferred (section 15) |
+| Planner invocation | reads sources and writes concepts with citations; called from Map and errata | `skill/teach-me/agents/teach-me-planner.md` |
 | Question UI | maps `ask --format json` onto the harness's question tool | a small script or skill |
 | Role guard | replaces the `TM_ROLE` soft check | a pre-tool hook |
+| Setup reference | converter and git configuration the teacher reads when advising the user | `skill/teach-me/reference/setup.md` |
 
 ## 3. Files
 
 - Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; there is no cache or side state.
-- Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history`.
+- Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history` and `tm check --drift`.
 - Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolved. Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
 - Lock: `<name>.mmd.lock`. Every mutating command takes the lock, writes a temp file, lints the result, then renames over the graph. Graders run in parallel, so this is required.
 - File resolution: `--file` > `$TM_FILE` > `.tmconfig` in the working directory. `tm new` and `tm load` write `.tmconfig`. Use the env var when two sessions share a directory.
 - Citations resolve against `$TM_SRC_ROOT`, defaulting to the graph's directory.
+- Converter and git configuration: user-level `$XDG_CONFIG_HOME/tm/config` (default `~/.config/tm/config`), key=value format (section 13). `.tmconfig` keys override the user config per project. Converters are machine-specific, so they live in the user config by default.
 
 ## 4. Graph format
 
@@ -146,11 +149,29 @@ All labels are plain double-quoted strings. Fields are separated by `<br/>`.
 
 | Node | Fields |
 |---|---|
-| Concept | scope; optional `GAP: <gap>`; citations (`file:a-b`, comma-separated) |
+| Concept | scope; optional `GAP: <gap>`; citations (`<hash>@<locator>:START-END`, comma-separated) |
 | Question | narrow scope; one citation |
 | Answer | optional `OOS` (teach answers only); optional `ASKED: <wording>`; then the raw answer while `pending`, replaced by the grader's summary |
 
 The writer escapes `"` as `#quot;`, `'` as `#39;`, `#` as `#35;`, `<` and `>` as `#lt;` and `#gt;`, and collapses newlines to spaces. `tm check`, `tm show`, and the log unescape. A pending answer holding `it#39;s the #quot;same#quot; entry (I think) [index, term] -> cmd; 100% sure?` parses cleanly on 11.17.2.
+
+#### Citation grammar
+
+```
+<hash>@<locator>:START-END
+```
+
+| Part | Rule |
+|---|---|
+| `hash` | first 12 hex characters of SHA-256 over the normalized cited text. Fixed width. Parsed first; the `@` after it is the delimiter, so `@` inside a locator is harmless |
+| `locator` | a path relative to `TM_SRC_ROOT`; an absolute path (`/...`, or a drive letter on Windows); or a URI with a scheme (`https://...`). Distinguished by prefix; no per-kind syntax |
+| `START-END` | 1-based inclusive line range into the resolved text, after conversion if any. Split on the last colon; the range never contains one, so scheme separators, ports, and drive letters are harmless |
+
+The model never types the hash. `tm add` and `tm q` accept the hashless form `<locator>:START-END`, resolve the text, compute the hash, and write the full form. The hash is a content hash of the cited lines, not a commit hash; the position invites that reading, so the spec says so here.
+
+Normalization before hashing: CRLF to LF; trailing whitespace stripped per line; lines joined with LF; no trailing newline; hash over the UTF-8 bytes. Internal whitespace is preserved because indentation is meaningful in code.
+
+A `"` in a locator must be percent-encoded; lint rejects a raw one.
 
 ### 4.5 Classes
 
@@ -210,9 +231,9 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm add <id> <cite> "<scope>" [--parent <id>:"<rel>"]... [--child <id>:"<rel>"]...` | new concept in `untested`. `--child` inserts a prerequisite above an existing concept | `ok` |
 | `tm link <from> <to> "<rel>"` | edge between existing concepts | `ok` |
 | `tm edit <concept> "<scope>" [--src <cite>]` | rewrite the scope of a concept that has no questions yet | `ok` |
-| `tm drop <concept>` | remove an untested leaf concept that has no questions. Logged | `ok` |
+| `tm drop <id>` | remove an untested leaf concept that has no questions; or remove an ungraded question whose citation the CLI verifies has drifted. Logged | `ok` |
 | `tm gap <concept> "<gap>"` | set or replace the GAP field | `ok` |
-| `tm reopen <concept> "<gap>"` | move a passed concept to `untested` with a GAP. Descendants stay passed | `ok` |
+| `tm reopen <concept> "<gap>" [--src <cite>]` | move a passed concept to `untested` with a GAP; `--src` re-points the concept citation in the same operation. Descendants stay passed | `ok` |
 | `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe | `qN` |
 | `tm q <concept> <cite> "<narrow scope>" --teach --re <qid>` | add a teach question hung off that question's answer. `--re` is required: it names the failed answer being taught, directly or through an earlier teach question | `qN` |
 | `tm ask <concept> [--format lines\|json] [--src-text]` | read-only: emit the batch to ask next (section 8) | batch ID, then one line per unanswered question |
@@ -220,8 +241,16 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm check <qid>` | grader: emit the grading payload (section 9) | the payload |
 | `tm grade <qid> pass\|fail\|unclear "<summary>" [--guided] [--oos]` | grader: write the verdict, run the transitions in section 8 | `ok` |
 | `tm lint [<file>]` | check the graph (section 11) | `ok`, or every violation |
+| `tm lint --drift` | resolve local citations; list mismatches one per line; exit 1 if any. Does not block mutations | mismatches or `ok` |
+| `tm report <concept> [--hops N] [--fulltext] [--passed-only]` | read-only: walk parent edges up to `N` hops, emit foundations as Markdown; `--fulltext` inlines cited text (default 2 hops); `--passed-only` drops open and blocked concepts | Markdown on stdout |
+| `tm rehash [<file>]` | for every citation without a hash: resolve the text, write the hash, log a `rehash` event | `ok`, or one line per updated citation |
+| `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
+| `tm check --drift <concept>` | grader: for a passed concept, read its `grade` events, resolve each question citation against the current source, and emit per-question pairs for judging whether the pass survives | the recheck payload |
+| `tm grade --drift <concept> keep\|reopen "<summary>"` | grader: record the recheck verdict; `keep` re-hashes the concept citation; `reopen` runs `reopen` with the summary as the GAP | `ok` |
 | Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when `TM_DOC` is set; otherwise one usage line per command |
 | `tm --help <command>`, `tm <command> --help [<flag>]` | specific inquiry | that command's usage line, or one line on the flag |
+
+Reads that resolve source text (`tm ask --src-text`, `tm show`, `tm report`) recompute the citation hash on every call. On mismatch the text is still printed; a `DRIFT <cite>` line sits between the citation line and the text.
 
 Samples:
 
@@ -258,8 +287,16 @@ fix: pass log_matching first
 | `add` | ID exists (`fix: tm reopen` when it is passed), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
 | `link` | unknown ID, non-concept endpoint, or cycle |
 | `edit` | the ID is a question or answer; the concept is passed or has any question |
-| `drop` | the ID is a question or answer; the concept is passed, has children, or has any question |
+| `drop` (concept) | the concept is passed, has children, or has any question |
+| `drop` (question) | the question is already graded; or the citation has not drifted |
 | `reopen` | the concept is not in `passed` |
+| `add`, `q` | the cited file cannot be fetched (URI locator, fetch failed) |
+| `add`, `q` | a converter is required for the MIME type or extension and none is configured |
+| `add`, `q`, `recite` | the configured converter's version does not match its pinned value |
+| `add`, `q` | the path is not in the working tree and git is not configured (sparse checkout or deleted file) |
+| `recite` | the new range does not hash to the existing citation hash |
+| `check --drift` | the event log is missing or unreadable (`fix: tm reopen`) |
+| `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |
 | `q` | the concept is passed or gated; the draft batch is at max; a probe question while a probe batch under the concept is locked or open; a teach question while a teach batch under the concept is open; `--teach` without `--re`; `--teach` once teaching is spent; `--teach` while the concept has no GAP; `--teach` with no failed probe batch above `base`; `--teach` without a fallback probe batch at min size that has no answers yet; `--re` on a probe whose target is not an `unclear` probe; `--re` on a teach question whose target is not a `fail` or `unclear` answer, or is flagged `OOS` |
 | `ask`, `answer` | the batch is under min; any parent of the concept is outside `passed`; the concept is gated; the batch is the fallback probes and any teach batch under the concept is unresolved; or the latest one is not all `pass` and teaching is not spent |
 | `answer` | the question already has an answer |
@@ -302,6 +339,8 @@ Teach verdicts control the exit from teaching. They never count toward the conce
 
 Questions and answers stay in the graph until the concept passes. By construction, every question under a passing concept has been answered and graded. Nothing leaves the graph without a log event.
 
+A question dropped for drift (section 6) counts as `unclear` for batch accounting: it produces exactly one `--re` replacement (steps 5 or 7 above apply as if the verdict were `unclear`) and carries none of the verdict consequences — it does not increment the failed-probe count and does not trigger step 2. Graded questions are never touched by `tm drop`; their verdicts were recorded against the text in the log.
+
 ## 9. Grader protocol
 
 The teacher spawns one grader per answer, probe or teach. The spawn prompt holds the question ID and the instruction to run `tm check <qid>` and then `tm grade`. The raw answer reaches the grader through the CLI, not through the prompt.
@@ -335,6 +374,30 @@ The teacher sees the flag in `tm status --concept <id>` as `q7 pass oos`. It mea
 
 The instruction block comes last so it lands after the parent's prompt in the grader's context. The CLI inlines the cited lines, so the grader needs no file access.
 
+### 9.1 Recheck payload
+
+`tm check --drift <concept>` reads every `grade` event for the concept from the log, resolves each question citation against the current source, and prints one block per question:
+
+```
+Q <qid>: <question scope>
+CITE <citation>
+SRC_GRADED
+  <src_text from the grade event, verbatim>
+SRC_CURRENT
+  <current text at the citation, verbatim>
+A: <raw answer from the grade event>
+VERDICT: <recorded verdict>
+```
+
+A `DRIFT <cite>` line precedes any block whose citation no longer resolves to the same hash.
+
+Grader rubric for `tm grade --drift <concept> keep|reopen "<summary>"`:
+
+- `keep`: every answer still holds against the current text (the substance is unchanged or the delta does not affect the graded scope). `keep` re-hashes the concept citation and logs a `recheck` event.
+- `reopen`: at least one answer no longer holds, or the grader cannot tell. `reopen` runs `tm reopen` with the summary as the GAP and logs a `recheck` event.
+
+The teacher never makes this call. Its bias runs toward re-testing always or never, depending on the model; the grader sees the logged answers and the current text, not the teacher.
+
 ## 10. Event log
 
 One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_ROLE` or null). Every mutation is logged; `gc` and `grade` carry the content that leaves the graph. `ask` is a read and logs nothing.
@@ -342,18 +405,21 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `ev` | Fields |
 |---|---|
 | `new`, `load` | `file` |
-| `add` | `id`, `scope`, `src`, `parents`, `children` |
+| `add` | `id`, `scope`, `src`, `parents`, `children`; optional: `commit` (when locator is inside a git repo), `url` (final URL after redirects), `mime`, `converter`, `converter_version`, `fetched_at` |
 | `link` | `from`, `to`, `rel` |
 | `edit` | `id`, `before`, `after` |
-| `drop` | `id`, `node`, `edges` |
+| `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and the recorded answer if any |
 | `gap` | `concept`, `before`, `after` |
-| `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re` |
+| `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
 | `answer` | `q`, `raw`, `asked` |
 | `grade` | `q`, `verdict`, `recorded` (differs from `verdict` under 8.2), `summary`, `raw`, `src_text`, `guided`, `oos` |
 | `pass` | `concept`, `batches`, `unblocked` |
 | `gc` | `concept`, `reason`, `nodes` (ID, label, class), `edges`, `meta` |
-| `reopen` | `concept`, `gap` |
+| `reopen` | `concept`, `gap`; optional: `src_before`, `src_after` (when `--src` is given) |
 | `gate` | `concept`, `trip` (`probes`, `stall`), `base`, `via` (`add`, `reopen`, `override`), `reason` |
+| `rehash` | `id`, `before` (old citation), `after` (new citation with hash) |
+| `recite` | `id`, `before` (old citation), `after` (new citation at new range) |
+| `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; per question: `q`, `src_text_before`, `src_text_after` |
 
 `src_text` in `grade` records what the grader saw, so a later audit survives edits to the source file.
 
@@ -392,6 +458,9 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 10. Concept edges carry a relation label and form a DAG.
 11. Every citation names an existing file and an in-bounds line range.
 12. Passed concepts have no tests, no GAP, and no gate line.
+13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
+14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`.
+15. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
 
 Runtime lint checks the subset grammar only and links no Mermaid parser. Whether the subset is valid Mermaid is a property of the grammar and the writer, so it is proven in CI by the conformance suite (16.6), against the real parser.
 
@@ -401,10 +470,12 @@ Runtime lint checks the subset grammar only and links no Mermaid parser. Whether
 stateDiagram-v2
     direction TB
 
-    [*] --> Orient : tm new | tm load
-    Orient --> Orient : tm status, tm find, tm show
+    [*] --> Source : tm new
+    Source --> Orient : sources and TM_SRC_ROOT set
+    [*] --> Orient : tm load
+    Orient --> Orient : tm status, tm find, tm show, tm report
     Orient --> Map : frontier thin, or a prerequisite is missing
-    Map --> Orient : tm add, tm link. tm edit and tm drop only for concepts with no questions
+    Map --> Orient : planner writes tm add, tm link; teacher reviews via tm status
     Orient --> Untested : choose a concept
     Orient --> [*] : untested is empty
 
@@ -443,7 +514,23 @@ stateDiagram-v2
     }
 ```
 
-Two behaviors the CLI cannot enforce belong in the teacher's prompt. Teach questions target the diagnosed gap, not the scopes of the locked probes. The grader's spawn prompt carries the question ID and nothing about the user.
+Four behaviors the CLI cannot enforce belong in the teacher's prompt:
+
+1. Teach questions target the diagnosed gap, not the scopes of the locked probes.
+2. The grader's spawn prompt carries the question ID and nothing about the user.
+3. The no-memory rule: model knowledge may draft questions and explain during teaching, but it never becomes source. When no real source can be obtained, the teacher says so and stops. Nothing model-authored is stored as source.
+4. The file-access rule: the model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on those file patterns; the CLI cannot.
+
+The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and sets `TM_SRC_ROOT`. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and points at the setup reference.
+
+The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach-me-planner.md`). The teacher's spawn prompt carries the learning goal, the source locations, and the request scope: initial map, extension around a named concept, or errata against named concepts. For extension or errata the teacher passes `tm report <concept>` output so the planner sees the existing foundations. The planner returns one paragraph; the teacher reads the result through `tm status` and `tm show`, never through the planner's prose.
+
+**Errata** handling:
+
+- `DRIFT` on an ungraded question: `tm drop <qid>`, then `tm q --re <qid>` with a fresh citation. The learner is asked again.
+- `DRIFT` on a passed concept: if the new range hashes the same, `tm recite`. Otherwise spawn a grader with the concept ID and the instruction to run `tm check --drift`; the grader decides `keep` or `reopen`. The teacher never decides whether a pass survives a source change.
+- A source replaced or a learner correction revealing a missing prerequisite: spawn the planner in errata mode for the affected concepts.
+- A learner who disputes a verdict: not errata. Re-probe with `--re`; the grader decides.
 
 ## 13. Configuration
 
@@ -459,6 +546,69 @@ Two behaviors the CLI cannot enforce belong in the teacher's prompt. Teach quest
 | `TM_MAX_FAILS` | 2 | failed probe batches before the gate |
 | `TM_MAX_TEACH` | 8 | in-scope teach questions per teaching round before teaching ends and the locked probes are asked |
 | `TM_MAX_STALL` | 4 | in-scope teach questions in a row, across zero-pass batches, before the gate |
+
+Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per project):
+
+| Key | Format | Meaning |
+|---|---|---|
+| `convert <mime>` | `= <command...>` | shell command that reads the source bytes on stdin and writes text on stdout; keyed by MIME type |
+| `ext <ext>` | `= <mime>` | map a file extension to a MIME type for converter lookup |
+| `version <program>` | `= <string>` | required version pin; the CLI checks that the pin is a substring of the first output line before the first use |
+| `version-cmd <program>` | `= <command...>` | version command override (default: `<program> --version`) |
+| `git` | `= <command>` | git executable; enables `HEAD` blob resolution for missing files and commit recording on `add` and `q` |
+
+
+### 13.1 Source resolution
+
+Resolution order: parse the citation into hash, locator, and range; locate the source bytes (path or fetch); convert if a converter matches the MIME type or file extension; slice the line range; compare the computed hash.
+
+**Paths.** When the locator is a relative or absolute path, the file is read raw unless a converter is configured for its extension, in which case it is piped through the converter.
+
+When the path does not exist locally and the path is inside a git repository: walk up from the longest existing ancestor until a `.git` directory or a `gitdir:` file is found (the latter for worktrees and submodules). Compute the repo-relative path. If `git` is configured (section 13), request the blob at `HEAD` through it. If git is not configured, or `HEAD` has no such blob:
+
+```
+err: my-folder/file.txt is not in the working tree
+fix: check it out, or set git in <config> to read it from HEAD
+```
+
+The CLI never talks to a remote git server. A file that exists only on the remote requires the user to fetch, or the teacher cites the remote URL at a commit instead.
+
+**Commit recording.** On `add` and `q`, when the locator is inside a git repo, the CLI reads `HEAD` by reading `.git/HEAD`, then the ref under `refs/heads/` or in `packed-refs`, following `commondir` for worktrees and submodules. This is a direct file read; no git process is exec'd. The resolved commit SHA is written to the `commit` log field.
+
+**URIs.** Fetched with the standard library: follow redirects and record the final URL; apply a timeout and a size cap; assume UTF-8; no script execution. The `Content-Type` header gives the MIME type; a converter is matched by MIME type first, then by the extension of the URL path. `text/plain` and `text/markdown` are read raw. Any other type with no configured converter refuses:
+
+```
+err: fetch https://... failed: no converter for <mime>
+fix: add a convert <mime> line to <config>
+```
+
+A failed fetch (no egress, timeout, non-2xx) refuses:
+
+```
+err: fetch https://... failed: <reason>
+fix: save a static copy under TM_SRC_ROOT and cite it
+```
+
+Dynamic pages are a stated limitation; the correct move is a static copy cited locally.
+
+**One conversion rule.** A converter applies whenever one is configured for the MIME type or for the extension of a local file, regardless of whether the source is local or remote. A local `.html` file is therefore cited by converted line numbers once a converter for it exists. Conversion is deterministic given the same input bytes and the same converter version, so converted output is regenerable and never stored durably.
+
+**PDF.** Handled through the same mechanism, with `pdftotext` as the configured converter. For arXiv, prefer the versioned HTML rendering or the e-print source; PDF is the fallback.
+
+**Converter protocol.** A converter reads source bytes on stdin and writes text on stdout. A non-zero exit refuses the citation with the converter's stderr in the `err:` line.
+
+**Version pin.** Every converter named in a `convert` key must have a `version` line. Before its first use in a process the CLI runs the version command (default `<program> --version`; `version-cmd` overrides it, since some programs use `-v` and write to stderr), takes the first line of combined output, and requires the pinned string to appear as a substring. Mismatch refuses:
+
+```
+err: pandoc is 3.2.0, config pins 3.1.11
+fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may drift
+```
+
+**`git`.** The `git` key enables `HEAD` blob resolution (above) and nothing else.
+
+**No config.** With no config file and no relevant keys, the CLI execs no external command and fetches nothing. The narrowing of §2.1 is additive: the default behavior is unchanged.
+
+**Security.** Converters process untrusted bytes fetched from URLs named in the graph; a hand-edited graph can make the CLI fetch and convert anything it names. The user chooses the converters. The skill has the model advise on the config lines and confirm with the user before writing the config.
 
 ## 14. Decision record
 
@@ -502,13 +652,25 @@ Two behaviors the CLI cannot enforce belong in the teacher's prompt. Teach quest
 | 36 | Help is agent-facing and split by what the call reveals: baseline help or an unknown subcommand defers to the `TM_DOC` file; a specific inquiry gets one usage or flag line; bad arguments to a real command get `err:` plus the usage line | a missing baseline is fixed by the skill file, which owns procedure; a narrow question or a slip is fixed by one parser-generated line, which cannot drift and costs the same whether or not the skill is in context | every help path defers to the skill file; every help path prints usage | agreed, v0.11 |
 | 37 | Pointers to the skill file print the tool version; the file carries `tm-version` in its frontmatter `metadata`, which the CLI checks; both live in one repository and CI enforces that they match | catches a stale skill file at the moment the agent is sent to it; same-version drift is handled in review | unversioned pointer; runtime content checks | agreed, v0.11 |
 | 38 | Every `err:` is appended to `ERRORS.jsonl`, silently | refusals show where the teacher agent goes wrong, which is the input for tuning its skill file; usage and lint errors are the input for debugging the CLI | errors only on stdout; errors mixed into the event log | agreed, v0.12 |
-| 39 | Go 1.27, standard library only at runtime, one static binary | the container has no default egress, so install is a file copy; millisecond startup on a tool called constantly; coding agents write Go well and it compiles fast | Rust (slower agent iteration), TypeScript (runtime and dependency tree in the container), Python (runtime in the container, no offsetting gain) | agreed, v0.13 |
+| 39 | Go 1.27, standard library only at runtime, one static binary; converters are external processes, not Go dependencies | the container has no default egress, so install is a file copy; millisecond startup on a tool called constantly; coding agents write Go well and it compiles fast; converter diversity is a user choice, not a CLI dependency | Rust (slower agent iteration), TypeScript (runtime and dependency tree in the container), Python (runtime in the container, no offsetting gain); built-in HTML/PDF libraries would add runtime dependencies | agreed, v0.13 |
 | 40 | Reference Mermaid parse runs in CI, not at runtime | measured about 1.35 s per call and a 182 MB, 103-package tree for `mermaid.parse` under jsdom, against about 25 ms for bare Node; native Go and Rust Mermaid parsers are independent reimplementations, not the grammar GitHub and VS Code run | reference parse on every write; a native third-party parser at runtime | agreed, v0.13 |
 | 41 | Section 16 fixes toolchain, layout, tests, CI gates, and release | the implementing agent should start with lookups to do, not choices to make | leave build decisions to the implementer | agreed |
 | 42 | Repository and module `github.com/reithan/teach-me`; binary and command `tm`; shipped skill `teach-me`, replacing the owner's existing skill of that name | a two-letter repository name collides and is hard to find; the command stays short because agents type it constantly; the project is the successor to the existing skill, so it takes its name | repository named `tm`; skill named `tm` | agreed, v0.15 |
 | 43 | Coverage is gated on the diff only: statement-level `diff-cover` against `origin/main` at 85%. No total gate. Condition coverage is deferred | a total gate penalizes code removal and refactors, since dropping well-tested lines reads as a net loss; no readily available diff filter exists for Go condition coverage | total coverage gate at 80% (v0.13); gobco plus an in-repo diff filter (v0.14) | agreed, v0.16 |
 | 44 | Git hooks in `.githooks/` via `core.hooksPath`, no framework: lint and light checks on commit, the CI suite on push, both refuse `main` | fast feedback before CI, and the same gates for a human or an agent; plain `sh` keeps the zero-dependency rule; branch protection stays the real enforcement because hooks can be skipped | a hook framework (lefthook, pre-commit); hooks as the only gate | agreed, v0.15 |
 | 45 | Repository private until the owner decides on a license, after testing the prototype build; no `LICENSE` file before then | licensing is a one-way door and should follow evidence that the tool works | choose a license up front; public from the start | agreed, v0.17 |
+| 46 | Citations carry a content hash, hash first: `<hash>@<locator>:START-END` | drift detection on every read with no side state; the hash travels wherever the citation is printed; reads like a git revision | meta line per citation; hash in the log only | agreed |
+| 47 | One locator grammar: relative path, absolute path, URI | three source kinds with one parser and one document; the kind is a prefix, not a syntax | sister lookup file of selectors; per-kind citation forms; XPath | agreed |
+| 48 | Sources converted by user-configured external converters keyed by MIME and extension, pinned by version and checked at runtime | deterministic per version; zero CLI dependencies; user-extensible to any format | built-in tag stripper; pure-Go HTML library; runtime-loaded modules (Go has none) | agreed |
+| 49 | Spec 2.1 narrowed: no external command except configured converters and git | default behavior unchanged; the rule's purpose was harness independence, which a content-only filter keeps | fetch and conversion inside the CLI with dependencies; adapter-side conversion only | agreed |
+| 50 | Drift derived at read time; a drifted ungraded question is dropped through a CLI-verified `tm drop` and replaced with `--re`; `answer` and `check` refuse it; graded questions untouched | immutability (21) holds because the CLI, not the teacher, decides a question may leave; grading a drifted question `unclear` wastes an answer and can turn into `fail` under 7 | brittle flag on the node; automatic re-citation; grade `unclear` on `DRIFT` | agreed |
+| 51 | `tm report` walks foundations: outline by default, `--fulltext` bounded by hops | requirement 1 with no model-authored intermediate text | derived study docs verified by a judge agent; anthologies of verbatim passages | agreed |
+| 52 | No-memory rule in the teacher adapter | the citation machinery is defeated silently by a notes file written from memory; the rule is the one thing the model will not enforce on itself | trust the model to source honestly | agreed |
+| 53 | `grade` keeps `src_text`; `add` and `q` do not copy text | audit needs what was judged; the hash covers detection; bounded log growth | copy every citation on write; filesystem compression | agreed |
+| 54 | Git read through the configured command; commit recorded by reading refs directly | packfile parsing is real work; unreachable commits can be garbage-collected, so the commit is provenance, not the verification mechanism | pure-Go object reader; go-git; commit hash in the citation | agreed |
+| 55 | Concept citations may be updated on drift through `recite` (hash-preserving), `reopen --src`, and a grader recheck; each logged with before and after | no verdict is graded against a concept citation, so updating it rewrites nothing a pass was earned against; the graph is already not add-only | errata nodes with edge transfer and a superseded marker; teacher override with a reason | agreed |
+| 56 | Whether a pass survives a source change is a grader's verdict from the logged answers and the current text, never the teacher's | same isolation argument as grading; the teacher's bias runs toward always or never re-testing | teacher `recite --override`; automatic reopen on any drift | agreed |
+| 57 | The model reaches the graph, log, and lock only through the CLI; adapters ask for harness deny rules on `tm new`, tell the model never to touch the files, and require it to report any accidental access as a misconfiguration | every CLI invariant assumes the CLI is the only writer and the grader's isolation assumes the model cannot read verdict history except through `show --history`; a model that opens the files bypasses all of it silently | CLI-side enforcement (impossible: it cannot see who opened a file); trust the model; encrypted or obfuscated graph | agreed |
 
 ## 15. Deferred
 
@@ -518,7 +680,12 @@ Two behaviors the CLI cannot enforce belong in the teacher's prompt. Teach quest
 - `--oos` on probes. Probes have no scope check yet.
 - Automatic grader spawning: a filter command the CLI runs, or a harness skill that injects `tm check` output into the grader's prompt. Both close the teacher's channel to the grader and both sit on `check` and `grade` unchanged.
 - Harness hook that authenticates the grader role.
-- Line rot beyond the existence and bounds check. `src_text` in the log records what was graded; a content hash per citation would detect drift.
+- Quote and position selectors, and fragment anchoring, for web citations.
+- Conversion cache (OS temp directory, keyed by input hash, converter, and version).
+- Learner-facing study guide from `tm report` (same walk over the passed block, question text omitted).
+- Remote git fetch.
+- `tm lint --remote` (resolve fetched citations).
+- Mermaid size limits under long URIs: measure in M9.
 - Decay and re-test of passed concepts across days.
 - Adapters from `tm ask --format json` to a specific harness's question UI.
 
@@ -559,7 +726,9 @@ internal/graph/           model, subset parser, writer, label escaping, edge pla
 internal/state/           derived state (section 5): frontier, batch states, targets, gate, stall, spent
 internal/ops/             one file per mutating command: invariants (section 7), transitions (section 8)
 internal/lint/            section 11
-internal/cite/            citation parsing, resolution against TM_SRC_ROOT, line reads
+internal/cite/            citation parsing and hash computation
+internal/source/          source resolution: resolve, fetch, convert, git HEAD blob
+internal/report/          tm report: walk, format, inline text
 internal/eventlog/        section 10
 internal/errlog/          section 10.1
 internal/lockfile/        lock, atomic write
@@ -576,7 +745,7 @@ docs/spec.md              this document
 .golangci.yml  .goreleaser.yaml  .gitattributes  Makefile  AGENTS.md  README.md
 ```
 
-`AGENTS.md` holds the `make` targets and a pointer to `docs/spec.md`, and nothing else. The body of `skill/teach-me/SKILL.md` is the owner's to write; the implementing agent creates the frontmatter and a body that restates section 12's two unenforceable behaviors.
+`AGENTS.md` holds the `make` targets, a pointer to `docs/spec.md`, and the adapter table (teacher, grader, planner). The body of `skill/teach-me/SKILL.md` is the owner's to write; the implementing agent creates the frontmatter and a body that restates section 12's four unenforceable behaviors.
 
 ### 16.4 Fixed implementation choices
 
