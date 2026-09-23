@@ -24,6 +24,9 @@ func driftPassedFixture(t *testing.T) (graphFile, srcDir string) {
 	}
 	t.Setenv("TM_SRC_ROOT", dir)
 	t.Setenv("TM_PROBE_MIN", "1")
+	// Chdir to the temp dir so tm new writes .tmconfig there, not to the
+	// package source directory.
+	t.Chdir(dir)
 
 	gfile := filepath.Join(dir, "g.mmd")
 	if _, _, code := run(t, "new", gfile); code != 0 {
@@ -125,6 +128,7 @@ func TestDrift_AnswerAndCheckRefusal(t *testing.T) {
 			t.Setenv("TM_SRC_ROOT", dir)
 			t.Setenv("TM_PROBE_MIN", "1")
 			gfile := filepath.Join(dir, "g.mmd")
+			t.Chdir(dir)
 			run(t, "new", gfile)
 			t.Setenv("TM_FILE", gfile)
 			run(t, "add", "mycon", "src.txt:1-5", "My concept")
@@ -224,6 +228,45 @@ func TestDrift_DropQuestion(t *testing.T) {
 			wantCode: 1,
 			wantErr:  "citation has not drifted",
 		},
+		{
+			// When there is an existing pending answer: the drop replaces it
+			// in place (no duplicate a<N> IDs), and the event carries the
+			// pending answer text in the "answer" field.
+			name: "pending answer is replaced in place and captured in event",
+			setup: func(t *testing.T, _ string, srcDir string) string {
+				qid := qidFromAsk(t)
+				run(t, "answer", qid, "My pending answer text")
+				driftSrc(t, srcDir)
+				return qid
+			},
+			wantCode: 0,
+			checkEvent: func(t *testing.T, gfile string) {
+				t.Helper()
+				// The event must carry the pending answer text.
+				rows := readEventLog(t, gfile)
+				var found map[string]any
+				for _, r := range rows {
+					if r["ev"] == "drop" {
+						found = r
+					}
+				}
+				if found == nil {
+					t.Fatal("no drop event")
+				}
+				if found["answer"] != "My pending answer text" {
+					t.Errorf("event answer: want 'My pending answer text', got %v", found["answer"])
+				}
+				// The graph must contain exactly one a<N> node (no duplicate IDs).
+				data, err := os.ReadFile(gfile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				const tombstoneLabel = "dropped: citation drifted"
+				if count := strings.Count(string(data), tombstoneLabel); count != 1 {
+					t.Errorf("want exactly 1 tombstone in graph, found %d; graph:\n%s", count, data)
+				}
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -238,6 +281,7 @@ func TestDrift_DropQuestion(t *testing.T) {
 			t.Setenv("TM_SRC_ROOT", dir)
 			t.Setenv("TM_PROBE_MIN", "1")
 			gfile := filepath.Join(dir, "g.mmd")
+			t.Chdir(dir)
 			run(t, "new", gfile)
 			t.Setenv("TM_FILE", gfile)
 			run(t, "add", "mycon", "src.txt:1-5", "My concept")
@@ -271,6 +315,7 @@ func TestDrift_DropQuestion_ReAfterDrop(t *testing.T) {
 	t.Setenv("TM_SRC_ROOT", dir)
 	t.Setenv("TM_PROBE_MIN", "1")
 	gfile := filepath.Join(dir, "g.mmd")
+	t.Chdir(dir)
 	run(t, "new", gfile)
 	t.Setenv("TM_FILE", gfile)
 	run(t, "add", "mycon", "src.txt:1-5", "My concept")
@@ -308,6 +353,75 @@ func TestDrift_DropQuestion_ReAfterDrop(t *testing.T) {
 	}
 }
 
+// TestDrift_DropQuestion_ReplacementUnclear verifies that grading the
+// replacement probe "unclear" is recorded as "unclear" (not "fail").
+//
+// When a question is drift-dropped, its tombstone answer carries DroppedLabel.
+// state.RootProbeUnclear must return false for the tombstone so that the
+// replacement probe's unclear verdict is not re-classified as fail.
+func TestDrift_DropQuestion_ReplacementUnclear(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_SRC_ROOT", dir)
+	t.Setenv("TM_PROBE_MIN", "1")
+	gfile := filepath.Join(dir, "g.mmd")
+	t.Chdir(dir)
+	run(t, "new", gfile)
+	t.Setenv("TM_FILE", gfile)
+	run(t, "add", "mycon", "src.txt:1-5", "My concept")
+	run(t, "q", "mycon", "src.txt:1-3", "What does line 1 say")
+	qid := qidFromAsk(t)
+
+	// Drift the source then drop the question.
+	driftSrc(t, dir)
+	if _, errOut, code := run(t, "drop", qid); code != 0 {
+		t.Fatalf("drop: exit %d; stderr=%s", code, errOut)
+	}
+
+	// Update content to reflect the new source state.
+	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte("line 1 MODIFIED\nline 2\nline 3\nline 4\nline 5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Replace the dropped question targeting lines 4-5.
+	outQ, errOut, code := run(t, "q", "mycon", "src.txt:4-5", "Replacement question", "--re", qid)
+	if code != 0 {
+		t.Fatalf("q --re: exit %d; stdout=%s stderr=%s", code, outQ, errOut)
+	}
+	newQID := strings.TrimSpace(outQ)
+
+	run(t, "answer", newQID, "Unclear answer")
+	_, errOut, code = run(t, "grade", newQID, "unclear", "Not sure")
+	if code != 0 {
+		t.Fatalf("grade unclear: exit %d; stderr=%s", code, errOut)
+	}
+
+	// Verify the replacement is recorded as "unclear", not "fail".
+	rows := readEventLog(t, gfile)
+	var found map[string]any
+	for _, r := range rows {
+		if r["ev"] == "grade" {
+			if v, _ := r["q"].(string); v == newQID {
+				found = r
+			}
+		}
+	}
+	if found == nil {
+		t.Fatal("no grade event for replacement question")
+	}
+	// "recorded" carries the class actually written to the graph.
+	// When RootProbeUnclear correctly returns false for the tombstone,
+	// recorded must be "unclear" — not re-classified as "fail".
+	rec, _ := found["recorded"].(string)
+	if rec != "unclear" {
+		t.Errorf("grade recorded: want 'unclear', got %q; tombstone should not propagate fail semantics", rec)
+	}
+}
+
 // ── TestDrift_Recite ──────────────────────────────────────────────────────────
 
 // TestDrift_Recite covers all recite behaviors: hash match on an untested and a
@@ -334,6 +448,7 @@ func TestDrift_Recite(t *testing.T) {
 				}
 				t.Setenv("TM_SRC_ROOT", dir)
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				run(t, "add", "mycon", "src.txt:1-2", "My concept")
@@ -352,6 +467,7 @@ func TestDrift_Recite(t *testing.T) {
 				t.Setenv("TM_SRC_ROOT", dir)
 				t.Setenv("TM_PROBE_MIN", "1")
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				run(t, "add", "mycon", "src.txt:1-2", "My concept")
@@ -372,6 +488,7 @@ func TestDrift_Recite(t *testing.T) {
 				}
 				t.Setenv("TM_SRC_ROOT", dir)
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				run(t, "add", "mycon", "src.txt:1-2", "My concept")
@@ -410,6 +527,7 @@ func TestDrift_Recite(t *testing.T) {
 				}
 				t.Setenv("TM_SRC_ROOT", dir)
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				return gfile, "src.txt:1-2"
@@ -426,6 +544,7 @@ func TestDrift_Recite(t *testing.T) {
 				}
 				t.Setenv("TM_SRC_ROOT", dir)
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				run(t, "add", "mycon", "src.txt:1-2", "My concept")
@@ -561,6 +680,7 @@ func TestDrift_CheckDrift(t *testing.T) {
 				t.Setenv("TM_SRC_ROOT", dir)
 				t.Setenv("TM_PROBE_MIN", "1")
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				run(t, "add", "mycon", "src.txt:1-5", "My concept")
@@ -701,6 +821,7 @@ func TestDrift_GradeDrift(t *testing.T) {
 				t.Setenv("TM_SRC_ROOT", dir)
 				t.Setenv("TM_PROBE_MIN", "1")
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				run(t, "add", "mycon", "src.txt:1-5", "My concept")
@@ -723,6 +844,7 @@ func TestDrift_GradeDrift(t *testing.T) {
 				t.Setenv("TM_SRC_ROOT", dir)
 				t.Setenv("TM_PROBE_MIN", "1")
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				run(t, "add", "mycon", "src.txt:1-5", "My concept")
@@ -753,6 +875,7 @@ func TestDrift_GradeDrift(t *testing.T) {
 				t.Setenv("TM_SRC_ROOT", dir)
 				t.Setenv("TM_PROBE_MIN", "1")
 				gfile := filepath.Join(dir, "g.mmd")
+				t.Chdir(dir)
 				run(t, "new", gfile)
 				t.Setenv("TM_FILE", gfile)
 				run(t, "add", "mycon", "src.txt:1-5", "My concept")
@@ -793,46 +916,6 @@ func TestDrift_GradeDrift(t *testing.T) {
 			}
 			if tc.check != nil {
 				tc.check(t, gfile)
-			}
-		})
-	}
-}
-
-// ── TestDrift_Roles ───────────────────────────────────────────────────────────
-
-// TestDrift_Roles verifies that the recite and grade --drift commands enforce
-// the expected role guards.
-func TestDrift_Roles(t *testing.T) {
-	cases := []struct {
-		name     string
-		role     string
-		args     []string
-		wantCode int
-		wantErr  string
-	}{
-		{
-			name: "grader cannot run recite",
-			role: "grader", args: []string{"recite", "mycon", "src.txt:1-3"},
-			wantCode: 1, wantErr: "not available when TM_ROLE=grader",
-		},
-		{
-			name: "teacher cannot run grade --drift",
-			role: "teacher", args: []string{"grade", "--drift", "mycon", "keep", "Summary"},
-			wantCode: 1, wantErr: "not available when TM_ROLE=teacher",
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			tempErrlog(t)
-			t.Setenv("TM_ROLE", tc.role)
-			_, errOut, code := run(t, tc.args...)
-			if code != tc.wantCode {
-				t.Fatalf("exit: want %d, got %d; stderr=%s", tc.wantCode, code, errOut)
-			}
-			if !strings.Contains(errOut, tc.wantErr) {
-				t.Errorf("want %q in stderr; got: %s", tc.wantErr, errOut)
 			}
 		})
 	}

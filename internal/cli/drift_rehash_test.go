@@ -350,19 +350,16 @@ func TestRehash(t *testing.T) {
 
 // ── DRIFT in read commands ────────────────────────────────────────────────────
 
-// TestDRIFT_Reads verifies that check, ask --src-text, and show all print a
-// DRIFT line when the source file has changed since the citation was hashed.
+// TestDRIFT_Reads verifies that ask --src-text and show print a DRIFT line
+// when the source file has changed since the citation was hashed.
+// (tm check refuses with exit 1 on drift in M10; that is covered by
+// TestCheck_DRIFT_HashMismatch.)
 func TestDRIFT_Reads(t *testing.T) {
 	tests := []struct {
 		name    string
 		cmdArgs []string
 		modSrc  string // full replacement content for src.txt
 	}{
-		{
-			name:    "check prints DRIFT",
-			cmdArgs: []string{"check", "q1"},
-			modSrc:  "line 1 modified\nline 2\nline 3\nline 4\nline 5\n",
-		},
 		{
 			name:    "ask --src-text prints DRIFT",
 			cmdArgs: []string{"ask", "--src-text", "mycon"},
