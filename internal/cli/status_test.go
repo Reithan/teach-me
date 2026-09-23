@@ -153,7 +153,7 @@ func TestStatus_Concept_Open_LogMatching(t *testing.T) {
 	// Verify batch lines.
 	wantLines := []string{
 		"  probe_1 resolved  q1 pass  q2 fail",
-		"    target q2 | Same index and term implies identical prefix | raft.txt:202-215 | Says matching index is enough; never mentions term",
+		"    target q2 | Same index and term implies identical prefix | fbb0469c4812@raft.txt:202-215 | Says matching index is enough; never mentions term",
 		"  probe_2 locked  q3 q4",
 		"  teach_3 open  q5 pass  q6 -",
 	}
@@ -170,7 +170,7 @@ func TestStatus_Concept_Open_LogMatching(t *testing.T) {
 	if !strings.Contains(out, "teach_3") {
 		t.Errorf("missing teach_3 in chain output; got:\n%s", out)
 	}
-	wantQ6 := "q6 | Why a follower rejects on term mismatch | raft.txt:216-228 | re q2"
+	wantQ6 := "q6 | Why a follower rejects on term mismatch | be8d8fe59060@raft.txt:216-228 | re q2"
 	if !strings.Contains(out, wantQ6) {
 		t.Errorf("missing %q in chain output; got:\n%s", wantQ6, out)
 	}
@@ -248,10 +248,10 @@ config:
 ---
 flowchart TB
     subgraph passed["Concepts User understands"]
-        alpha["Alpha concept<br/>src.txt:1-5"]
+        alpha["Alpha concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        beta["Beta concept<br/>src.txt:6-10"]
+        beta["Beta concept<br/>6aa0757910fd@src.txt:6-10"]
         alpha --"requires"--> beta
     end
     subgraph testing["Open tests validating and teaching User understanding"]

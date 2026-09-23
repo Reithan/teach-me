@@ -1,22 +1,22 @@
 flowchart TB
     subgraph passed["Concepts User understands"]
         %% leader concept
-        consensus["Consensus: agreement among replicas<br/>algo.txt:1-50"]
+        consensus["Consensus: agreement among replicas<br/>24bf22e06a01@algo.txt:1-50"]
     end
     subgraph untested["Concepts User has not been tested on"]
         %% gate annotation
         %% tm:gate consensus base=3
-        safety["Safety: committed values never lost<br/>algo.txt:51-100"]
-        liveness["Liveness: eventual progress<br/>algo.txt:101-150"]
+        safety["Safety: committed values never lost<br/>2b5758b4a3b8@algo.txt:51-100"]
+        liveness["Liveness: eventual progress<br/>f436c9a4ff9c@algo.txt:101-150"]
         %% reopen-style edge
         consensus --"requires"--> safety
         safety --"enables"--> liveness
     end
     subgraph testing["Open tests validating and teaching User understanding"]
         %% pending answer question
-        q1["What makes a value committed<br/>algo.txt:51-60"]:::probe_1
+        q1["What makes a value committed<br/>5e7c3c262e6b@algo.txt:51-60"]:::probe_1
         a1["it#39;s #quot;safe#quot; when a majority confirms it"]:::pending
-        q2["When can progress stall<br/>algo.txt:101-110"]:::teach_1
+        q2["When can progress stall<br/>f36ffa6cd95c@algo.txt:101-110"]:::teach_1
         a2["OOS<br/>out-of-scope answer text"]:::pass
         a3["unclear response"]:::unclear
         a4["fails to distinguish"]:::fail

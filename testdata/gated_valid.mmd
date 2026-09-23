@@ -1,20 +1,20 @@
 flowchart TB
     subgraph passed["Concepts User understands"]
-        consensus["Consensus: agreement among replicas<br/>algo.txt:1-50"]
+        consensus["Consensus: agreement among replicas<br/>24bf22e06a01@algo.txt:1-50"]
     end
     subgraph untested["Concepts User has not been tested on"]
         %% tm:gate safety base=1
-        safety["Safety: committed values never lost<br/>GAP: conflates committed with durable<br/>algo.txt:51-100"]
-        liveness["Liveness: eventual progress<br/>algo.txt:101-150"]
+        safety["Safety: committed values never lost<br/>GAP: conflates committed with durable<br/>2b5758b4a3b8@algo.txt:51-100"]
+        liveness["Liveness: eventual progress<br/>f436c9a4ff9c@algo.txt:101-150"]
         consensus --"requires"--> safety
         safety --"enables"--> liveness
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["What makes an entry committed<br/>algo.txt:51-60"]:::probe_1
-        q2["Why a majority quorum guarantees no loss<br/>algo.txt:61-80"]:::probe_1
+        q1["What makes an entry committed<br/>5e7c3c262e6b@algo.txt:51-60"]:::probe_1
+        q2["Why a majority quorum guarantees no loss<br/>1245accebc9a@algo.txt:61-80"]:::probe_1
         a1["Confuses durable with committed"]:::fail
         a2["Correct explanation of quorum overlap"]:::pass
-        q3["How majority overlap prevents divergence<br/>algo.txt:81-100"]:::teach_2
+        q3["How majority overlap prevents divergence<br/>5d8fe500ac4a@algo.txt:81-100"]:::teach_2
         a3["Explains overlap correctly"]:::pass
         safety --> q1
         safety --> q2

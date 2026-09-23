@@ -26,10 +26,10 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        con["Con scope<br/>src.txt:1-5"]
+        con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        q1["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
         a1["fail answer"]:::fail
         con --> q1
         q1 --> a1
@@ -56,14 +56,14 @@ config:
 ---
 flowchart TB
     subgraph passed["Concepts User understands"]
-        parent["Parent scope<br/>src.txt:1-5"]
+        parent["Parent scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        child["Child scope<br/>src.txt:1-5"]
+        child["Child scope<br/>f5ca3875b379@src.txt:1-5"]
         parent --"requires"--> child
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        q1["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
         a1["fail answer"]:::fail
         child --> q1
         q1 --> a1
@@ -124,7 +124,7 @@ func TestAddChild_GatedChild_WritesGateMeta(t *testing.T) {
 	file := buildGatedGraph(t, dir, gatedConceptGraph)
 
 	// Add a new concept "parent" as a prerequisite above the gated "con".
-	out, errOut, code := run(t, "add", "newparent", "src.txt:1-5", "parent scope", "--child", "con:requires")
+	out, errOut, code := run(t, "add", "newparent", "f5ca3875b379@src.txt:1-5", "parent scope", "--child", "con:requires")
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -183,7 +183,7 @@ func TestAddChild_NonGatedChild_NoGateMeta(t *testing.T) {
 	setupSrcFile(t, dir)
 	file := buildGatedGraph(t, dir, gatedConceptGraph)
 
-	_, errOut, code := run(t, "add", "newparent", "src.txt:1-5", "parent scope", "--child", "con:requires")
+	_, errOut, code := run(t, "add", "newparent", "f5ca3875b379@src.txt:1-5", "parent scope", "--child", "con:requires")
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -295,7 +295,7 @@ func TestQ_Override_ClearsGateAndAddsQuestion(t *testing.T) {
 	setupSrcFile(t, dir)
 	file := buildGatedGraph(t, dir, gatedConceptGraph)
 
-	out, errOut, code := run(t, "q", "con", "src.txt:1-5", "new probe scope", "--override", "testing reason")
+	out, errOut, code := run(t, "q", "con", "f5ca3875b379@src.txt:1-5", "new probe scope", "--override", "testing reason")
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -363,7 +363,7 @@ func TestQ_NoOverride_GatedRefusal(t *testing.T) {
 	setupSrcFile(t, dir)
 	buildGatedGraph(t, dir, gatedConceptGraph)
 
-	_, errOut, code := run(t, "q", "con", "src.txt:1-5", "scope")
+	_, errOut, code := run(t, "q", "con", "f5ca3875b379@src.txt:1-5", "scope")
 	if code != 1 {
 		t.Fatalf("want exit 1 (gated refusal), got %d; stderr:\n%s", code, errOut)
 	}
@@ -393,11 +393,11 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        con["Con scope<br/>src.txt:1-5"]
+        con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["probe scope<br/>src.txt:1-5"]:::probe_1
-        q2["teach scope<br/>src.txt:1-5"]:::teach_2
+        q1["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
+        q2["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_2
         a1["fail answer"]:::fail
         con --> q1
         q1 --> a1
@@ -641,16 +641,16 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        con["Con scope<br/>src.txt:1-5"]
+        con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
         %% tm:gate con base=4
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        q1["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
         a1["fail answer"]:::fail
-        q2["teach scope<br/>src.txt:1-5"]:::teach_2
+        q2["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_2
         a2["pass answer"]:::pass
-        q3["probe scope<br/>src.txt:1-5"]:::probe_3
-        q4["teach scope<br/>src.txt:1-5"]:::teach_4
+        q3["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_3
+        q4["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_4
         a4["pass answer"]:::pass
         con --> q1
         con --> q3
@@ -718,16 +718,16 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        con["Con scope<br/>src.txt:1-5"]
+        con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        q1["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
         a1["fail answer"]:::fail
-        q5["probe scope<br/>src.txt:1-5"]:::probe_1
+        q5["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
         a5["fail answer"]:::fail
-        q2["teach scope<br/>src.txt:1-5"]:::teach_2
+        q2["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_2
         a2["pass answer"]:::pass
-        q4["teach scope<br/>src.txt:1-5"]:::teach_4
+        q4["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_4
         a4["pass answer"]:::pass
         con --> q1
         con --> q5
@@ -791,14 +791,14 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        con["Con scope<br/>src.txt:1-5"]
+        con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        q1["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
         a1["fail answer"]:::fail
-        q2["teach scope<br/>src.txt:1-5"]:::teach_2
+        q2["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_2
         a2["pass answer"]:::pass
-        q4["teach scope<br/>src.txt:1-5"]:::teach_4
+        q4["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_4
         a4["fail answer"]:::fail
         con --> q1
         q1 --> a1
@@ -868,15 +868,15 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        con["Con scope<br/>src.txt:1-5"]
+        con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["probe scope<br/>src.txt:1-5"]:::probe_1
+        q1["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
         a1["fail answer"]:::fail
-        q5["probe scope<br/>src.txt:1-5"]:::probe_1
+        q5["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
         a5["fail answer"]:::fail
-        q2["teach scope<br/>src.txt:1-5"]:::teach_2
-        q3["probe scope<br/>src.txt:1-5"]:::probe_3
+        q2["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_2
+        q3["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_3
         con --> q1
         con --> q5
         con --> q3

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/reithan/teach-me/internal/cite"
+	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/lint"
 	"github.com/reithan/teach-me/internal/state"
 )
@@ -55,6 +56,11 @@ func lintRun(ctx *Context) int {
 
 	ctx.GraphFile = file
 
+	// --drift mode: resolve citations and report hash mismatches.
+	if _, ok := ctx.Flags["drift"]; ok {
+		return lintDrift(ctx, data, file)
+	}
+
 	cfg := buildLintConfig(file)
 	viols := lint.Check(data, cfg)
 	if len(viols) == 0 {
@@ -80,6 +86,56 @@ func lintRun(ctx *Context) int {
 	// not an err: line. The Violations field carries the printed text for the
 	// ERRORS.jsonl row.
 	return 2
+}
+
+// lintDrift checks all local citations for content drift.
+// It prints "DRIFT <cite>" for each mismatched citation and exits 1 if any are
+// found, 0 if all citations match.
+func lintDrift(ctx *Context, data []byte, file string) int {
+	g, parseErr := graph.Parse(data)
+	if parseErr != nil {
+		errMsg := fmt.Sprintf("cannot parse %s: %v", filepath.Base(file), parseErr)
+		writeErrFix(ctx.ErrOut, errMsg, "")
+		ctx.ErrMsg = errMsg
+		return 3
+	}
+
+	srcRoot := cite.SrcRoot(filepath.Dir(file))
+	anyDrift := false
+
+	// Collect all citations: concept Cites and question Cite fields.
+	var citations []string
+	for _, c := range g.PassedConcepts {
+		citations = append(citations, c.Cites...)
+	}
+	for _, c := range g.UntestedConcepts {
+		citations = append(citations, c.Cites...)
+	}
+	for _, item := range g.TestingItems {
+		if item.Q != nil && item.Q.Cite != "" {
+			citations = append(citations, item.Q.Cite)
+		}
+	}
+
+	for _, citeStr := range citations {
+		drifted, err := cite.CheckDrift(citeStr, srcRoot)
+		if err != nil {
+			errMsg := fmt.Sprintf("citation %q: %v", citeStr, err)
+			writeErrFix(ctx.ErrOut, errMsg, "")
+			ctx.ErrMsg = errMsg
+			return 3
+		}
+		if drifted {
+			_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", citeStr)
+			anyDrift = true
+		}
+	}
+
+	if anyDrift {
+		return 1
+	}
+	_, _ = fmt.Fprintln(ctx.Out, "ok")
+	return 0
 }
 
 // buildLintConfig constructs a lint.Config from §13 environment variables,

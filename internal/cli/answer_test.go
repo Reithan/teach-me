@@ -17,11 +17,11 @@ func answerProbeGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         mycon --> q1
         mycon --> q2
     end
@@ -36,11 +36,11 @@ func answerAlreadyAnsweredGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a1["already pending answer"]:::pending
         mycon --> q1
         mycon --> q2
@@ -59,13 +59,13 @@ func answerBlockedParentGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        parent_con["Parent concept<br/>src.txt:1-5"]
-        child_con["Child concept<br/>src.txt:1-5"]
+        parent_con["Parent concept<br/>f5ca3875b379@src.txt:1-5"]
+        child_con["Child concept<br/>f5ca3875b379@src.txt:1-5"]
         parent_con --"requires"--> child_con
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         child_con --> q1
         child_con --> q2
     end
@@ -180,15 +180,15 @@ func TestAnswer_Gated_Exit1(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["wrong answer"]:::fail
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["correct answer"]:::pass
-        q3["Fallback 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback 2<br/>src.txt:3-4"]:::probe_2
+        q3["Fallback 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -268,10 +268,10 @@ func TestAnswer_ProbeMinCount_Exit1(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         mycon --> q1
     end
     classDef probe_1 stroke:#4aa3ff
@@ -517,14 +517,14 @@ func TestAnswer_ReplacementBatch_MinExempt(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["ambiguous"]:::unclear
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["correct"]:::pass
-        q3["Replacement probe<br/>src.txt:1-2"]:::probe_2
+        q3["Replacement probe<br/>e266782c2841@src.txt:1-2"]:::probe_2
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -562,14 +562,14 @@ func TestAsk_ReplacementBatch_Emitted(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["ambiguous"]:::unclear
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["correct"]:::pass
-        q3["Replacement probe<br/>src.txt:1-2"]:::probe_2
+        q3["Replacement probe<br/>e266782c2841@src.txt:1-2"]:::probe_2
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -608,11 +608,11 @@ func TestCheck_AskedLine_Present(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept scope<br/>src.txt:1-5"]
+        mycon["My concept scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["What does the source say<br/>src.txt:1-3"]:::probe_1
-        q2["Second probe<br/>src.txt:2-4"]:::probe_1
+        q1["What does the source say<br/>cd3f27ccd149@src.txt:1-3"]:::probe_1
+        q2["Second probe<br/>25070e52a6ae@src.txt:2-4"]:::probe_1
         a1["ASKED: how does X work?<br/>the user answered here"]:::pending
         mycon --> q1
         mycon --> q2
@@ -634,7 +634,7 @@ func TestCheck_AskedLine_Present(t *testing.T) {
 	// ASKED must appear after Q: and before SRC.
 	qIdx := strings.Index(out, "Q: What does the source say")
 	askedIdx := strings.Index(out, "ASKED: how does X work?")
-	srcIdx := strings.Index(out, "SRC src.txt:1-3")
+	srcIdx := strings.Index(out, "SRC cd3f27ccd149@src.txt:1-3")
 	if qIdx < 0 || askedIdx < 0 || srcIdx < 0 {
 		t.Fatalf("missing Q: / ASKED: / SRC in output:\n%s", out)
 	}

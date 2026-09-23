@@ -581,6 +581,10 @@ func TestCheck10_ConceptCycle(t *testing.T) {
 }
 
 // check11 ────────────────────────────────────────────────────────────────────
+//
+// check11 is now static: it checks citation syntax, hash presence, and rejects
+// raw '"' in locators. File existence and bounds are validated at write time
+// (tm add/q/edit) and via tm lint --drift, not by static lint.
 
 func makeConceptGraph(conceptCite string) []byte {
 	return []byte(fmt.Sprintf(`flowchart TB
@@ -598,29 +602,19 @@ func makeConceptGraph(conceptCite string) []byte {
 `, conceptCite))
 }
 
-func TestCheck11_MissingFile(t *testing.T) {
-	dir := t.TempDir()
-	data := makeConceptGraph(`Concept<br/>missing.txt:1-5`)
-	viols := lint.Check(data, cfgWithSrc(dir))
-	if !hasMsgContaining(viols, `concept "c1"`) || !hasMsgContaining(viols, `missing.txt`) {
-		t.Errorf("expected citation error for missing.txt; got %v", viols)
+// TestCheck11_HashlessConceptCitation verifies that a hashless citation on a
+// concept node produces a lint violation.
+func TestCheck11_HashlessConceptCitation(t *testing.T) {
+	data := makeConceptGraph(`Concept<br/>raft.txt:1-5`)
+	viols := lint.Check(data, defaultCfg())
+	if !hasMsgContaining(viols, `concept "c1"`) || !hasMsgContaining(viols, `missing a hash`) {
+		t.Errorf("expected hashless citation error for concept; got %v", viols)
 	}
 }
 
-func TestCheck11_OutOfBoundsRange(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "src.txt"), makeLines(3), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	data := makeConceptGraph(`Concept<br/>src.txt:1-10`)
-	viols := lint.Check(data, cfgWithSrc(dir))
-	if !hasMsgContaining(viols, `concept "c1"`) || !hasMsgContaining(viols, `out of bounds`) {
-		t.Errorf("expected out-of-bounds citation error; got %v", viols)
-	}
-}
-
-func TestCheck11_QuestionCiteMissing(t *testing.T) {
-	dir := t.TempDir()
+// TestCheck11_HashlessQuestionCitation verifies that a hashless citation on a
+// question node produces a lint violation.
+func TestCheck11_HashlessQuestionCitation(t *testing.T) {
 	data := []byte(`flowchart TB
     subgraph passed["P"]
     end
@@ -628,7 +622,7 @@ func TestCheck11_QuestionCiteMissing(t *testing.T) {
         c1["Concept"]
     end
     subgraph testing["T"]
-        q1["Q<br/>nope.txt:1-5"]:::probe_1
+        q1["Q<br/>src.txt:1-3"]:::probe_1
         c1 --> q1
     end
     classDef probe_1 stroke:#4aa3ff
@@ -637,9 +631,38 @@ func TestCheck11_QuestionCiteMissing(t *testing.T) {
     classDef unclear stroke:#d29922
     classDef pending stroke-dasharray:4 3
 `)
-	viols := lint.Check(data, cfgWithSrc(dir))
-	if !hasMsgContaining(viols, `question "q1"`) || !hasMsgContaining(viols, `nope.txt`) {
-		t.Errorf("expected citation error for question q1; got %v", viols)
+	viols := lint.Check(data, defaultCfg())
+	if !hasMsgContaining(viols, `question "q1"`) || !hasMsgContaining(viols, `missing a hash`) {
+		t.Errorf("expected hashless citation error for question q1; got %v", viols)
+	}
+}
+
+// TestCheck11_HashedCitationNoError verifies that a properly hashed citation
+// passes lint without any file I/O.
+func TestCheck11_HashedCitationNoError(t *testing.T) {
+	// This file does not exist — lint must not attempt to open it.
+	data := makeConceptGraph(`Concept<br/>3f9a1c2b7e0d@nonexistent.txt:1-5`)
+	viols := lint.Check(data, defaultCfg())
+	// Filter to check11-specific messages only (hash/quote violations).
+	var check11Viols []lint.Violation
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "missing a hash") || strings.Contains(v.Msg, "locator contains") {
+			check11Viols = append(check11Viols, v)
+		}
+	}
+	if len(check11Viols) != 0 {
+		t.Errorf("expected no check11 violations for hashed citation; got %v", check11Viols)
+	}
+}
+
+// TestCheck11_InvalidCitationSyntax verifies that a syntactically invalid
+// citation still produces a parse-error violation.
+func TestCheck11_InvalidCitationSyntax(t *testing.T) {
+	// "raft.txt" has no colon → parse error.
+	data := makeConceptGraph(`Concept<br/>raft.txt`)
+	viols := lint.Check(data, defaultCfg())
+	if !hasMsgContaining(viols, `concept "c1"`) {
+		t.Errorf("expected citation parse error for concept; got %v", viols)
 	}
 }
 

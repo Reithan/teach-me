@@ -53,10 +53,10 @@ config:
 ---
 flowchart TB
     subgraph passed["Concepts User understands"]
-        passed_c["Passed concept scope<br/>src.txt:1-5"]
+        passed_c["Passed concept scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        untested_c["Untested concept scope<br/>src.txt:1-5"]
+        untested_c["Untested concept scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
     end
@@ -118,7 +118,7 @@ func TestAdd_HappyPath(t *testing.T) {
 
 	file := newGraph(t, dir)
 
-	out, errOut, code := run(t, "add", "mycon", "src.txt:1-5", "My concept scope")
+	out, errOut, code := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "My concept scope")
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -148,8 +148,8 @@ func TestAdd_HappyPath(t *testing.T) {
 			if c.Scope != "My concept scope" {
 				t.Errorf("scope: want %q, got %q", "My concept scope", c.Scope)
 			}
-			if len(c.Cites) != 1 || c.Cites[0] != "src.txt:1-5" {
-				t.Errorf("cites: want [src.txt:1-5], got %v", c.Cites)
+			if len(c.Cites) != 1 || c.Cites[0] != "f5ca3875b379@src.txt:1-5" {
+				t.Errorf("cites: want [f5ca3875b379@src.txt:1-5], got %v", c.Cites)
 			}
 		}
 	}
@@ -178,8 +178,8 @@ func TestAdd_HappyPath(t *testing.T) {
 	if addRow["scope"] != "My concept scope" {
 		t.Errorf("add event scope: want 'My concept scope', got %v", addRow["scope"])
 	}
-	if addRow["src"] != "src.txt:1-5" {
-		t.Errorf("add event src: want 'src.txt:1-5', got %v", addRow["src"])
+	if addRow["src"] != "f5ca3875b379@src.txt:1-5" {
+		t.Errorf("add event src: want 'f5ca3875b379@src.txt:1-5', got %v", addRow["src"])
 	}
 	// parents and children should be empty slices.
 	parents, ok := addRow["parents"].([]any)
@@ -204,17 +204,17 @@ func TestAdd_HappyPath_WithParentChild(t *testing.T) {
 	file := newGraph(t, dir)
 
 	// Add two concepts first to serve as parent and child endpoints.
-	_, _, c1 := run(t, "add", "prereq", "src.txt:1-3", "Prerequisite concept")
+	_, _, c1 := run(t, "add", "prereq", "cd3f27ccd149@src.txt:1-3", "Prerequisite concept")
 	if c1 != 0 {
 		t.Fatalf("setup add prereq: exit %d", c1)
 	}
-	_, _, c2 := run(t, "add", "followup", "src.txt:3-5", "Follow-up concept")
+	_, _, c2 := run(t, "add", "followup", "e28e810e6e2e@src.txt:3-5", "Follow-up concept")
 	if c2 != 0 {
 		t.Fatalf("setup add followup: exit %d", c2)
 	}
 
 	// Now add "middle" with prereq as parent and followup as child.
-	out, errOut, code := run(t, "add", "middle", "src.txt:2-4", "Middle concept",
+	out, errOut, code := run(t, "add", "middle", "25070e52a6ae@src.txt:2-4", "Middle concept",
 		"--parent", "prereq:enables",
 		"--child", "followup:leads to")
 	if code != 0 {
@@ -286,13 +286,13 @@ func TestAdd_IDExists_Untested(t *testing.T) {
 	_ = file
 
 	// Add once.
-	_, _, c1 := run(t, "add", "mycon", "src.txt:1-5", "scope")
+	_, _, c1 := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope")
 	if c1 != 0 {
 		t.Fatalf("first add: exit %d", c1)
 	}
 
 	// Add again → should fail.
-	_, errOut, code := run(t, "add", "mycon", "src.txt:1-5", "scope")
+	_, errOut, code := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -317,7 +317,7 @@ func TestAdd_IDExists_Passed(t *testing.T) {
 	// Build a graph with a passed concept.
 	buildMinimalGraph(t, dir)
 
-	_, errOut, code := run(t, "add", "passed_c", "src.txt:1-5", "scope")
+	_, errOut, code := run(t, "add", "passed_c", "f5ca3875b379@src.txt:1-5", "scope")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -343,7 +343,7 @@ func TestAdd_ReservedID(t *testing.T) {
 	for _, id := range cases {
 		id := id
 		t.Run(id, func(t *testing.T) {
-			_, errOut, code := run(t, "add", id, "src.txt:1-5", "scope")
+			_, errOut, code := run(t, "add", id, "f5ca3875b379@src.txt:1-5", "scope")
 			if code != 3 {
 				t.Fatalf("want exit 3 for reserved id %q, got %d; stderr:\n%s", id, code, errOut)
 			}
@@ -412,7 +412,7 @@ func TestAdd_UnknownParent(t *testing.T) {
 	setupSrcFile(t, dir)
 	_ = newGraph(t, dir)
 
-	_, errOut, code := run(t, "add", "mycon", "src.txt:1-5", "scope",
+	_, errOut, code := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope",
 		"--parent", "nonexistent:some rel")
 	if code != 3 {
 		t.Fatalf("want exit 3 for unknown parent, got %d; stderr:\n%s", code, errOut)
@@ -432,7 +432,7 @@ func TestAdd_UnknownChild(t *testing.T) {
 	setupSrcFile(t, dir)
 	_ = newGraph(t, dir)
 
-	_, errOut, code := run(t, "add", "mycon", "src.txt:1-5", "scope",
+	_, errOut, code := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope",
 		"--child", "nonexistent:depends on")
 	if code != 3 {
 		t.Fatalf("want exit 3 for unknown child, got %d; stderr:\n%s", code, errOut)
@@ -463,18 +463,18 @@ func TestAdd_CycleViaChild(t *testing.T) {
 	// Then add "c" with --parent a and --child b: a→c and c→b.
 	// This creates a cycle: a→c→b... wait, b→a, so a→c→b→a is a cycle.
 
-	_, _, c1 := run(t, "add", "a", "src.txt:1-3", "concept a")
+	_, _, c1 := run(t, "add", "a", "cd3f27ccd149@src.txt:1-3", "concept a")
 	if c1 != 0 {
 		t.Fatalf("add a: exit %d", c1)
 	}
-	_, _, c2 := run(t, "add", "b", "src.txt:3-5", "concept b", "--child", "a:requires")
+	_, _, c2 := run(t, "add", "b", "e28e810e6e2e@src.txt:3-5", "concept b", "--child", "a:requires")
 	if c2 != 0 {
 		t.Fatalf("add b with child a: exit %d", c2)
 	}
 
 	// Now add c with --parent a and --child b: a→c and c→b, plus b→a already
 	// exists. Path: a→c→b→a is a cycle.
-	_, errOut, code := run(t, "add", "c", "src.txt:5-7", "concept c",
+	_, errOut, code := run(t, "add", "c", "be2b44461fad@src.txt:5-7", "concept c",
 		"--parent", "a:followed by",
 		"--child", "b:leads back")
 	if code != 1 {
@@ -495,7 +495,7 @@ func TestAdd_MissingColonInFlag(t *testing.T) {
 	setupSrcFile(t, dir)
 	_ = newGraph(t, dir)
 
-	_, errOut, code := run(t, "add", "mycon", "src.txt:1-5", "scope",
+	_, errOut, code := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope",
 		"--parent", "nocolon")
 	if code != 3 {
 		t.Fatalf("want exit 3 for missing colon in flag, got %d; stderr:\n%s", code, errOut)
@@ -522,11 +522,11 @@ func TestLink_HappyPath(t *testing.T) {
 	file := newGraph(t, dir)
 
 	// Add two concepts.
-	_, _, c1 := run(t, "add", "a", "src.txt:1-5", "concept a")
+	_, _, c1 := run(t, "add", "a", "f5ca3875b379@src.txt:1-5", "concept a")
 	if c1 != 0 {
 		t.Fatalf("add a: exit %d", c1)
 	}
-	_, _, c2 := run(t, "add", "b", "src.txt:1-5", "concept b")
+	_, _, c2 := run(t, "add", "b", "f5ca3875b379@src.txt:1-5", "concept b")
 	if c2 != 0 {
 		t.Fatalf("add b: exit %d", c2)
 	}
@@ -591,7 +591,7 @@ func TestLink_UnknownFrom(t *testing.T) {
 	setupSrcFile(t, dir)
 
 	_ = newGraph(t, dir)
-	_, _, c1 := run(t, "add", "b", "src.txt:1-5", "concept b")
+	_, _, c1 := run(t, "add", "b", "f5ca3875b379@src.txt:1-5", "concept b")
 	if c1 != 0 {
 		t.Fatalf("add b: exit %d", c1)
 	}
@@ -614,7 +614,7 @@ func TestLink_UnknownTo(t *testing.T) {
 	setupSrcFile(t, dir)
 
 	_ = newGraph(t, dir)
-	_, _, c1 := run(t, "add", "a", "src.txt:1-5", "concept a")
+	_, _, c1 := run(t, "add", "a", "f5ca3875b379@src.txt:1-5", "concept a")
 	if c1 != 0 {
 		t.Fatalf("add a: exit %d", c1)
 	}
@@ -651,7 +651,7 @@ func TestLink_NonConceptFrom(t *testing.T) {
 	t.Setenv("TM_FILE", file)
 
 	// Create a second concept to link to.
-	_, _, c1 := run(t, "add", "other", "src.txt:1-5", "other concept")
+	_, _, c1 := run(t, "add", "other", "f5ca3875b379@src.txt:1-5", "other concept")
 	if c1 != 0 {
 		t.Fatalf("add other: exit %d", c1)
 	}
@@ -709,11 +709,11 @@ func TestLink_Cycle(t *testing.T) {
 
 	_ = newGraph(t, dir)
 
-	_, _, c1 := run(t, "add", "a", "src.txt:1-3", "concept a")
+	_, _, c1 := run(t, "add", "a", "cd3f27ccd149@src.txt:1-3", "concept a")
 	if c1 != 0 {
 		t.Fatalf("add a: exit %d", c1)
 	}
-	_, _, c2 := run(t, "add", "b", "src.txt:3-5", "concept b")
+	_, _, c2 := run(t, "add", "b", "e28e810e6e2e@src.txt:3-5", "concept b")
 	if c2 != 0 {
 		t.Fatalf("add b: exit %d", c2)
 	}
@@ -744,11 +744,11 @@ func TestLink_DuplicateEdge(t *testing.T) {
 
 	_ = newGraph(t, dir)
 
-	_, _, c1 := run(t, "add", "a", "src.txt:1-3", "concept a")
+	_, _, c1 := run(t, "add", "a", "cd3f27ccd149@src.txt:1-3", "concept a")
 	if c1 != 0 {
 		t.Fatalf("add a: exit %d", c1)
 	}
-	_, _, c2 := run(t, "add", "b", "src.txt:3-5", "concept b")
+	_, _, c2 := run(t, "add", "b", "e28e810e6e2e@src.txt:3-5", "concept b")
 	if c2 != 0 {
 		t.Fatalf("add b: exit %d", c2)
 	}
@@ -776,7 +776,7 @@ func TestAdd_NoLeakedFiles(t *testing.T) {
 	setupSrcFile(t, dir)
 
 	_ = newGraph(t, dir)
-	_, _, c1 := run(t, "add", "x", "src.txt:1-5", "concept x")
+	_, _, c1 := run(t, "add", "x", "f5ca3875b379@src.txt:1-5", "concept x")
 	if c1 != 0 {
 		t.Fatalf("add x: exit %d", c1)
 	}

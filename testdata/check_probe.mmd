@@ -12,11 +12,11 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept scope<br/>src.txt:1-5"]
+        mycon["My concept scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["What does the source say<br/>src.txt:1-3"]:::probe_1
-        q2["Second probe question<br/>src.txt:2-4"]:::probe_1
+        q1["What does the source say<br/>cd3f27ccd149@src.txt:1-3"]:::probe_1
+        q2["Second probe question<br/>25070e52a6ae@src.txt:2-4"]:::probe_1
         a1["The user answered here"]:::pending
         mycon --> q1
         mycon --> q2
