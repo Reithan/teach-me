@@ -814,3 +814,205 @@ func TestGradeDrift_InvalidVerdict(t *testing.T) {
 		t.Errorf("want verdict error; got: %s", errOut)
 	}
 }
+
+// ── additional edge-case coverage ────────────────────────────────────────────
+
+// TestGrade_KeepWithoutDrift verifies that grade with verdict "keep" (not a
+// standard pass|fail|unclear) exits 3 with an err about invalid verdict.
+func TestGrade_KeepWithoutDrift(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Setenv("TM_PROBE_MIN", "1")
+	graphPath, _ := setupDriftFixture(t, dir)
+	t.Setenv("TM_FILE", graphPath)
+
+	out, _, _ := run(t, "ask", "mycon")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	qid := strings.Fields(lines[1])[0]
+	_, _, _ = run(t, "answer", qid, "My answer")
+
+	_, errOut, code := run(t, "grade", qid, "keep", "Summary")
+	if code != 3 {
+		t.Fatalf("grade keep without --drift: want 3, got %d; stderr=%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "verdict must be pass, fail, or unclear") {
+		t.Errorf("want invalid verdict message; got: %s", errOut)
+	}
+}
+
+// TestCheckDrift_UnknownConcept verifies that check --drift on an unknown
+// concept exits 3 with an unknown concept message.
+func TestCheckDrift_UnknownConcept(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Setenv("TM_PROBE_MIN", "1")
+	graphPath, _ := buildPassedConceptSession(t, dir)
+	t.Setenv("TM_FILE", graphPath)
+
+	_, errOut, code := run(t, "check", "--drift", "no_such_concept")
+	if code != 3 {
+		t.Fatalf("check --drift unknown: want 3, got %d; stderr=%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "unknown concept") {
+		t.Errorf("want unknown concept; got: %s", errOut)
+	}
+}
+
+// TestGradeDrift_UnknownConcept verifies that grade --drift on an unknown
+// concept exits 3 from inside the apply closure.
+func TestGradeDrift_UnknownConcept(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Setenv("TM_PROBE_MIN", "1")
+	graphPath, _ := buildPassedConceptSession(t, dir)
+	t.Setenv("TM_FILE", graphPath)
+
+	_, errOut, code := run(t, "grade", "--drift", "no_such", "keep", "Summary")
+	if code != 3 {
+		t.Fatalf("grade --drift unknown: want 3, got %d; stderr=%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "unknown concept") {
+		t.Errorf("want unknown concept; got: %s", errOut)
+	}
+}
+
+// TestRecite_UnknownConcept verifies that recite on a nonexistent concept exits 3.
+func TestRecite_UnknownConcept(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	srcContent := "line 1\nline 2\nline 3\n"
+	srcPath := filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_SRC_ROOT", dir)
+
+	graphPath := filepath.Join(dir, "g.mmd")
+	run(t, "new", graphPath)
+	t.Setenv("TM_FILE", graphPath)
+
+	_, errOut, code := run(t, "recite", "no_such", "src.txt:1-2")
+	if code != 3 {
+		t.Fatalf("recite unknown concept: want 3, got %d; stderr=%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "unknown concept") {
+		t.Errorf("want unknown concept; got: %s", errOut)
+	}
+}
+
+// TestRecite_HashError verifies that recite refuses with exit 3 when the
+// target file does not exist (cite.HashCitation fails).
+func TestRecite_HashError(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	srcContent := "line 1\nline 2\nline 3\n"
+	srcPath := filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_SRC_ROOT", dir)
+
+	graphPath := filepath.Join(dir, "g.mmd")
+	run(t, "new", graphPath)
+	t.Setenv("TM_FILE", graphPath)
+	run(t, "add", "mycon", "src.txt:1-2", "My concept")
+
+	_, errOut, code := run(t, "recite", "mycon", "nonexistent.txt:1-2")
+	if code != 3 {
+		t.Fatalf("recite bad file: want 3, got %d; stderr=%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "cannot hash") {
+		t.Errorf("want hash error; got: %s", errOut)
+	}
+}
+
+// TestRecite_PassedConcept verifies that recite works on a passed concept
+// (exercises the passed branch in the graph update).
+func TestRecite_PassedConcept(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+
+	// Lines 1-2 appear twice: at :1-2 and at :5-6.
+	srcContent := "line 1\nline 2\nline 3\nline 4\nline 1\nline 2\n"
+	srcPath := filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(srcPath, []byte(srcContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TM_SRC_ROOT", dir)
+	t.Setenv("TM_PROBE_MIN", "1")
+
+	graphPath := filepath.Join(dir, "g.mmd")
+	run(t, "new", graphPath)
+	t.Setenv("TM_FILE", graphPath)
+	run(t, "add", "mycon", "src.txt:1-2", "My concept")
+	// Add a probe question so tm ask can build a batch.
+	_, _, _ = run(t, "q", "mycon", "src.txt:3-4", "What is on line 3")
+
+	out, _, _ := run(t, "ask", "mycon")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("ask: expected at least 2 lines; got %q", out)
+	}
+	qid := strings.Fields(lines[1])[0]
+	_, _, _ = run(t, "answer", qid, "My answer")
+	_, _, _ = run(t, "grade", qid, "pass", "Good")
+
+	outStatus, _, _ := run(t, "status")
+	if !strings.Contains(outStatus, "passed 1") {
+		t.Fatalf("concept not passed before recite; status: %s", outStatus)
+	}
+
+	outRecite, errOut, code := run(t, "recite", "mycon", "src.txt:5-6")
+	if code != 0 {
+		t.Fatalf("recite passed concept: want 0, got %d; stdout=%s stderr=%s", code, outRecite, errOut)
+	}
+	if strings.TrimSpace(outRecite) != "ok" {
+		t.Errorf("recite: want 'ok', got %q", outRecite)
+	}
+}
+
+// TestGradeDrift_KeepUntestedConcept verifies that grade --drift keep on an
+// untested concept succeeds (exercises the untested branch in keep).
+func TestGradeDrift_KeepUntestedConcept(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Setenv("TM_PROBE_MIN", "1")
+	graphPath, srcPath := setupDriftFixture(t, dir)
+	t.Setenv("TM_FILE", graphPath)
+
+	out, _, _ := run(t, "ask", "mycon")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	qid := strings.Fields(lines[1])[0]
+	_, _, _ = run(t, "answer", qid, "My answer")
+	_, _, _ = run(t, "grade", qid, "fail", "Not good")
+	driftSrc(t, srcPath)
+
+	_, errOut, code := run(t, "grade", "--drift", "mycon", "keep", "Source updated")
+	if code != 0 {
+		t.Fatalf("grade --drift keep untested: want 0, got %d; stderr=%s", code, errOut)
+	}
+}
+
+// TestGradeDrift_ReopenUntested verifies that grade --drift reopen refuses
+// exit 1 when the concept is not passed.
+func TestGradeDrift_ReopenUntested(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Setenv("TM_PROBE_MIN", "1")
+	graphPath, _ := setupDriftFixture(t, dir)
+	t.Setenv("TM_FILE", graphPath)
+
+	out, _, _ := run(t, "ask", "mycon")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	qid := strings.Fields(lines[1])[0]
+	_, _, _ = run(t, "answer", qid, "My answer")
+	_, _, _ = run(t, "grade", qid, "fail", "Not good")
+
+	_, errOut, code := run(t, "grade", "--drift", "mycon", "reopen", "Summary")
+	if code != 1 {
+		t.Fatalf("grade --drift reopen untested: want 1, got %d; stderr=%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "not passed") {
+		t.Errorf("want 'not passed' error; got: %s", errOut)
+	}
+}

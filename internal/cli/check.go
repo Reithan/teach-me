@@ -111,10 +111,6 @@ func checkRun(ctx *Context) int {
 	// SRC <cite>
 	//   <cited lines, verbatim, indented 2 spaces>
 	fmt.Fprintf(&b, "SRC %s\n", qn.Cite)
-	// DRIFT <cite> — printed when the stored hash no longer matches file content.
-	if drifted, _, driftErr := resolver.CheckDrift(qn.Cite); driftErr == nil && drifted {
-		fmt.Fprintf(&b, "DRIFT %s\n", qn.Cite)
-	}
 	cit, citErr := cite.Parse(qn.Cite)
 	if citErr == nil {
 		lines, _, readErr := resolver.Read(cit)
