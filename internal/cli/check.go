@@ -2,27 +2,28 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/graph"
-	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
-// checkRun is the Run handler for `tm check <qid>`.
+// checkRun is the Run handler for:
 //
-// It resolves the graph file, finds the question and its pending answer, and
-// emits the grading payload described in spec §9 to ctx.Out. The grader runs
-// this output through a model and then calls `tm grade`.
+//   - `tm check <qid>` — emits the grading payload (§9)
+//   - `tm check --drift <concept>` — emits the recheck payload (§9.1)
 //
 // Exit codes:
 //
 //	0  payload emitted
-//	1  invariant refusal: no pending answer (§7 line 266)
+//	1  invariant refusal: no pending answer (§7 line 266); or citation drifted (§7 line 299)
 //	3  usage / load error: unknown question ID or file problem
 func checkRun(ctx *Context) int {
+	// Route to drift-check handler when --drift is supplied.
+	if len(ctx.Flags["drift"]) > 0 {
+		return checkDriftRun(ctx)
+	}
+
 	qid := ctx.Positionals[0]
 
 	// Resolve graph file (global --file > $TM_FILE > .tmconfig per §3).
@@ -69,6 +70,15 @@ func checkRun(ctx *Context) int {
 		}
 	}
 
+	// §7 line 299: refuse when the question's citation has drifted.
+	srcRoot := s.Cfg().SrcRoot
+	if drifted, driftErr := checkCiteDrift(qn.Cite, srcRoot); driftErr == nil && drifted {
+		ctx.ErrMsg = fmt.Sprintf("%s citation has drifted", qid)
+		ctx.FixMsg = fmt.Sprintf("tm drop %s, then tm q --re %s <cite>", qid, qid)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+		return 1
+	}
+
 	// §7 line 266: refuse when the question has no pending answer.
 	if an == nil || an.Class != "pending" {
 		ctx.ErrMsg = fmt.Sprintf("%s has no pending answer", qid)
@@ -77,12 +87,6 @@ func checkRun(ctx *Context) int {
 		return 1
 	}
 
-	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
-	if resolverErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
 	isTeach := graph.IsTeachClass(qn.Class)
 
 	var b strings.Builder
@@ -98,23 +102,13 @@ func checkRun(ctx *Context) int {
 	// SRC <cite>
 	//   <cited lines, verbatim, indented 2 spaces>
 	fmt.Fprintf(&b, "SRC %s\n", qn.Cite)
-	// DRIFT <cite> — printed when the stored hash no longer matches file content.
-	if drifted, _, driftErr := resolver.CheckDrift(qn.Cite); driftErr == nil && drifted {
-		fmt.Fprintf(&b, "DRIFT %s\n", qn.Cite)
-	}
-	cit, citErr := cite.Parse(qn.Cite)
-	if citErr == nil {
-		lines, _, readErr := resolver.Read(cit)
-		if readErr == nil {
-			for _, l := range strings.Split(lines, "\n") {
-				fmt.Fprintf(&b, "  %s\n", l)
-			}
-		} else {
-			// Keep going; grader needs to know citation is unreadable.
-			fmt.Fprintf(&b, "  [citation unreadable: %v]\n", readErr)
+	if lines, readErr := readCiteText(qn.Cite, srcRoot); readErr == nil {
+		for _, l := range strings.Split(lines, "\n") {
+			fmt.Fprintf(&b, "  %s\n", l)
 		}
 	} else {
-		fmt.Fprintf(&b, "  [citation unreadable: %v]\n", citErr)
+		// Keep going; grader needs to know citation is unreadable.
+		fmt.Fprintf(&b, "  [citation unreadable: %v]\n", readErr)
 	}
 
 	// For teach questions: TARGET and GAP are inserted after the SRC block

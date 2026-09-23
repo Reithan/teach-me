@@ -77,6 +77,15 @@ func answerRun(ctx *Context) int {
 			}
 		}
 
+		// Exit 1: question's citation has drifted (§7, §14 row 50).
+		if drifted, driftErr := checkCiteDrift(qn.Cite, s.Cfg().SrcRoot); driftErr == nil && drifted {
+			return nil, nil, &ops.Refusal{
+				Err:  fmt.Sprintf("%s citation has drifted", qid),
+				Fix:  fmt.Sprintf("tm drop %s, then tm q --re %s <cite>", qid, qid),
+				Exit: 1,
+			}
+		}
+
 		// Exit 1: question already has an answer (§7 line 265).
 		if s.AnswerFor(qid) != nil {
 			return nil, nil, &ops.Refusal{

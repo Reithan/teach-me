@@ -14,6 +14,12 @@ const (
 	BlockTesting Block = 2
 )
 
+// DroppedLabel is the answer-node label written when a question is dropped
+// via drift-drop (§8 line 342). It lets state.RootProbeUnclear distinguish a
+// drift tombstone from a real unclear answer so that the replacement probe is
+// never recorded as "fail".
+const DroppedLabel = "dropped: citation drifted"
+
 // ConceptNode is a concept in the passed or untested block.
 type ConceptNode struct {
 	ID    string

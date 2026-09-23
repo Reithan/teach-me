@@ -449,9 +449,9 @@ func TestDrop_UnknownID(t *testing.T) {
 	}
 }
 
-// TestDrop_QuestionID verifies that dropping a question ID exits 1 with
-// "is not a concept".
-func TestDrop_QuestionID(t *testing.T) {
+// TestDrop_QuestionID_NotDrifted verifies that dropping a question whose
+// citation has not drifted exits 1 with "citation has not drifted".
+func TestDrop_QuestionID_NotDrifted(t *testing.T) {
 	probeFixture := checkProbeFixture(t) // must resolve before t.Chdir
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -464,8 +464,8 @@ func TestDrop_QuestionID(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
-	if !strings.Contains(errOut, "err: q1 is not a concept") {
-		t.Errorf("want 'not a concept' err; got:\n%s", errOut)
+	if !strings.Contains(errOut, "citation has not drifted") {
+		t.Errorf("want 'citation has not drifted' err; got:\n%s", errOut)
 	}
 }
 

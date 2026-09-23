@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -12,23 +11,26 @@ import (
 
 // gradeRun is the Run handler for:
 //
-//	tm grade <qid> pass|fail|unclear "<summary>" [--guided] [--oos]
+//   - `tm grade <qid> pass|fail|unclear "<summary>" [--guided] [--oos]`
+//   - `tm grade --drift <concept> keep|reopen "<summary>"`
 //
-// Implements the §8 grade procedure (steps 1–10). Replaces the pending
-// answer's label with summary and sets its class to the recorded verdict.
-// When the batch completes with all probe answers passing, runs the pass
-// procedure (§8.4) and emits gc + pass events.
+// Without --drift: implements the §8 grade procedure (steps 1–10).
+// With --drift: implements the §9.1 recheck verdict (keep or reopen).
 //
-// ForbidTeacher: true is enforced by the dispatcher (run.go checkRole);
-// no redundant check is needed here.
+// ForbidTeacher: true is enforced by the dispatcher (run.go checkRole).
 //
 // Exit codes:
 //
 //	0  ok
-//	1  invariant refusal (no pending answer; --oos on probe question)
+//	1  invariant refusal
 //	2  output fails lint (internal engine error)
-//	3  usage error or unknown qid
+//	3  usage error or unknown id
 func gradeRun(ctx *Context) int {
+	// Route to drift-grade handler when --drift is supplied.
+	if len(ctx.Flags["drift"]) > 0 {
+		return gradeDriftRun(ctx)
+	}
+
 	qid := ctx.Positionals[0]
 	verdict := ctx.Positionals[1]
 	summary := ctx.Positionals[2]
@@ -37,6 +39,14 @@ func gradeRun(ctx *Context) int {
 	oos := len(ctx.Flags["oos"]) > 0
 
 	usageLine := FindCommand("grade").Usage()
+
+	// Runtime enum check: without --drift, only pass|fail|unclear are valid.
+	if verdict != "pass" && verdict != "fail" && verdict != "unclear" {
+		ctx.ErrMsg = fmt.Sprintf("verdict must be pass, fail, or unclear, got %q", verdict)
+		ctx.FixMsg = usageLine
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+		return 3
+	}
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		// Find the question node.
@@ -80,10 +90,8 @@ func gradeRun(ctx *Context) int {
 		// src_text: cited source text of the question per §10 grade event.
 		srcText := ""
 		srcRoot := s.Cfg().SrcRoot
-		if cit, citErr := cite.Parse(qn.Cite); citErr == nil {
-			if text, readErr := cite.ReadRange(cit, srcRoot); readErr == nil {
-				srcText = text
-			}
+		if text, readErr := readCiteText(qn.Cite, srcRoot); readErr == nil {
+			srcText = text
 		}
 
 		// Step 2 (§8.2, Q5): if verdict is unclear and the root probe reached by
