@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -23,6 +24,11 @@ import (
 func reopenRun(ctx *Context) int {
 	concept := ctx.Positionals[0]
 	gap := ctx.Positionals[1]
+
+	srcCite := ""
+	if v := ctx.Flags["src"]; len(v) > 0 {
+		srcCite = v[0]
+	}
 
 	usageLine := FindCommand("reopen").Usage()
 
@@ -90,6 +96,32 @@ func reopenRun(ctx *Context) int {
 		newNode.Block = graph.BlockUntested
 		newNode.GAP = gap
 
+		// --src: re-point the concept citation in the same operation.
+		srcBefore := ""
+		srcAfter := ""
+		if srcCite != "" {
+			srcRoot := s.Cfg().SrcRoot
+			hashedSrc, hashErr := cite.HashCitation(srcCite, srcRoot)
+			if hashErr != nil {
+				return nil, nil, &ops.Refusal{
+					Err:  fmt.Sprintf("cannot hash --src %q: %v", srcCite, hashErr),
+					Fix:  usageLine,
+					Exit: 3,
+				}
+			}
+			// Replace the first citation (or the only one).
+			if len(newNode.Cites) > 0 {
+				srcBefore = newNode.Cites[0]
+				newCites := make([]string, len(newNode.Cites))
+				copy(newCites, newNode.Cites)
+				newCites[0] = hashedSrc
+				newNode.Cites = newCites
+			} else {
+				newNode.Cites = []string{hashedSrc}
+			}
+			srcAfter = hashedSrc
+		}
+
 		// Build new graph: remove from passed, prepend to untested.
 		newG := *g
 
@@ -108,10 +140,17 @@ func reopenRun(ctx *Context) int {
 		newUntested = append(newUntested, g.UntestedConcepts...)
 		newG.UntestedConcepts = newUntested
 
-		row := eventlog.NewRow("reopen", map[string]any{
+		eventFields := map[string]any{
 			"concept": concept,
 			"gap":     gap,
-		})
+		}
+		if srcBefore != "" {
+			eventFields["src_before"] = srcBefore
+		}
+		if srcAfter != "" {
+			eventFields["src_after"] = srcAfter
+		}
+		row := eventlog.NewRow("reopen", eventFields)
 
 		// Gate clearing for gated direct children of the reopened concept (Q2 /
 		// spec §7 line 278). Reopening P re-blocks its direct children via the
