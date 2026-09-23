@@ -404,18 +404,21 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `ev` | Fields |
 |---|---|
 | `new`, `load` | `file` |
-| `add` | `id`, `scope`, `src`, `parents`, `children` |
+| `add` | `id`, `scope`, `src`, `parents`, `children`; optional: `commit` (when locator is inside a git repo), `url` (final URL after redirects), `mime`, `converter`, `converter_version`, `fetched_at` |
 | `link` | `from`, `to`, `rel` |
 | `edit` | `id`, `before`, `after` |
-| `drop` | `id`, `node`, `edges` |
+| `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and the recorded answer if any |
 | `gap` | `concept`, `before`, `after` |
-| `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re` |
+| `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
 | `answer` | `q`, `raw`, `asked` |
 | `grade` | `q`, `verdict`, `recorded` (differs from `verdict` under 8.2), `summary`, `raw`, `src_text`, `guided`, `oos` |
 | `pass` | `concept`, `batches`, `unblocked` |
 | `gc` | `concept`, `reason`, `nodes` (ID, label, class), `edges`, `meta` |
-| `reopen` | `concept`, `gap` |
+| `reopen` | `concept`, `gap`; optional: `src_before`, `src_after` (when `--src` is given) |
 | `gate` | `concept`, `trip` (`probes`, `stall`), `base`, `via` (`add`, `reopen`, `override`), `reason` |
+| `rehash` | `id`, `before` (old citation), `after` (new citation with hash) |
+| `recite` | `id`, `before` (old citation), `after` (new citation at new range) |
+| `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; per question: `q`, `src_text_before`, `src_text_after` |
 
 `src_text` in `grade` records what the grader saw, so a later audit survives edits to the source file.
 
@@ -454,6 +457,9 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 10. Concept edges carry a relation label and form a DAG.
 11. Every citation names an existing file and an in-bounds line range.
 12. Passed concepts have no tests, no GAP, and no gate line.
+13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
+14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode the `"` as `%22``.
+15. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any); `--remote` adds fetched ones.
 
 Runtime lint checks the subset grammar only and links no Mermaid parser. Whether the subset is valid Mermaid is a property of the grammar and the writer, so it is proven in CI by the conformance suite (16.6), against the real parser.
 
