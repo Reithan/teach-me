@@ -13,6 +13,101 @@ import (
 	"github.com/reithan/teach-me/internal/state"
 )
 
+// gradeRec holds the last grade recorded for a single question in a concept.
+type gradeRec struct {
+	qid     string
+	scope   string
+	citeStr string // latest citation (after rehash/recite updates)
+	raw     string
+	srcText string // source text at time of grading
+	verdict string
+}
+
+// conceptGrades reads the event log at logPath and returns the last grade
+// for each question that belongs to concept, in the order the questions first
+// appeared in the log.
+//
+// Returns an empty slice when the concept has no grade events; returns an
+// error only when logPath cannot be read.
+func conceptGrades(logPath, concept string) ([]gradeRec, error) {
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Single-pass accumulation:
+	//   qCite:    qid → latest citation (updated by q, rehash, recite events)
+	//   qScope:   qid → question scope
+	//   qConcept: qid → concept ID
+	//   byQ:      qid → last gradeRec seen (overwritten on each grade event)
+	//   order:    qids in first-seen order for stable output
+	qCite := make(map[string]string)
+	qScope := make(map[string]string)
+	qConcept := make(map[string]string)
+	byQ := make(map[string]gradeRec)
+	var order []string
+
+	for _, line := range strings.Split(string(logData), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var ev map[string]any
+		if jerr := json.Unmarshal([]byte(line), &ev); jerr != nil {
+			continue
+		}
+		evName, _ := ev["ev"].(string)
+
+		switch evName {
+		case "q":
+			qid, _ := ev["q"].(string)
+			src, _ := ev["src"].(string)
+			scope, _ := ev["scope"].(string)
+			cID, _ := ev["concept"].(string)
+			if qid != "" {
+				qCite[qid] = src
+				qScope[qid] = graph.Unescape(scope)
+				qConcept[qid] = cID
+			}
+
+		case "rehash", "recite":
+			id, _ := ev["id"].(string)
+			after, _ := ev["after"].(string)
+			if id != "" && after != "" {
+				if _, ok := qCite[id]; ok {
+					qCite[id] = after
+				}
+			}
+
+		case "grade":
+			qid, _ := ev["q"].(string)
+			if qid == "" || qConcept[qid] != concept {
+				continue
+			}
+			raw, _ := ev["raw"].(string)
+			srcText, _ := ev["src_text"].(string)
+			verdict, _ := ev["verdict"].(string)
+			if _, seen := byQ[qid]; !seen {
+				order = append(order, qid)
+			}
+			byQ[qid] = gradeRec{
+				qid:     qid,
+				scope:   qScope[qid],
+				citeStr: qCite[qid],
+				raw:     graph.Unescape(raw),
+				srcText: graph.Unescape(srcText),
+				verdict: verdict,
+			}
+		}
+	}
+
+	result := make([]gradeRec, 0, len(order))
+	for _, qid := range order {
+		result = append(result, byQ[qid])
+	}
+	return result, nil
+}
+
 // checkDriftRun handles `tm check --drift <concept>`.
 //
 // Reads every `grade` event for the passed concept from the event log, resolves
@@ -71,7 +166,7 @@ func checkDriftRun(ctx *Context) int {
 
 	// Read the event log. A missing or unreadable log is a refusal (§7 line 298).
 	logPath := eventlog.Path(file)
-	logData, readErr := os.ReadFile(logPath)
+	grades, readErr := conceptGrades(logPath, concept)
 	if readErr != nil {
 		ctx.ErrMsg = fmt.Sprintf("no event log for %s", concept)
 		ctx.FixMsg = fmt.Sprintf("tm reopen %s \"<gap>\"", concept)
@@ -79,122 +174,18 @@ func checkDriftRun(ctx *Context) int {
 		return 1
 	}
 
-	// Build question metadata maps from the event log.
-	// qScope: qid → scope (from q events)
-	// qCite: qid → latest citation string (from q, then recite/rehash)
-	// qConcept: qid → concept ID (from q events)
-	qScope := make(map[string]string)
-	qCite := make(map[string]string)
-	qConcept := make(map[string]string)
-
-	// gradeEvents: grade events for questions belonging to this concept.
-	type gradeRec struct {
-		qid     string
-		raw     string
-		srcText string
-		verdict string
-	}
-	var gradeEvents []gradeRec
-
-	for _, line := range strings.Split(string(logData), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var ev map[string]any
-		if err := json.Unmarshal([]byte(line), &ev); err != nil {
-			continue
-		}
-		evName, _ := ev["ev"].(string)
-
-		switch evName {
-		case "q":
-			// Record question metadata.
-			qid, _ := ev["q"].(string)
-			scope, _ := ev["scope"].(string)
-			src, _ := ev["src"].(string)
-			conceptID, _ := ev["concept"].(string)
-			if qid != "" {
-				qScope[qid] = graph.Unescape(scope)
-				qCite[qid] = src
-				qConcept[qid] = conceptID
-			}
-
-		case "rehash", "recite":
-			// Update citation when a question's cite has changed.
-			id, _ := ev["id"].(string)
-			after, _ := ev["after"].(string)
-			if id != "" && after != "" {
-				// Only update if this id is a question we track.
-				if _, ok := qCite[id]; ok {
-					qCite[id] = after
-				}
-			}
-
-		case "grade":
-			// Collect grade events; filter by concept after we have all q events.
-			qid, _ := ev["q"].(string)
-			if qid == "" {
-				continue
-			}
-			raw, _ := ev["raw"].(string)
-			srcText, _ := ev["src_text"].(string)
-			verdict, _ := ev["verdict"].(string)
-			gradeEvents = append(gradeEvents, gradeRec{
-				qid:     qid,
-				raw:     graph.Unescape(raw),
-				srcText: graph.Unescape(srcText),
-				verdict: verdict,
-			})
-		}
-	}
-
-	// Filter grade events to questions belonging to this concept.
-	var filtered []gradeRec
-	seenQ := make(map[string]bool)
-	for _, ge := range gradeEvents {
-		if qConcept[ge.qid] == concept {
-			// Take only the latest grade per question.
-			if !seenQ[ge.qid] {
-				seenQ[ge.qid] = true
-				filtered = append(filtered, ge)
-			}
-		}
-	}
-	// Reverse to get latest grade per question: the log is append-only so
-	// the last grade for each qid is the canonical one.
-	for i, j := 0, len(filtered)-1; i < j; i, j = i+1, j-1 {
-		filtered[i], filtered[j] = filtered[j], filtered[i]
-	}
-	seenQ = make(map[string]bool)
-	var deduped []gradeRec
-	for _, ge := range filtered {
-		if !seenQ[ge.qid] {
-			seenQ[ge.qid] = true
-			deduped = append(deduped, ge)
-		}
-	}
-	// Restore original order (by first appearance in log).
-	for i, j := 0, len(deduped)-1; i < j; i, j = i+1, j-1 {
-		deduped[i], deduped[j] = deduped[j], deduped[i]
-	}
-	filtered = deduped
-
 	var b strings.Builder
 
-	for _, ge := range filtered {
-		citeStr := qCite[ge.qid]
-		scope := qScope[ge.qid]
-
+	for _, ge := range grades {
 		// Q <qid>: <question scope>
-		fmt.Fprintf(&b, "Q %s: %s\n", ge.qid, scope)
+		fmt.Fprintf(&b, "Q %s: %s\n", ge.qid, ge.scope)
 		// CITE <citation>
-		fmt.Fprintf(&b, "CITE %s\n", citeStr)
+		fmt.Fprintf(&b, "CITE %s\n", ge.citeStr)
 
 		// Check drift on the current citation.
-		drifted, _ := cite.CheckDrift(citeStr, srcRoot)
+		drifted, _ := cite.CheckDrift(ge.citeStr, srcRoot)
 		if drifted {
-			fmt.Fprintf(&b, "DRIFT %s\n", citeStr)
+			fmt.Fprintf(&b, "DRIFT %s\n", ge.citeStr)
 		}
 
 		// SRC_GRADED block (text at time of grading)
@@ -205,13 +196,13 @@ func checkDriftRun(ctx *Context) int {
 
 		// SRC_CURRENT block (text now)
 		fmt.Fprintln(&b, "SRC_CURRENT")
-		currentText, readErr := readCiteText(citeStr, srcRoot)
-		if readErr == nil {
+		currentText, readCiteErr := readCiteText(ge.citeStr, srcRoot)
+		if readCiteErr == nil {
 			for _, l := range strings.Split(currentText, "\n") {
 				fmt.Fprintf(&b, "  %s\n", l)
 			}
 		} else {
-			fmt.Fprintf(&b, "  [citation unreadable: %v]\n", readErr)
+			fmt.Fprintf(&b, "  [citation unreadable: %v]\n", readCiteErr)
 		}
 
 		// A: <raw answer>
@@ -279,84 +270,47 @@ func gradeDriftRun(ctx *Context) int {
 			}
 		}
 
-		// Collect per-question src_text_before and src_text_after from the
-		// event log for the recheck event.
+		// Collect per-question src_text_before from the event log for the recheck event.
 		logPath := eventlog.Path(ctx.GraphFile)
-		var recheckQs []map[string]any
-		if logData, readErr := os.ReadFile(logPath); readErr == nil {
-			qCite := make(map[string]string)
-			qConcept := make(map[string]string)
-			type gradeRec struct {
-				qid     string
-				srcText string
-			}
-			var grades []gradeRec
-			for _, line := range strings.Split(string(logData), "\n") {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-				var ev map[string]any
-				if jerr := json.Unmarshal([]byte(line), &ev); jerr != nil {
-					continue
-				}
-				evName, _ := ev["ev"].(string)
-				switch evName {
-				case "q":
-					qid, _ := ev["q"].(string)
-					src, _ := ev["src"].(string)
-					cID, _ := ev["concept"].(string)
-					if qid != "" {
-						qCite[qid] = src
-						qConcept[qid] = cID
-					}
-				case "rehash", "recite":
-					id, _ := ev["id"].(string)
-					after, _ := ev["after"].(string)
-					if id != "" && after != "" {
-						if _, ok := qCite[id]; ok {
-							qCite[id] = after
-						}
-					}
-				case "grade":
-					qid, _ := ev["q"].(string)
-					srcText, _ := ev["src_text"].(string)
-					if qid != "" && qConcept[qid] == concept {
-						grades = append(grades, gradeRec{qid: qid, srcText: srcText})
-					}
-				}
-			}
-			// Deduplicate: keep latest grade per qid.
-			seenQ := make(map[string]bool)
-			for i := len(grades) - 1; i >= 0; i-- {
-				ge := grades[i]
-				if !seenQ[ge.qid] {
-					seenQ[ge.qid] = true
-					citeStr := qCite[ge.qid]
-					currentText, _ := readCiteText(citeStr, srcRoot)
-					recheckQs = append(recheckQs, map[string]any{
-						"q":               ge.qid,
-						"src_text_before": graph.Unescape(ge.srcText),
-						"src_text_after":  currentText,
-					})
-				}
-			}
+		grades, _ := conceptGrades(logPath, concept)
+
+		recheckQs := make([]map[string]any, 0, len(grades))
+		for _, ge := range grades {
+			currentText, _ := readCiteText(ge.citeStr, srcRoot)
+			recheckQs = append(recheckQs, map[string]any{
+				"q":               ge.qid,
+				"src_text_before": ge.srcText,
+				"src_text_after":  currentText,
+			})
 		}
 
-		var newG *graph.Graph
-		rows := make([]eventlog.Row, 0, 1)
+		var (
+			newG *graph.Graph
+			rows []eventlog.Row
+		)
 
 		if verdict == "keep" {
 			// Re-hash all concept citations to the current text.
+			// For drifted citations the stored hash no longer matches; strip it
+			// and rehash against current content. Refuse only when the file
+			// cannot be resolved at all.
 			newNode := *targetNode
 			newCites := make([]string, len(targetNode.Cites))
 			for i, citeStr := range targetNode.Cites {
-				hashed, hashErr := cite.HashCitation(citeStr, srcRoot)
-				if hashErr == nil {
-					newCites[i] = hashed
-				} else {
-					newCites[i] = citeStr
+				// Strip any existing hash so HashCitation always reads current content.
+				hashless := citeStr
+				if cit, parseErr := cite.Parse(citeStr); parseErr == nil && cit.Hash != "" {
+					hashless = fmt.Sprintf("%s:%d-%d", cit.File, cit.Start, cit.End)
 				}
+				hashed, hashErr := cite.HashCitation(hashless, srcRoot)
+				if hashErr != nil {
+					return nil, nil, &ops.Refusal{
+						Err:  fmt.Sprintf("cannot resolve citation %q: %v", citeStr, hashErr),
+						Fix:  "fix the source file or use reopen to re-point the citation",
+						Exit: 1,
+					}
+				}
+				newCites[i] = hashed
 			}
 			newNode.Cites = newCites
 
@@ -386,33 +340,14 @@ func gradeDriftRun(ctx *Context) int {
 			newG = &ng
 
 		} else {
-			// reopen: move the passed concept back to untested with summary as GAP.
-			// Reuse the reopenApply logic inline to avoid code duplication.
-			if targetNode.Block != graph.BlockPassed {
-				return nil, nil, &ops.Refusal{
-					Err:  fmt.Sprintf("%s is not passed; cannot reopen via grade --drift", concept),
-					Exit: 1,
-				}
+			// reopen: run the full reopenApply logic (gate clearing, reopen event).
+			usageLine := fmt.Sprintf("tm grade --drift %s keep|reopen \"<summary>\"", concept)
+			ng, reopenRows, ref := reopenApply(g, s, concept, summary, "", usageLine)
+			if ref != nil {
+				return nil, nil, ref
 			}
-
-			newNode := *targetNode
-			newNode.Block = graph.BlockUntested
-			newNode.GAP = summary
-
-			ng := *g
-			newPassed := make([]*graph.ConceptNode, 0, len(g.PassedConcepts)-1)
-			for _, c := range g.PassedConcepts {
-				if c.ID != concept {
-					newPassed = append(newPassed, c)
-				}
-			}
-			ng.PassedConcepts = newPassed
-
-			newUntested := make([]*graph.ConceptNode, 0, len(g.UntestedConcepts)+1)
-			newUntested = append(newUntested, &newNode)
-			newUntested = append(newUntested, g.UntestedConcepts...)
-			ng.UntestedConcepts = newUntested
-			newG = &ng
+			newG = ng
+			rows = reopenRows
 		}
 
 		recheckRow := eventlog.NewRow("recheck", map[string]any{
