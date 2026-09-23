@@ -1,13 +1,14 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -43,12 +44,24 @@ func editRun(ctx *Context) int {
 	citeStr := ""
 	if vals := ctx.Flags["src"]; len(vals) > 0 {
 		citeStr = vals[0]
-		srcRoot := cite.SrcRoot(filepath.Dir(file))
-		hashedCite, hashErr := cite.HashCitation(citeStr, srcRoot)
+		resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+		if resolverErr != nil {
+			ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+			return 3
+		}
+		hashedCite, _, hashErr := resolver.HashCitation(citeStr)
 		if hashErr != nil {
-			ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, hashErr)
-			ctx.FixMsg = usageLine
-			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+			var ref *source.RefusalError
+			if errors.As(hashErr, &ref) {
+				ctx.ErrMsg = ref.Err
+				ctx.FixMsg = ref.Fix
+				writeErrFix(ctx.ErrOut, ref.Err, ref.Fix)
+			} else {
+				ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, hashErr)
+				ctx.FixMsg = usageLine
+				writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+			}
 			return 3
 		}
 		citeStr = hashedCite
