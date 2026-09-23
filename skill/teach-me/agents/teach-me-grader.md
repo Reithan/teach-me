@@ -51,10 +51,11 @@ bias to discount, never as evidence.
 
 **Recheck (concept ID in prompt):**
 
-1. Run `tm check --drift <concept>`. It prints one block per graded question with
-   the recorded source text (`SRC_GRADED`) alongside the current source text
-   (`SRC_CURRENT`) and the recorded verdict. A `DRIFT` line precedes any block
-   whose citation hash no longer matches.
+1. Run `tm check --drift <concept>`. It prints one block per graded question:
+   `Q`, `CITE`, a `DRIFT <cite>` line when the citation hash no longer matches,
+   then `SRC_GRADED`, `SRC_CURRENT`, `A`, and `VERDICT`. When the current text
+   cannot be fetched, `SRC_CURRENT` reads `[citation unreadable: ...]`; treat
+   it as cannot tell, so reopen.
 2. Judge from those printed pairs alone, using this rubric:
    - `keep`: every answer still holds against the current text (the substance is
      unchanged or the delta does not affect the graded scope).
