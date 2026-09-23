@@ -114,10 +114,10 @@ func TestSourceCitationWiring(t *testing.T) {
 		switch r.URL.Path {
 		case "/doc.html":
 			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprint(w, "<p>source text</p>\n")
+			_, _ = fmt.Fprint(w, "<p>source text</p>\n")
 		case "/doc.txt":
 			w.Header().Set("Content-Type", "text/plain")
-			fmt.Fprint(w, "source text\n")
+			_, _ = fmt.Fprint(w, "source text\n")
 		default:
 			http.Error(w, "not found", http.StatusNotFound)
 		}
@@ -159,15 +159,15 @@ func TestSourceCitationWiring(t *testing.T) {
 		},
 		{
 			name:      "version mismatch exits 1",
-			xdgCfg:   fmt.Sprintf("convert text/html=%s\nversion %s=1.0\nversion-cmd %s=%s\n", cv, cv, cv, wrongVr),
+			xdgCfg:    fmt.Sprintf("convert text/html=%s\nversion %s=1.0\nversion-cmd %s=%s\n", cv, cv, cv, wrongVr),
 			citeArg:   srv.URL + "/doc.html:1-1",
 			wantCode:  1,
 			wantInErr: "2.0",
 		},
 		{
-			name:   "successful URI add records url/mime/converter/converter_version/fetched_at",
-			xdgCfg: fmt.Sprintf("convert text/html=%s\nversion %s=1.0\nversion-cmd %s=%s\n", cv, cv, cv, vr),
-			citeArg: srv.URL + "/doc.html:1-1",
+			name:     "successful URI add records url/mime/converter/converter_version/fetched_at",
+			xdgCfg:   fmt.Sprintf("convert text/html=%s\nversion %s=1.0\nversion-cmd %s=%s\n", cv, cv, cv, vr),
+			citeArg:  srv.URL + "/doc.html:1-1",
 			wantCode: 0,
 			checkEvent: func(t *testing.T, mmdFile string) {
 				fields := srcEventFields(t, mmdFile, "add")
@@ -179,10 +179,10 @@ func TestSourceCitationWiring(t *testing.T) {
 			},
 		},
 		{
-			name:    "successful path add inside git records commit",
-			citeArg: "file.txt:1-1",
+			name:     "successful path add inside git records commit",
+			citeArg:  "file.txt:1-1",
 			wantCode: 0,
-			needGit: true,
+			needGit:  true,
 			checkEvent: func(t *testing.T, mmdFile string) {
 				fields := srcEventFields(t, mmdFile, "add")
 				if v, ok := fields["commit"]; !ok || v == "" {

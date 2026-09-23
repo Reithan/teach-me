@@ -178,8 +178,8 @@ func TestLoadConfig(t *testing.T) {
 			user: "unknown-key=value\ngit=/g\n", wantGit: "/g",
 		},
 		{
-			name:  "blank lines and no-equals lines are skipped",
-			user:  "\n# comment\nno-equals\ngit=/g\n",
+			name:    "blank lines and no-equals lines are skipped",
+			user:    "\n# comment\nno-equals\ngit=/g\n",
 			wantGit: "/g",
 		},
 		{
@@ -239,7 +239,7 @@ func TestConverter(t *testing.T) {
 		convBody  string
 		cfgPin    string // version pin in config; "" → no version key
 		verOutput string // what version script prints
-		docHtml   string
+		docHTML   string
 		start     int
 		end       int
 		wantText  string
@@ -247,46 +247,46 @@ func TestConverter(t *testing.T) {
 		wantInErr string
 	}{
 		{
-			name: "converter runs and slices output",
+			name:     "converter runs and slices output",
 			convBody: "sed 's/<[^>]*>//g'", cfgPin: "1.0", verOutput: "1.0",
-			docHtml: "<p>alpha</p>\n<p>beta</p>\n",
-			start: 1, end: 2, wantText: "alpha\nbeta",
+			docHTML: "<p>alpha</p>\n<p>beta</p>\n",
+			start:   1, end: 2, wantText: "alpha\nbeta",
 		},
 		{
-			name: "version mismatch produces RefusalError",
+			name:     "version mismatch produces RefusalError",
 			convBody: "cat", cfgPin: "1.0", verOutput: "2.0",
-			docHtml: "x\n",
+			docHTML: "x\n",
 			wantErr: true, wantInErr: "2.0",
 		},
 		{
-			name:      "missing version pin produces RefusalError",
-			convBody:  "cat", cfgPin: "", verOutput: "",
-			docHtml:   "x\n",
+			name:     "missing version pin produces RefusalError",
+			convBody: "cat", cfgPin: "", verOutput: "",
+			docHTML: "x\n",
 			wantErr: true, wantInErr: "no version pin",
 		},
 		{
 			name: "non-zero exit with stderr produces RefusalError citing stderr",
 			convBody: `echo "bad input" >&2
 exit 1`, cfgPin: "1.0", verOutput: "1.0",
-			docHtml:   "x\n",
+			docHTML: "x\n",
 			wantErr: true, wantInErr: "bad input",
 		},
 		{
-			name: "non-zero exit with empty stderr uses process error in RefusalError",
+			name:     "non-zero exit with empty stderr uses process error in RefusalError",
 			convBody: "exit 1", cfgPin: "1.0", verOutput: "1.0",
-			docHtml: "x\n", wantErr: true,
+			docHTML: "x\n", wantErr: true,
 		},
 		{
-			name: "multi-line version output uses first line for pin check",
+			name:     "multi-line version output uses first line for pin check",
 			convBody: "cat", cfgPin: "1.0", verOutput: `1.0\nextra`,
-			docHtml: "line\n",
-			start: 1, end: 1, wantText: "line",
+			docHTML: "line\n",
+			start:   1, end: 1, wantText: "line",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			dir, cfg := makeConvFixture(t, tc.convBody, tc.cfgPin, tc.verOutput, tc.docHtml)
+			dir, cfg := makeConvFixture(t, tc.convBody, tc.cfgPin, tc.verOutput, tc.docHTML)
 			r := resolverFrom(loadCfg(t, cfg, ""), dir)
 			start, end := 1, 1
 			if tc.start != 0 {
@@ -338,25 +338,30 @@ func TestURIFetch(t *testing.T) {
 		case "/redir":
 			http.Redirect(w, r, srvURL+"/plain", http.StatusFound)
 		case "/plain":
-			w.Header().Set("Content-Type", "text/plain"); fmt.Fprint(w, threeLines)
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = fmt.Fprint(w, threeLines)
 		case "/md":
-			w.Header().Set("Content-Type", "text/markdown"); fmt.Fprint(w, "# H\ntext\n")
+			w.Header().Set("Content-Type", "text/markdown")
+			_, _ = fmt.Fprint(w, "# H\ntext\n")
 		case "/notfound":
 			http.Error(w, "not found", http.StatusNotFound)
 		case "/big":
 			w.Header().Set("Content-Type", "text/plain")
 			chunk := strings.Repeat("x", 1<<20)
 			for range 17 {
-				fmt.Fprint(w, chunk)
+				_, _ = fmt.Fprint(w, chunk)
 			}
 		case "/pdf":
-			w.Header().Set("Content-Type", "application/pdf"); fmt.Fprint(w, "%PDF")
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = fmt.Fprint(w, "%PDF")
 		case "/html":
-			w.Header().Set("Content-Type", "text/html"); fmt.Fprint(w, "<p>alpha</p>\n")
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = fmt.Fprint(w, "<p>alpha</p>\n")
 		case "/doc.md":
-			w.Header().Set("Content-Type", " "); fmt.Fprint(w, "# T\nC\n")
+			w.Header().Set("Content-Type", " ")
+			_, _ = fmt.Fprint(w, "# T\nC\n")
 		case "/doc":
-			fmt.Fprint(w, "plain\n")
+			_, _ = fmt.Fprint(w, "plain\n")
 		default:
 			http.Error(w, "unknown", http.StatusNotFound)
 		}
@@ -440,8 +445,8 @@ func TestPath(t *testing.T) {
 			start: 1, end: 1, wantText: "raw",
 		},
 		{
-			name:      "missing file with no git produces RefusalError",
-			file:      "missing.txt", start: 1, end: 1,
+			name: "missing file with no git produces RefusalError",
+			file: "missing.txt", start: 1, end: 1,
 			wantErr: true, wantInErr: "not in the working tree",
 		},
 		{
@@ -518,8 +523,10 @@ func TestCommitRecording(t *testing.T) {
 			wantSHA: sha,
 		},
 		{
-			name:    "branch ref resolves via packed-refs",
-			makeDir: func(t *testing.T) string { return makeFakeGit(t, "ref: refs/heads/main\n", "", "", sha+" refs/heads/main\n") },
+			name: "branch ref resolves via packed-refs",
+			makeDir: func(t *testing.T) string {
+				return makeFakeGit(t, "ref: refs/heads/main\n", "", "", sha+" refs/heads/main\n")
+			},
 			wantSHA: sha,
 		},
 		{

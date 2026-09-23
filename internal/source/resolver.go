@@ -263,34 +263,37 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 	case isRawMIME(ctMIME):
 		mime, isRaw = ctMIME, true
 	case ctMIME != "":
-		if cmds := r.Cfg.ConverterFor(ctMIME); len(cmds) > 0 {
-			mime, convCmds = ctMIME, cmds
-		} else if isRawMIME(extMIME) {
+		ctCmds := r.Cfg.ConverterFor(ctMIME)
+		switch {
+		case len(ctCmds) > 0:
+			mime, convCmds = ctMIME, ctCmds
+		case isRawMIME(extMIME):
 			// CT has no converter; URL ext maps to a raw type.
 			mime, isRaw = extMIME, true
-		} else if extMIME != "" {
+		case extMIME != "":
 			if cmds := r.Cfg.ConverterFor(extMIME); len(cmds) > 0 {
 				mime, convCmds = extMIME, cmds
 			} else {
 				return "", Meta{URL: finalURL, MIME: ctMIME, FetchedAt: fetchedAt},
 					r.noConverterErr(c.File, ctMIME)
 			}
-		} else {
+		default:
 			return "", Meta{URL: finalURL, MIME: ctMIME, FetchedAt: fetchedAt},
 				r.noConverterErr(c.File, ctMIME)
 		}
 	default:
 		// No Content-Type: fall back to URL extension.
-		if isRawMIME(extMIME) {
+		switch {
+		case isRawMIME(extMIME):
 			mime, isRaw = extMIME, true
-		} else if extMIME != "" {
+		case extMIME != "":
 			if cmds := r.Cfg.ConverterFor(extMIME); len(cmds) > 0 {
 				mime, convCmds = extMIME, cmds
 			} else {
 				// Extension known but no converter: treat as plain text.
 				isRaw = true
 			}
-		} else {
+		default:
 			// No CT, no extension: treat as plain text.
 			isRaw = true
 		}
