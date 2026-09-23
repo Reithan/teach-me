@@ -7,7 +7,6 @@ package report
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/reithan/teach-me/internal/cite"
@@ -22,7 +21,7 @@ var ErrUnknownConcept = errors.New("unknown concept")
 type ConceptInfo struct {
 	Node          *graph.ConceptNode
 	ConceptState  string   // "passed" | "open" | "blocked" | "gated"
-	FailSummaries []string // grader labels from fail-class probe answers
+	FailSummaries []string // grader labels from fail-class probe answers, in declaration order
 }
 
 // Options controls how Render formats the Markdown.
@@ -32,15 +31,19 @@ type Options struct {
 	SrcRoot    string
 }
 
-// TextReader reads source text for citeStr under srcRoot. It mirrors the
-// signature of internal/cli.readCiteText so the CLI can pass that function
-// directly.
-type TextReader func(citeStr, srcRoot string) (string, error)
+// TextReader reads source text and drift status for citeStr under srcRoot.
+// drifted is true when the stored hash does not match the current content.
+// The CLI passes a wrapper that calls readCiteText then cite.CheckDrift, so
+// the report package never calls cite.CheckDrift or cite.ReadRange directly.
+type TextReader func(citeStr, srcRoot string) (text string, drifted bool, err error)
 
 // Walk returns the concepts reachable from startID via parent (prerequisite)
-// edges, in topological order with roots first. hops==0 means unbounded.
-// The start concept is always included. Returns ErrUnknownConcept when
-// startID is not a concept in g.
+// edges, in topological order with roots first.
+//
+// hops < 0 means unbounded. hops == 0 returns only the start concept.
+// hops > 0 limits the walk to that many hops from the start.
+//
+// Returns ErrUnknownConcept when startID is not a concept in g.
 func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptInfo, error) {
 	// Build a flat map of all concepts for fast lookup.
 	allConcepts := make(map[string]*graph.ConceptNode, len(g.PassedConcepts)+len(g.UntestedConcepts))
@@ -67,7 +70,7 @@ func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptIn
 		parentMap[e.To] = append(parentMap[e.To], e.From)
 	}
 
-	// BFS from startID following parent edges up to hops hops.
+	// BFS from startID following parent edges, bounded by hops when hops >= 0.
 	type bfsItem struct {
 		id    string
 		depth int
@@ -77,7 +80,7 @@ func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptIn
 	for len(queue) > 0 {
 		cur := queue[0]
 		queue = queue[1:]
-		if hops > 0 && cur.depth >= hops {
+		if hops >= 0 && cur.depth >= hops {
 			continue
 		}
 		for _, parentID := range parentMap[cur.id] {
@@ -222,6 +225,7 @@ func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptIn
 		}
 
 		// Collect fail summaries from probe questions in declaration order.
+		// Declaration order matches the order answers were recorded.
 		var failSums []string
 		for _, qid := range conceptProbeQs[id] {
 			n := graph.QuestionN(qid)
@@ -232,7 +236,6 @@ func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptIn
 				failSums = append(failSums, a.Label)
 			}
 		}
-		sort.Strings(failSums)
 
 		concepts = append(concepts, ConceptInfo{
 			Node:          cn,
@@ -269,7 +272,7 @@ func Render(concepts []ConceptInfo, opts Options, reader TextReader) string {
 
 // renderOutline formats concepts without inlining source text. Citations appear
 // as footnote references in each concept heading block and as definitions at
-// the end.
+// the end. URI locators are rendered as Markdown links in the definitions.
 func renderOutline(concepts []ConceptInfo) string {
 	var sb strings.Builder
 
@@ -330,9 +333,10 @@ func renderOutline(concepts []ConceptInfo) string {
 }
 
 // renderFulltext formats concepts with cited source text inlined in fenced
-// blocks. Repeated citations link back to the first concept heading's anchor.
-// A drifted citation emits a DRIFT line between the citation line and the
-// fenced block.
+// blocks. Repeated citations link back to the first concept heading's anchor
+// instead of re-emitting the text. A drifted citation emits a DRIFT line
+// between the citation line and the fenced block. An unreadable source
+// emits a visible error line with no fenced block.
 func renderFulltext(concepts []ConceptInfo, opts Options, reader TextReader) string {
 	var sb strings.Builder
 
@@ -371,15 +375,14 @@ func renderFulltext(concepts []ConceptInfo, opts Options, reader TextReader) str
 
 			fmt.Fprintf(&sb, "Source: %s\n", citeStr)
 
-			text, err := reader(citeStr, opts.SrcRoot)
+			text, drifted, err := reader(citeStr, opts.SrcRoot)
 			if err != nil {
-				fmt.Fprintf(&sb, "<!-- error reading source: %v -->\n", err)
+				// Unreadable source: visible error so a resuming teacher sees it.
+				fmt.Fprintf(&sb, "Source unreadable: %v\n", err)
 				continue
 			}
 
-			// Check for drift.
-			drifted, driftErr := cite.CheckDrift(citeStr, opts.SrcRoot)
-			if driftErr == nil && drifted {
+			if drifted {
 				fmt.Fprintf(&sb, "DRIFT %s\n", citeStr)
 			}
 

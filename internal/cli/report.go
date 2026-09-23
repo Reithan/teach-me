@@ -14,19 +14,25 @@ import (
 //
 //	tm report <concept> [--hops N] [--fulltext] [--passed-only]
 //
-// Read-only. Walks parent edges from concept up to N hops (default unbounded
-// for outline, 2 for --fulltext) and emits a Markdown report on stdout.
+// Read-only. Walks parent edges from concept and emits a Markdown report on
+// stdout. hops defaults to unbounded for outline mode and 2 for --fulltext.
+// --hops 0 returns only the start concept; --hops N limits the walk to N hops.
 //
 // Exit codes:
 //
 //	0  ok
-//	3  unknown concept, bad hops value, or file error
+//	3  unknown concept, bad --hops value, or file error
 func reportRun(ctx *Context) int {
 	conceptID := ctx.Positionals[0]
 
-	// Parse --hops.
-	hops := 0 // unbounded
 	fulltext := len(ctx.Flags["fulltext"]) > 0
+	passedOnly := len(ctx.Flags["passed-only"]) > 0
+
+	// hops: -1 = unbounded (internal sentinel); user passes N >= 0.
+	hops := -1 // unbounded by default
+	if fulltext {
+		hops = 2 // default hops for --fulltext
+	}
 	if v := ctx.Flags["hops"]; len(v) > 0 {
 		n, err := strconv.Atoi(v[0])
 		if err != nil || n < 0 {
@@ -35,12 +41,7 @@ func reportRun(ctx *Context) int {
 			return 3
 		}
 		hops = n
-	} else if fulltext {
-		// Default hops for --fulltext is 2 when not explicitly set.
-		hops = 2
 	}
-
-	passedOnly := len(ctx.Flags["passed-only"]) > 0
 
 	file, err := state.ResolveFile(ctx.FileFlag)
 	if err != nil {
@@ -75,9 +76,19 @@ func reportRun(ctx *Context) int {
 		SrcRoot:    srcRoot,
 	}
 
+	// reader wraps readCiteText and cite.CheckDrift so the report package
+	// goes through the CLI's single read funnel rather than calling cite
+	// primitives directly (same pair show.go uses for drift annotation).
 	var reader report.TextReader
 	if fulltext {
-		reader = readCiteText
+		reader = func(citeStr, root string) (string, bool, error) {
+			text, err := readCiteText(citeStr, root)
+			if err != nil {
+				return "", false, err
+			}
+			drifted, _ := cite.CheckDrift(citeStr, root)
+			return text, drifted, nil
+		}
 	}
 
 	out := report.Render(concepts, opts, reader)
