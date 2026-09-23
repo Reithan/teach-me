@@ -30,7 +30,6 @@ archives:
     name_template: "tm_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
-      - docs/spec.md
       - skill/teach-me/SKILL.md
       - skill/teach-me/**/*
 
