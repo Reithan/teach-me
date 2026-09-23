@@ -224,23 +224,48 @@ func dropQuestionDrift(
 		}
 	}
 
-	// Add an "unclear" answer node so the existing --re path works.
-	// The answer ID mirrors the question number (a<N> for q<N>).
+	// Add or replace the "unclear" answer tombstone so the existing --re path
+	// works. The answer ID mirrors the question number (a<N> for q<N>).
 	qN := graph.QuestionN(qid)
 	aid := fmt.Sprintf("a%d", qN)
 
+	tombstone := &graph.AnswerNode{
+		ID:    aid,
+		Class: "unclear",
+		Label: graph.DroppedLabel,
+	}
+
+	// Capture the pending answer text before we overwrite it (§10 event field).
+	var pendingAnswerText string
+	if an != nil && an.Class == "pending" {
+		pendingAnswerText = an.Label
+	}
+
 	newG := *g
-	newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
-		A: &graph.AnswerNode{
-			ID:    aid,
-			Class: "unclear",
-			Label: "dropped: citation drifted",
-		},
-	})
-	newG.Edges = append(append([]*graph.Edge{}, g.Edges...), &graph.Edge{
-		From: qid,
-		To:   aid,
-	})
+	newItems := make([]graph.TestingItem, len(g.TestingItems))
+	copy(newItems, g.TestingItems)
+
+	replaced := false
+	for i, item := range newItems {
+		if item.A != nil && item.A.ID == aid {
+			// Replace the existing pending answer in place.
+			newItems[i].A = tombstone
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		newItems = append(newItems, graph.TestingItem{A: tombstone})
+	}
+	newG.TestingItems = newItems
+
+	// Add the q→a edge only when there was no existing answer (which already
+	// implies the edge exists).
+	newEdges := append([]*graph.Edge{}, g.Edges...)
+	if !replaced {
+		newEdges = append(newEdges, &graph.Edge{From: qid, To: aid})
+	}
+	newG.Edges = newEdges
 
 	// Build event.
 	nodeObj := map[string]any{
@@ -264,12 +289,17 @@ func dropQuestionDrift(
 		edgeList = []map[string]any{}
 	}
 
-	row := eventlog.NewRow("drop", map[string]any{
+	evFields := map[string]any{
 		"id":     qid,
 		"node":   nodeObj,
 		"edges":  edgeList,
 		"reason": "drift",
-	})
+	}
+	if pendingAnswerText != "" {
+		evFields["answer"] = pendingAnswerText
+	}
+
+	row := eventlog.NewRow("drop", evFields)
 
 	return &newG, []eventlog.Row{row}, nil
 }

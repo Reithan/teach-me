@@ -108,7 +108,9 @@ func (s *State) BatchOf(qid string) (string, bool) {
 // up to an unclear root probe is recorded as "fail" instead.
 func (s *State) RootProbeUnclear(qid string) bool {
 	_, a := s.walkToRootProbe(qid)
-	return a != nil && a.Class == "unclear"
+	// Drift tombstones (DroppedLabel) carry class "unclear" but must not
+	// propagate fail semantics to the replacement probe.
+	return a != nil && a.Class == "unclear" && a.Label != graph.DroppedLabel
 }
 
 // UnblockedBy returns the IDs of untested concepts that become newly
