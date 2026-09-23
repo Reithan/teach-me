@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.17
+# tm: teaching-map CLI, draft spec v0.18
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.16: repository visibility and licensing are settled as a sequence (16.1, row 45). Section 14 records every decision.
+Changes from v0.17: sources and citations folded in; §2.1, §3, §4.4, §6–16 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -43,7 +43,7 @@ What follows from the rule:
 
 ### 2.1 Harness boundary
 
-The CLI is harness-agnostic. It reads arguments, stdin, environment variables, and files; it writes stdout, the graph, and the log. It names no model, harness, or agent, and it runs no external command.
+The CLI is harness-agnostic. It reads arguments, stdin, environment variables, and files; it writes stdout, the graph, and the log. It names no model, harness, or agent, and it runs no external command except user-configured converters and git (section 5).
 
 Everything harness-specific is an adapter outside the CLI. An adapter may use any feature its harness offers. The CLI surface never changes to suit one.
 
@@ -51,17 +51,20 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 |---|---|---|
 | Teacher prompt | the procedure the CLI cannot enforce (section 12); sets `TM_DOC` to its own path | a skill file, an agent file, a section of the harness's instruction file |
 | Grader invocation | carries `check` output to a model and a verdict back to `grade` | a sub-agent the teacher spawns, on any harness with sub-agents and a shell. Automatic spawning is deferred (section 15) |
+| Planner invocation | reads sources and writes concepts with citations; called from Map and errata | `skill/teach-me/agents/teach-me-planner.md` |
 | Question UI | maps `ask --format json` onto the harness's question tool | a small script or skill |
 | Role guard | replaces the `TM_ROLE` soft check | a pre-tool hook |
+| Setup reference | converter and git configuration the teacher reads when advising the user | `skill/teach-me/reference/setup.md` |
 
 ## 3. Files
 
 - Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; there is no cache or side state.
-- Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history`.
+- Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history` and `tm check --drift`.
 - Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolved. Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
 - Lock: `<name>.mmd.lock`. Every mutating command takes the lock, writes a temp file, lints the result, then renames over the graph. Graders run in parallel, so this is required.
 - File resolution: `--file` > `$TM_FILE` > `.tmconfig` in the working directory. `tm new` and `tm load` write `.tmconfig`. Use the env var when two sessions share a directory.
 - Citations resolve against `$TM_SRC_ROOT`, defaulting to the graph's directory.
+- Converter and git configuration: user-level `$XDG_CONFIG_HOME/tm/config` (default `~/.config/tm/config`), key=value format (section 13). `.tmconfig` keys override the user config per project. Converters are machine-specific, so they live in the user config by default.
 
 ## 4. Graph format
 
@@ -146,11 +149,29 @@ All labels are plain double-quoted strings. Fields are separated by `<br/>`.
 
 | Node | Fields |
 |---|---|
-| Concept | scope; optional `GAP: <gap>`; citations (`file:a-b`, comma-separated) |
+| Concept | scope; optional `GAP: <gap>`; citations (`<hash>@<locator>:START-END`, comma-separated) |
 | Question | narrow scope; one citation |
 | Answer | optional `OOS` (teach answers only); optional `ASKED: <wording>`; then the raw answer while `pending`, replaced by the grader's summary |
 
 The writer escapes `"` as `#quot;`, `'` as `#39;`, `#` as `#35;`, `<` and `>` as `#lt;` and `#gt;`, and collapses newlines to spaces. `tm check`, `tm show`, and the log unescape. A pending answer holding `it#39;s the #quot;same#quot; entry (I think) [index, term] -> cmd; 100% sure?` parses cleanly on 11.17.2.
+
+#### Citation grammar
+
+```
+<hash>@<locator>:START-END
+```
+
+| Part | Rule |
+|---|---|
+| `hash` | first 12 hex characters of SHA-256 over the normalized cited text. Fixed width. Parsed first; the `@` after it is the delimiter, so `@` inside a locator is harmless |
+| `locator` | a path relative to `TM_SRC_ROOT`; an absolute path (`/...`, or a drive letter on Windows); or a URI with a scheme (`https://...`). Distinguished by prefix; no per-kind syntax |
+| `START-END` | 1-based inclusive line range into the resolved text, after conversion if any. Split on the last colon; the range never contains one, so scheme separators, ports, and drive letters are harmless |
+
+The model never types the hash. `tm add` and `tm q` accept the hashless form `<locator>:START-END`, resolve the text, compute the hash, and write the full form. The hash is a content hash of the cited lines, not a commit hash; the position invites that reading, so the spec says so here.
+
+Normalization before hashing: CRLF to LF; trailing whitespace stripped per line; lines joined with LF; no trailing newline; hash over the UTF-8 bytes. Internal whitespace is preserved because indentation is meaningful in code.
+
+A `"` in a locator must be percent-encoded; lint rejects a raw one.
 
 ### 4.5 Classes
 
