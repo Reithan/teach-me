@@ -69,7 +69,7 @@ func isLowerHex12(s string) bool {
 
 // Normalize normalizes text for hashing per spec section 3.2:
 // CRLF to LF, trailing whitespace stripped per line, lines LF-joined,
-// no trailing newline. Internal whitespace is preserved.
+// at most one trailing newline removed. Internal whitespace is preserved.
 func Normalize(text string) string {
 	// CRLF → LF
 	s := strings.ReplaceAll(text, "\r\n", "\n")
@@ -78,15 +78,16 @@ func Normalize(text string) string {
 	for i, l := range lines {
 		lines[i] = strings.TrimRight(l, " \t")
 	}
-	// Join with LF, drop trailing empty lines and newline
+	// Join with LF, remove at most one trailing newline
 	result := strings.Join(lines, "\n")
-	return strings.TrimRight(result, "\n")
+	return strings.TrimSuffix(result, "\n")
 }
 
 // Hash returns the first 12 lowercase hex characters of the SHA-256 of the
-// normalized text. The caller should pass Normalize(text) for citation hashing.
+// normalized text. It calls Normalize internally so callers pass raw text.
 func Hash(text string) string {
-	sum := sha256.Sum256([]byte(text))
+	normalized := Normalize(text)
+	sum := sha256.Sum256([]byte(normalized))
 	return hex.EncodeToString(sum[:])[:12]
 }
 
@@ -189,14 +190,19 @@ func SrcRoot(graphDir string) string {
 // For absolute locators, the path is returned as-is (cleaned).
 // For URI locators, the locator string is returned unchanged; the caller
 // must not pass URI citations to os.ReadFile.
+//
+// %22 sequences in path locators are decoded to '"' before path construction
+// so that file names containing double-quotes are resolved correctly.
 func Resolve(c Citation, srcRoot string) string {
 	if IsURI(c.File) {
 		return c.File
 	}
-	if IsAbsPath(c.File) {
-		return filepath.Clean(filepath.FromSlash(c.File))
+	// Decode %22 → '"' in path locators (the only percent-sequence we encode).
+	file := strings.ReplaceAll(c.File, "%22", `"`)
+	if IsAbsPath(file) {
+		return filepath.Clean(filepath.FromSlash(file))
 	}
-	return filepath.Clean(filepath.Join(srcRoot, filepath.FromSlash(c.File)))
+	return filepath.Clean(filepath.Join(srcRoot, filepath.FromSlash(file)))
 }
 
 // ReadRange reads the lines [c.Start, c.End] inclusive from the file named
@@ -241,8 +247,11 @@ func ReadRange(c Citation, srcRoot string) (string, error) {
 // returns the canonical hashed form "<hash>@<locator>:START-END".
 //
 // Rules:
+//   - Any raw '"' in the locator is percent-encoded to %22 before parsing so
+//     that file names containing a double-quote can be stored (Mermaid uses '"'
+//     as a label delimiter, so raw quotes must not appear in node text).
 //   - If citeStr is already hashed and the hash matches the resolved text,
-//     the original citeStr is returned unchanged.
+//     the encoded form is returned unchanged.
 //   - If citeStr is already hashed and the hash does NOT match, an error is
 //     returned (hash mismatch).
 //   - If citeStr is hashless (legacy form), the hash is computed and the
@@ -251,7 +260,11 @@ func ReadRange(c Citation, srcRoot string) (string, error) {
 //     hash is already present and returned as-is. A URI without a hash is
 //     refused. (M10 adds URI fetch support.)
 func HashCitation(citeStr, srcRoot string) (string, error) {
-	c, err := Parse(citeStr)
+	// Percent-encode raw '"' in the locator; Parse enforces the raw-quote rule,
+	// so callers on the write path use this function instead of Parse directly.
+	encoded := strings.ReplaceAll(citeStr, `"`, "%22")
+
+	c, err := Parse(encoded)
 	if err != nil {
 		return "", err
 	}
@@ -262,21 +275,22 @@ func HashCitation(citeStr, srcRoot string) (string, error) {
 		if c.Hash == "" {
 			return "", fmt.Errorf("citation %q: URI locator requires a hash in M9; use <hash>@<uri>:START-END", citeStr)
 		}
-		return citeStr, nil
+		return encoded, nil
 	}
 
 	// Local (relative or absolute) citation: resolve, read, and hash.
+	// Hash calls Normalize internally so raw file text is passed directly.
 	text, readErr := ReadRange(c, srcRoot)
 	if readErr != nil {
 		return "", readErr
 	}
 
-	computed := Hash(Normalize(text))
+	computed := Hash(text)
 
 	if c.Hash != "" && c.Hash != computed {
 		return "", fmt.Errorf(
 			"citation %q: hash mismatch (stored %s, file hashes to %s)",
-			citeStr, c.Hash, computed,
+			encoded, c.Hash, computed,
 		)
 	}
 
@@ -304,7 +318,7 @@ func CheckDrift(citeStr, srcRoot string) (drifted bool, err error) {
 		return false, readErr
 	}
 
-	computed := Hash(Normalize(text))
+	computed := Hash(text)
 	return computed != c.Hash, nil
 }
 

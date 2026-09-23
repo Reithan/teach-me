@@ -11,18 +11,17 @@
 package gen
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"strings"
 
+	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/graph"
 )
 
 // genCite returns a hashed citation string "<hash>@<file>:<start>-<end>".
-// The hash is the SHA-256 prefix (12 hex chars) of the fake content
-// "line start\nline start+1\n...\nline end" (normalized: trailing newline stripped).
+// The hash is cite.Hash of the fake content "line start\nline start+1\n...\nline end\n"
+// (cite.Hash calls Normalize internally, so the trailing newline is stripped before hashing).
 // This produces deterministic, syntactically-valid citations for generated graphs
 // that do not correspond to any real source file.
 func genCite(file string, start, end int) string {
@@ -30,9 +29,7 @@ func genCite(file string, start, end int) string {
 	for i := start; i <= end; i++ {
 		fmt.Fprintf(&sb, "line %d\n", i)
 	}
-	text := strings.TrimRight(sb.String(), "\n")
-	sum := sha256.Sum256([]byte(text))
-	h := hex.EncodeToString(sum[:])[:12]
+	h := cite.Hash(sb.String())
 	return fmt.Sprintf("%s@%s:%d-%d", h, file, start, end)
 }
 

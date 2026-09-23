@@ -229,6 +229,13 @@ func TestNormalize(t *testing.T) {
 			input: "hello",
 			want:  "hello",
 		},
+		{
+			// TrimSuffix removes at most one trailing LF; internal blank lines
+			// and additional trailing newlines are preserved (unlike TrimRight).
+			name:  "multiple trailing newlines: only one removed",
+			input: "line one\n\nline two\n\n",
+			want:  "line one\n\nline two\n",
+		},
 	}
 
 	for _, tc := range tests {
@@ -524,7 +531,7 @@ func TestHashCitation(t *testing.T) {
 		}
 		// Verify hash is correct.
 		text, _ := cite.ReadRange(cite.Citation{File: "src.txt", Start: 1, End: 3}, dir)
-		want := cite.Hash(cite.Normalize(text))
+		want := cite.Hash(text)
 		if c.Hash != want {
 			t.Fatalf("HashCitation: hash %q, want %q", c.Hash, want)
 		}
@@ -534,7 +541,7 @@ func TestHashCitation(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, dir, "src.txt", "line 1\nline 2\nline 3\n")
 		text := "line 1\nline 2\nline 3"
-		h := cite.Hash(cite.Normalize(text))
+		h := cite.Hash(text)
 		citeStr := h + "@src.txt:1-3"
 		got, err := cite.HashCitation(citeStr, dir)
 		if err != nil {
@@ -572,6 +579,44 @@ func TestHashCitation(t *testing.T) {
 			t.Fatal("expected error for URI without hash, got nil")
 		}
 	})
+
+	t.Run("file with double-quote in name percent-encoded", func(t *testing.T) {
+		// A file named a"b.txt must be stored as a%22b.txt in the citation
+		// because raw '"' is the Mermaid label delimiter.
+		dir := t.TempDir()
+		content := "line 1\nline 2\nline 3\n"
+		fname := `a"b.txt`
+		if err := os.WriteFile(filepath.Join(dir, fname), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		// Pass the raw name; HashCitation must encode it.
+		got, err := cite.HashCitation(`a"b.txt:1-3`, dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// The stored locator must use %22, not a raw quote.
+		c, parseErr := cite.Parse(got)
+		if parseErr != nil {
+			t.Fatalf("Parse result %q: %v", got, parseErr)
+		}
+		if c.File != "a%22b.txt" {
+			t.Errorf("locator: got %q, want %q", c.File, "a%22b.txt")
+		}
+		// Resolve must decode %22 back to '"' so the file can be read.
+		resolved := cite.Resolve(c, dir)
+		wantResolved := filepath.Join(dir, fname)
+		if resolved != wantResolved {
+			t.Errorf("Resolve: got %q, want %q", resolved, wantResolved)
+		}
+		// The hash must match a fresh HashCitation call (idempotent).
+		got2, err2 := cite.HashCitation(got, dir)
+		if err2 != nil {
+			t.Fatalf("second HashCitation: %v", err2)
+		}
+		if got2 != got {
+			t.Errorf("HashCitation idempotent: got %q, want %q", got2, got)
+		}
+	})
 }
 
 func TestCheckDrift(t *testing.T) {
@@ -588,7 +633,7 @@ func TestCheckDrift(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, dir, "src.txt", "hello\nworld\n")
 		text := "hello\nworld"
-		h := cite.Hash(cite.Normalize(text))
+		h := cite.Hash(text)
 		citeStr := h + "@src.txt:1-2"
 		drifted, err := cite.CheckDrift(citeStr, dir)
 		if err != nil {
