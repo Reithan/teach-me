@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/reithan/teach-me/internal/docver"
+	"github.com/reithan/teach-me/internal/version"
 )
 
 func TestDocVersion(t *testing.T) {
@@ -178,8 +179,9 @@ func TestMarker(t *testing.T) {
 	if len(parts) != 2 {
 		t.Errorf("Marker() = %q, want major.minor format", m)
 	}
-	// Must match the prefix of version.Version() (derived from "0.1.0" → "0.1").
-	if m != "0.1" {
-		t.Errorf("Marker() = %q, want \"0.1\"", m)
+	// Must equal the major.minor prefix of version.Version().
+	want := strings.Join(strings.SplitN(version.Version(), ".", 3)[:2], ".")
+	if m != want {
+		t.Errorf("Marker() = %q, want %q", m, want)
 	}
 }
