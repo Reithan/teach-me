@@ -1,9 +1,5 @@
 # teach-me setup reference
 
-Read this file only when advising a user on converter or git configuration, or
-when pointing them at the harness permission rules. Do not load it at session
-start.
-
 ## Config file
 
 User-level config: `$XDG_CONFIG_HOME/tm/config` (default `~/.config/tm/config`).
