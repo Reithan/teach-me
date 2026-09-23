@@ -1,15 +1,16 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -54,12 +55,24 @@ func addRun(ctx *Context) int {
 	ctx.GraphFile = file
 
 	// Hash the citation: resolve, compute SHA-256 prefix, return hashed form.
-	srcRoot := cite.SrcRoot(filepath.Dir(file))
-	hashedCite, hashErr := cite.HashCitation(citeStr, srcRoot)
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
+	hashedCite, citeMeta, hashErr := resolver.HashCitation(citeStr)
 	if hashErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, hashErr)
-		ctx.FixMsg = usageLine
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+		var ref *source.RefusalError
+		if errors.As(hashErr, &ref) {
+			ctx.ErrMsg = ref.Err
+			ctx.FixMsg = ref.Fix
+			writeErrFix(ctx.ErrOut, ref.Err, ref.Fix)
+		} else {
+			ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, hashErr)
+			ctx.FixMsg = usageLine
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+		}
 		return 3
 	}
 	citeStr = hashedCite
@@ -173,13 +186,15 @@ func addRun(ctx *Context) int {
 			childIDs[i] = ch.endpointID
 		}
 
-		row := eventlog.NewRow("add", map[string]any{
+		rowFields := map[string]any{
 			"id":       id,
 			"scope":    scope,
 			"src":      citeStr,
 			"parents":  parentIDs,
 			"children": childIDs,
-		})
+		}
+		source.ApplyMeta(rowFields, citeMeta)
+		row := eventlog.NewRow("add", rowFields)
 
 		// Gate clearing for gated children (Q2 / spec §7 line 278).
 		// When --child C is gated, write the gate meta + gate event for C via=add.
