@@ -2,7 +2,7 @@
 name: teach-me
 description: "Drive a teaching session with the tm CLI: diagnose what a learner understands over a Mermaid concept graph, probe and grade their answers via grader sub-agents, and teach each diagnosed gap."
 metadata:
-  tm-version: "0.1"
+  tm-version: "0.2"
 ---
 
 # teach-me skill
@@ -20,6 +20,23 @@ Move every in-scope concept into the graph's passed block, each pass earned by
 probe answers a grader scored against the source, never by your own read of the
 learner. The session is done when `untested` holds no concept you intend to test.
 
+## File-access rule
+
+The model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or
+`<name>.mmd.lock` by any tool, including shell reads. All reads go through
+`tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; all
+writes go through a `tm` command.
+
+On every `tm new`, before the first `tm add`, tell the user to configure harness
+deny rules for those three files and point at
+`skill/teach-me/reference/setup.md`. Continue once the user confirms or declines.
+Declining is allowed; this rule still binds.
+
+If the model finds it has read or written one of those files — by accident or by a
+tool it did not expect to reach them — say so immediately, remind the user that the
+deny rules are not in place, and point at `skill/teach-me/reference/setup.md`.
+No silent recovery; an accidental write may already have broken a lint invariant.
+
 ## Context
 
 `tm` reads and edits one Mermaid flowchart that records what the learner has shown
@@ -35,8 +52,8 @@ Three parties share the file:
 | Grader sub-agent | `tm check` output only | `tm grade` |
 | Human learner | the rendered graph, your questions | answers; hand-edits |
 
-Citations are `file:START-END`, resolved against `$TM_SRC_ROOT` (defaults to the
-graph's directory).
+Citations are `hash@locator:START-END`, resolved against `$TM_SRC_ROOT`
+(defaults to the graph's directory).
 
 ## Rules
 
@@ -54,30 +71,68 @@ When a failed probe opens a teaching round, target your teach questions at the
 misunderstanding recorded in the concept's `GAP` field; never re-ask the literal
 scope of the locked probe batch.
 
+The no-memory rule: every citation must point to text read this session through
+the CLI or the harness's file or fetch tools. Never author source text from memory
+and never write a notes file from memory and then cite it. If no real source can
+be obtained, say so and stop.
+
 ## Workflow
 
 `tm status` is your dashboard, and the `fix:` line on any refusal names your next
 move. The full state machine is spec §12; the phases:
 
-1. **Orient.** Run `tm load <file>`, then `tm status`, `tm find`, `tm show` to see
-   what is passed, open, blocked, and the frontier (untested concepts whose
-   prerequisites are all passed).
-2. **Map**, when the frontier is thin or a prerequisite is missing. Use `tm add`
-   and `tm link` to fill in concepts; `tm edit` and `tm drop` touch only concepts
-   that have no questions yet.
-3. **Pick** a frontier concept.
-4. **Probe.** Draft between `TM_PROBE_MIN` and `TM_PROBE_MAX` narrow probe
+1. **Source.** On `tm new` (fresh session only):
+   - Ask the learner for source materials — notes, textbook chapters, docs, a
+     repo, papers. Markdown or any line-addressable text. Set `TM_SRC_ROOT`.
+   - A repo: set `TM_SRC_ROOT` to the repo root, or cite absolute paths. When
+     the graph must be portable across machines, cite the remote URL at a commit
+     instead.
+   - Web sources: prefer immutable or versioned URLs (versioned arXiv, tagged
+     docs, permalinks at a commit, archive snapshots). arXiv HTML or e-print over
+     PDF. For dynamic pages, save a static copy and cite it.
+   - No egress: use local sources or ask the learner for citable documents.
+     Not a blocker.
+   - When a citation refuses for want of a converter: read
+     `skill/teach-me/reference/setup.md`, advise the user on the config lines,
+     run a test conversion, and confirm with the user before writing the config.
+   - **File-access rule (repeated).** Tell the user to configure harness deny
+     rules for `*.mmd`, `*.mmd.jsonl`, and `*.mmd.lock`, and point at
+     `skill/teach-me/reference/setup.md`. Once the user confirms or declines,
+     run `tm new`. Declining is allowed; the rule above still binds.
+
+   On `tm load` (resuming): run `tm load <file>`, then `tm report` before each
+   teaching round.
+
+2. **Orient.** Run `tm status`, `tm find`, `tm show` to see what is passed, open,
+   blocked, and the frontier (untested concepts whose prerequisites are all
+   passed).
+
+3. **Map**, when the frontier is thin or a prerequisite is missing. Spawn the
+   `teach-me-planner` sub-agent with: the learning goal as the learner stated it,
+   the source locations, and the request scope — `initial` for a fresh map,
+   `extend around <concept>` when the frontier is thin, or
+   `errata for <concepts>` when sources or prerequisites have changed. For extend
+   or errata, also include the output of `tm report <concept>` so the planner
+   sees the existing foundations. Read the planner's results through `tm status`
+   and `tm show`; ignore its prose summary.
+
+4. **Pick** a frontier concept.
+
+5. **Probe.** Draft between `TM_PROBE_MIN` and `TM_PROBE_MAX` narrow probe
    questions with `tm q`, then emit the batch with `tm ask <concept>`. A question
    is immutable once written.
-5. **Answer.** Present the emitted questions to the learner through the harness's
+
+6. **Answer.** Present the emitted questions to the learner through the harness's
    built-in question tool (`tm ask --format json` maps onto it), then record each
    answer with `tm answer <qid>`, piping raw text via `-`. The first recorded
    answer locks the batch.
-6. **Grade.** Spawn one `teach-me-grader` per answer per the grader-isolation
+
+7. **Grade.** Spawn one `teach-me-grader` per answer per the grader-isolation
    rule above, choosing its model by the answer's subtlety (sonnet by default,
    opus when the judgment is fine-grained). Then read the verdicts with
    `tm status --concept <id>`.
-7. **Act on the verdict** (`tm` runs the transitions of spec §8):
+
+8. **Act on the verdict** (`tm` runs the transitions of spec §8):
    - all pass → the concept passes automatically; its tests clear and it moves to
      the passed block.
    - no fail, some unclear → add one `tm q --re <qid>` replacement per unclear
@@ -85,7 +140,27 @@ move. The full state machine is spec §12; the phases:
    - any fail → open a teaching round: record the gap with `tm gap`, then teach
      with `tm q --teach --re <qid>`. Once the teach batch resolves all pass, the
      locked fallback probes become answerable.
-8. Repeat from step 3 until `untested` holds no concept you intend to test.
+
+9. Repeat from step 4 until `untested` holds no concept you intend to test.
+
+## Errata
+
+Handle drift and disputes as they arise; these are not part of the main probe
+cycle.
+
+- **Drifted ungraded question** (`DRIFT` marker on an ungraded question, or
+  `answer` or a grader refusing with a drift error): `tm drop <qid>`, then
+  `tm q --re <qid>` with a fresh citation. Ask the learner again; nothing is
+  graded.
+- **Drifted passed concept**: if the current text at a new range hashes the same,
+  run `tm recite`. Otherwise spawn a `teach-me-grader` with the concept ID and
+  the instruction to recheck it; the grader runs `tm check --drift` and decides
+  `keep` or `reopen`. The teacher never decides whether a pass survives a source
+  change.
+- **Replaced source or revealed missing prerequisite**: spawn the
+  `teach-me-planner` in `errata for <concepts>` mode.
+- **Disputed verdict**: not errata. Re-probe with `--re`; the grader decides.
+- **After any hand edit to the graph**: run `tm lint`.
 
 ## Command reference
 
@@ -96,6 +171,7 @@ Generated from the CLI; for one command or flag, run `tm <command> --help`:
 ## Reference
 
 Read `docs/spec.md` for full command semantics, invariants, and edge cases. Key
-sections: §8 transitions, §9 grader protocol, §5 derived state, and §13
-configuration (batch sizes and gate limits: `TM_PROBE_MIN`/`MAX`,
-`TM_TEACH_MIN`/`MAX`, `TM_MAX_FAILS`, `TM_MAX_TEACH`, `TM_MAX_STALL`).
+sections: §8 transitions, §9 grader protocol, §9.1 recheck payload, §5 derived
+state, §12 intended usage, and §13 configuration (batch sizes and gate limits:
+`TM_PROBE_MIN`/`MAX`, `TM_TEACH_MIN`/`MAX`, `TM_MAX_FAILS`, `TM_MAX_TEACH`,
+`TM_MAX_STALL`).
