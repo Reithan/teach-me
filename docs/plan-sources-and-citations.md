@@ -42,11 +42,17 @@ description of it.
   are deterministic. Grading stays judged and isolated.
 - By default the CLI fetches nothing and runs nothing. A user may configure
   converters and git; only then does either happen.
-- Nodes are immutable. Drift is derived at read time, never stored. Errata are
-  additive.
+- Questions are immutable and verdict-bearing history lives in the log. Drift
+  is derived at read time, never stored. A concept citation may be updated on
+  drift through logged paths (section 6); a drifted ungraded question leaves
+  the graph only through a CLI-verified drop.
 - The no-memory rule: model knowledge drafts questions and explains during
   teaching. It never becomes source. When no real source can be obtained, the
   teacher says so and stops.
+- The model reaches the graph and the log only through the CLI. The harness
+  is configured to deny the model direct reads and writes of `<name>.mmd`,
+  `<name>.mmd.jsonl`, and `<name>.mmd.lock`; the adapters tell the model not
+  to touch them and to ask the user for that configuration on every `tm new`.
 
 ## 3. Citation grammar
 
@@ -206,12 +212,23 @@ Rules:
 
 ## 6. Drift
 
-- Every read that resolves text (`check`, `ask --src-text`, `show`, `report`)
+- Every read that resolves text (`ask --src-text`, `show`, `report`)
   recomputes the hash. On mismatch the text is still printed, preceded by a
   `DRIFT <cite>` line.
-- `tm check` adds one rubric line: if `DRIFT` is present, grade `unclear`.
-  Questions are immutable (decision 21), so a rotted question resolves
-  `unclear` and its `--re` replacement carries a fresh citation.
+- **Drifted ungraded questions are dropped, not graded.** A question whose
+  citation no longer hashes cannot be answered or graded fairly: grading it
+  `unclear` wastes a learner answer, and a second `unclear` becomes `fail`
+  under decision 7, which would punish the learner for a source edit.
+  `tm answer` and `tm check` refuse a drifted question with `fix: tm drop
+  <qid>, then tm q --re <qid> <cite>`. `tm drop <qid>` is accepted only when
+  the CLI verifies the hash mismatch, so the teacher cannot drop questions at
+  will and decision 21 keeps its force: answering, or CLI-verified drift, are
+  the only ways a question leaves the graph. The `drop` event carries the
+  full node, the recorded answer if any, and `reason: drift`. For batch
+  accounting a dropped question is treated like an `unclear` one: exactly one
+  `--re` replacement, with none of the verdict consequences (no failed count,
+  no second-`unclear` rule). Graded questions are never touched; their
+  verdicts were recorded against the text in the log.
 - `tm lint` stays a static structure check: syntax and hash presence only,
   no resolution, no fetch. `tm lint --drift` resolves local citations and
   lists mismatches, one per line, exit 1 if any; `--remote` adds fetched ones.
@@ -251,7 +268,7 @@ Rules:
     `show --history`; a missing log refuses with `fix: tm reopen`.
   - `tm edit --src` on question-less concepts is unchanged.
 - A missing prerequisite revealed by drift or by a learner correction is
-  mapping, not errata: `tm add ... --child` or the mapper in errata mode.
+  mapping, not errata: `tm add ... --child` or the planner in errata mode.
 
 ## 7. Log changes
 
@@ -291,17 +308,20 @@ the grader surface stays `tm check`.
 
 Today two adapters exist: the teacher skill, which drives the session and
 administers questions, and the grader agent, which scores one answer in
-isolation. Mapping a corpus into concepts is one sentence in the teacher's
-Map phase, and errata handling does not exist. Both become explicit, and
-mapping becomes a third adapter, because it reads far more source than the
-teacher should carry in context and its output is a small set of `tm`
-mutations the teacher can review through `tm status`.
+isolation. Planning a lesson, meaning reading the corpus and decomposing the
+topic into a prerequisite graph with citations, is one sentence in the
+teacher's Map phase, and errata handling does not exist. Both become
+explicit, and planning becomes a third adapter, because it reads far more
+source than the teacher should carry in context and its output is a small
+set of `tm` mutations the teacher can review through `tm status`. The three
+roles: the planner decomposes, the teacher tests and teaches, the grader
+arbitrates.
 
 | Adapter | File | Job |
 |---|---|---|
 | Teacher | `skill/teach-me/SKILL.md` | drive the session; source acquisition; delegate mapping and grading; errata |
 | Grader | `skill/teach-me/agents/teach-me-grader.md` | grade one answer in isolation |
-| Mapper | `skill/teach-me/agents/teach-me-mapper.md` | read sources, write concepts and edges with citations |
+| Planner | `skill/teach-me/agents/teach-me-planner.md` | read sources, write concepts and edges with citations |
 | Setup reference | `skill/teach-me/reference/setup.md` | converter and git configuration the teacher reads only when advising the user |
 
 ### 9.1 Teacher skill
@@ -326,26 +346,54 @@ A **Source** step before Orient:
 - `tm new` for a fresh session. `tm report` when resuming and before a
   teaching round.
 
-The **Map** phase delegates to the mapper. The teacher's spawn prompt carries
+A **File access** rule, stated once near the top and repeated at `tm new`:
+
+- The model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or
+  `<name>.mmd.lock` directly, by any tool, including shell reads. Every read
+  goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show
+  --history`; every write goes through a `tm` command. This is what makes the
+  CLI's invariants (lint on write, immutable questions, grader isolation,
+  the drop and recheck paths) hold: a model that can open the graph can
+  bypass all of them without noticing.
+- On every `tm new`, before the first `tm add`, the teacher tells the user to
+  configure the harness to deny the model direct access to those three files,
+  points at the setup reference for the exact rules, and continues once the
+  user confirms or declines. Declining is allowed; the rule still binds the
+  model.
+- If the model ever finds that it has read or written one of those files, by
+  accident or by a tool it did not expect to reach them, it says so
+  immediately, reminds the user that the deny rules are not in place, and
+  points at the setup reference again. Silent recovery is not an option,
+  because an accidental write may already have broken a lint invariant.
+
+The setup reference carries the harness section for this: for a harness with
+permission rules, deny entries for read, edit, and write on `**/*.mmd`,
+`**/*.mmd.jsonl`, and `**/*.mmd.lock`, scoped to the lesson directory. The
+reference notes that such rules cover the harness's file tools; a shell
+`cat` is not covered, which is why the rule in the skill also binds the
+model's own behavior.
+
+The **Map** phase delegates to the planner. The teacher's spawn prompt carries
 the learning goal as the learner stated it, the source locations, and the
 scope of the request: initial map, extension around a named concept when the
 frontier is thin, or errata against named concepts. For an extension or
 errata request the teacher also passes the output of `tm report <concept>`
-so the mapper sees the existing foundations without reading the graph
-itself. The mapper returns a one-paragraph summary; the teacher reads the
-result through `tm status` and `tm show`, never through the mapper's prose.
+so the planner sees the existing foundations without reading the graph
+itself. The planner returns a one-paragraph summary; the teacher reads the
+result through `tm status` and `tm show`, never through the planner's prose.
 
 An **Errata** section, since the teacher is who sees drift and disputes:
 
-- `DRIFT` on a question: nothing to do; the grader records `unclear` and the
-  replacement re-cites.
+- `DRIFT` on an ungraded question, or an `answer` or grader refusal naming
+  one: `tm drop <qid>`, then `tm q --re <qid>` with a fresh citation. The
+  learner is asked again; nothing is graded.
 - `DRIFT` on a passed concept: if the current text hashes the same at a new
   range, `tm recite`. Otherwise spawn a grader with the concept ID and the
   instruction to recheck it; the grader decides `keep` or `reopen` from the
   logged answers (section 6). The teacher never decides whether a pass
   survives a source change. Descendants stay passed either way.
 - A source replaced or a learner correction that shows a missing
-  prerequisite: spawn the mapper in errata mode for the affected concepts. It
+  prerequisite: spawn the planner in errata mode for the affected concepts. It
   may `tm add --child`, `tm link`, and `tm edit` or `tm drop` question-less
   concepts; it never touches a concept with questions, which is the CLI's
   rule already.
@@ -355,15 +403,17 @@ An **Errata** section, since the teacher is who sees drift and disputes:
 
 ### 9.2 Grader agent
 
-Two additions. `DRIFT` on a question means `unclear`. A recheck prompt
+Two additions. When `tm check` refuses because the question drifted, report
+the refusal and stop; the teacher drops and replaces it. A recheck prompt
 carries a concept ID instead of a question ID: run `tm check --drift
 <concept>`, judge from the printed pairs of graded and current text alone,
 then `tm grade --drift <concept> keep|reopen "<summary>"`. Tool scoping is
-unchanged, since both are `tm check` and `tm grade`.
+unchanged, since both are `tm check` and `tm grade`. The grader has no file
+tools, so the file-access rule (9.1) needs no restating there.
 
-### 9.3 Mapper agent
+### 9.3 Planner agent
 
-`skill/teach-me/agents/teach-me-mapper.md`, static body like the grader's.
+`skill/teach-me/agents/teach-me-planner.md`, static body like the grader's.
 
 - **Task.** Turn a body of source into concepts the teacher can probe: one
   `tm add` per concept with a scope and a citation, `tm link` for
@@ -372,7 +422,7 @@ unchanged, since both are `tm check` and `tm grade`.
 - **Input.** The spawn prompt carries the learning goal, the source
   locations, the request scope (initial, extend around `<concept>`, errata
   for `<concepts>`), and for the latter two the `tm report` output.
-- **Rules.** The no-memory rule: every concept cites source the mapper has
+- **Rules.** The no-memory rule: every concept cites source the planner has
   read in this session. A scope is probe-sized, meaning two to five narrow
   probes can test it; anything larger is split. A prerequisite edge is added
   only where passing the parent is genuinely required to answer probes on the
@@ -383,28 +433,30 @@ unchanged, since both are `tm check` and `tm grade`.
 - **Tools.** `Bash(tm add *)`, `Bash(tm link *)`, `Bash(tm edit *)`,
   `Bash(tm drop *)`, `Bash(tm find *)`, `Bash(tm show *)`, `Bash(tm status*)`,
   file reading, and the harness's fetch tool when it has one. No `tm q`,
-  `tm ask`, `tm answer`, `tm check`, or `tm grade`.
+  `tm ask`, `tm answer`, `tm check`, or `tm grade`. The planner has file
+  reading for sources, so the file-access rule (9.1) is restated in its body
+  and the harness deny rules from the setup reference apply to it too.
 - **Model.** Sonnet by default; the teacher picks Opus for dense sources.
 - **Completion.** One paragraph: what was added, what was linked, what was
   left unmapped and why, and any question for the learner. Then stop.
 
-`AGENTS.md` gains the mapper row in its adapter table.
+`AGENTS.md` gains the planner row in its adapter table.
 
-Grader adapter: one line, `DRIFT` means `unclear`.
 
 ## 10. Spec revision checklist (M8)
 
 | Section | Change |
 |---|---|
-| 2.1 | narrow "runs no external command" per section 5; adapter table gains the mapper and the setup reference (section 9) |
+| 2.1 | narrow "runs no external command" per section 5; adapter table gains the planner and the setup reference (section 9) |
 | 3 | user config file and `.tmconfig` override; the log-read exception gains `check --drift` |
 | 4.4 | citation field grammar (section 3) |
-| 6 | `report`, `rehash`, `recite`, `reopen --src`, `check --drift`, `grade --drift`, `lint --drift`; `check` prints `DRIFT` |
-| 7 | refusals: fetch failed, no converter, version mismatch, not in working tree, `recite` hash mismatch, `check --drift` without a log |
-| 9 | `DRIFT` line and rubric sentence; the recheck payload and its `keep`/`reopen` rubric |
-| 10 | new log fields; `rehash`, `recite`, `recheck` events; `reopen` source fields |
+| 6 | `report`, `rehash`, `recite`, `reopen --src`, `check --drift`, `grade --drift`, `lint --drift`; `drop` accepts a drifted question; reads print `DRIFT` |
+| 7 | refusals: fetch failed, no converter, version mismatch, not in working tree, `recite` hash mismatch, `check --drift` without a log, `answer` and `check` on a drifted question, `drop` on a question that has not drifted or is graded |
+| 8 | a dropped question counts as `unclear` for batch accounting: one `--re` replacement, no verdict consequences |
+| 9 | the recheck payload and its `keep`/`reopen` rubric |
+| 10 | new log fields; `rehash`, `recite`, `recheck` events; `drop` on questions with `reason: drift`; `reopen` source fields |
 | 11 | hash presence; `"` in locator; `--drift` |
-| 12 | Source step; Map delegates to the mapper; errata; no-memory rule as the third unenforceable behavior |
+| 12 | Source step; Map delegates to the planner; errata; no-memory rule and the file-access rule as the third and fourth unenforceable behaviors (the harness may enforce the second; the CLI cannot) |
 | 13 | config file variables |
 | 14 | decision rows below |
 | 15 | move resolved items out; add section 12 items |
@@ -418,13 +470,14 @@ Draft decision rows:
 | 47 | One locator grammar: relative path, absolute path, URI | three source kinds with one parser and one document; the kind is a prefix, not a syntax | sister lookup file of selectors; per-kind citation forms; XPath |
 | 48 | Sources converted by user-configured external converters keyed by MIME and extension, pinned by version and checked at runtime | deterministic per version; zero CLI dependencies; user-extensible to any format | built-in tag stripper; pure-Go HTML library; runtime-loaded modules (Go has none) |
 | 49 | Spec 2.1 narrowed: no external command except configured converters and git | default behavior unchanged; the rule's purpose was harness independence, which a content-only filter keeps | fetch and conversion inside the CLI with dependencies; adapter-side conversion only |
-| 50 | Drift derived at read time; `check` prints `DRIFT` and the rubric says `unclear`; questions never edited | immutability (21); a rotted question is replaced, not repaired | brittle flag on the node; automatic re-citation |
+| 50 | Drift derived at read time; a drifted ungraded question is dropped through a CLI-verified `tm drop` and replaced with `--re`; `answer` and `check` refuse it; graded questions untouched | immutability (21) holds because the CLI, not the teacher, decides a question may leave; grading a drifted question `unclear` wastes an answer and can turn into `fail` under 7 | brittle flag on the node; automatic re-citation; grade `unclear` on `DRIFT` |
 | 55 | Concept citations may be updated on drift through `recite` (hash-preserving), `reopen --src`, and a grader recheck; each logged with before and after | no verdict is graded against a concept citation, so updating it rewrites nothing a pass was earned against; the graph is already not add-only | errata nodes with edge transfer and a superseded marker; teacher override with a reason |
 | 56 | Whether a pass survives a source change is a grader's verdict from the logged answers and the current text, never the teacher's | same isolation argument as grading; the teacher's bias runs toward always or never re-testing | teacher `recite --override`; automatic reopen on any drift |
 | 51 | `tm report` walks foundations: outline by default, `--fulltext` bounded by hops | requirement 1 with no model-authored intermediate text | derived study docs verified by a judge agent; anthologies of verbatim passages |
 | 52 | No-memory rule in the teacher adapter | the citation machinery is defeated silently by a notes file written from memory; the rule is the one thing the model will not enforce on itself | trust the model to source honestly |
 | 53 | `grade` keeps `src_text`; `add` and `q` do not copy text | audit needs what was judged; the hash covers detection; bounded log growth | copy every citation on write; filesystem compression |
 | 54 | Git read through the configured command; commit recorded by reading refs directly | packfile parsing is real work; unreachable commits can be garbage-collected, so the commit is provenance, not the verification mechanism | pure-Go object reader; go-git; commit hash in the citation |
+| 57 | The model reaches the graph, log, and lock only through the CLI; adapters ask for harness deny rules on `tm new`, tell the model never to touch the files, and require it to report any accidental access as a misconfiguration | every CLI invariant assumes the CLI is the only writer and the grader's isolation assumes the model cannot read verdict history except through `show --history`; a model that opens the files bypasses all of it silently | CLI-side enforcement (impossible: it cannot see who opened a file); trust the model; encrypted or obfuscated graph |
 
 ## 11. Trade-offs accepted
 
@@ -455,8 +508,8 @@ Draft decision rows:
 | M9 | citation grammar, hash, normalization, `rehash`, lint rules, golden and corpus regeneration | M8 |
 | M10 | source resolution: config file, converters, version check, fetch, git `HEAD` resolution, commit recording, log fields, `DRIFT` in every read | M9 |
 | M11 | `tm report` | M10 |
-| M12 | teacher skill: Source step, mapper delegation, errata section, setup reference file; grader `DRIFT` line | M10, M11 |
-| M13 | mapper agent: `teach-me-mapper.md`, tool scoping, `AGENTS.md` adapter row | M11, M12 |
+| M12 | teacher skill: Source step, planner delegation, errata section, setup reference file; grader `DRIFT` line | M10, M11 |
+| M13 | planner agent: `teach-me-planner.md`, tool scoping, `AGENTS.md` adapter row | M11, M12 |
 | Gate | end-to-end: a session from an empty directory through mapping, web and repo citations, drift, errata, and report | M9 to M13 |
 
 M8 is blocked by M7 so the v0.1.0 release is not derailed. The grammar change
