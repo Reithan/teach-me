@@ -469,10 +469,12 @@ Runtime lint checks the subset grammar only and links no Mermaid parser. Whether
 stateDiagram-v2
     direction TB
 
-    [*] --> Orient : tm new | tm load
-    Orient --> Orient : tm status, tm find, tm show
+    [*] --> Source : tm new
+    Source --> Orient : sources and TM_SRC_ROOT set
+    [*] --> Orient : tm load
+    Orient --> Orient : tm status, tm find, tm show, tm report
     Orient --> Map : frontier thin, or a prerequisite is missing
-    Map --> Orient : tm add, tm link. tm edit and tm drop only for concepts with no questions
+    Map --> Orient : planner writes tm add, tm link; teacher reviews via tm status
     Orient --> Untested : choose a concept
     Orient --> [*] : untested is empty
 
@@ -511,7 +513,23 @@ stateDiagram-v2
     }
 ```
 
-Two behaviors the CLI cannot enforce belong in the teacher's prompt. Teach questions target the diagnosed gap, not the scopes of the locked probes. The grader's spawn prompt carries the question ID and nothing about the user.
+Four behaviors the CLI cannot enforce belong in the teacher's prompt:
+
+1. Teach questions target the diagnosed gap, not the scopes of the locked probes.
+2. The grader's spawn prompt carries the question ID and nothing about the user.
+3. The no-memory rule: model knowledge may draft questions and explain during teaching, but it never becomes source. When no real source can be obtained, the teacher says so and stops. Nothing model-authored is stored as source.
+4. The file-access rule: the model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on those file patterns; the CLI cannot.
+
+The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and sets `TM_SRC_ROOT`. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and points at the setup reference.
+
+The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach-me-planner.md`). The teacher's spawn prompt carries the learning goal, the source locations, and the request scope: initial map, extension around a named concept, or errata against named concepts. For extension or errata the teacher passes `tm report <concept>` output so the planner sees the existing foundations. The planner returns one paragraph; the teacher reads the result through `tm status` and `tm show`, never through the planner's prose.
+
+**Errata** handling:
+
+- `DRIFT` on an ungraded question: `tm drop <qid>`, then `tm q --re <qid>` with a fresh citation. The learner is asked again.
+- `DRIFT` on a passed concept: if the new range hashes the same, `tm recite`. Otherwise spawn a grader with the concept ID and the instruction to run `tm check --drift`; the grader decides `keep` or `reopen`. The teacher never decides whether a pass survives a source change.
+- A source replaced or a learner correction revealing a missing prerequisite: spawn the planner in errata mode for the affected concepts.
+- A learner who disputes a verdict: not errata. Re-probe with `--re`; the grader decides.
 
 ## 13. Configuration
 
