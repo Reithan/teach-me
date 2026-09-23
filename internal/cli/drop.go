@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -58,12 +59,9 @@ func dropRun(ctx *Context) int {
 			}
 		}
 
-		// Not a concept (q or a node) → exit 1.
+		// Question ID: handle drift-drop path (§6, §7 drop-question row, §8 accounting).
 		if !allConcepts[concept] {
-			return nil, nil, &ops.Refusal{
-				Err:  concept + " is not a concept",
-				Exit: 1,
-			}
+			return dropQuestionDrift(g, s, concept, usageLine)
 		}
 
 		// Passed concept → exit 1.
@@ -158,4 +156,120 @@ func dropRun(ctx *Context) int {
 	}
 
 	return runMutation(ctx, apply)
+}
+
+// dropQuestionDrift implements the question drift-drop path:
+//
+//	tm drop <qid>
+//
+// Accepted only when:
+//   - qid is an ungraded question (no answer, or pending answer)
+//   - the question's citation has drifted (cite.CheckDrift true)
+//
+// Refuses with:
+//   - "question is already graded" (exit 1) if a non-pending answer exists
+//   - "citation has not drifted" (exit 1) if no drift detected
+//
+// The question remains in the graph but gains an "unclear" answer node so
+// that `tm q --re <qid>` works via the existing ProbeReplacesUnclear path.
+// Batch accounting treats the drop as an unclear verdict with no verdict
+// consequences (no fail-count increment, §8.8).
+func dropQuestionDrift(
+	g *graph.Graph,
+	s *state.State,
+	qid string,
+	usageLine string,
+) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
+	// Find the question node.
+	var qn *graph.QuestionNode
+	for _, item := range g.TestingItems {
+		if item.Q != nil && item.Q.ID == qid {
+			qn = item.Q
+			break
+		}
+	}
+	if qn == nil {
+		// ID exists but is not a question (e.g. an answer node). Refuse.
+		return nil, nil, &ops.Refusal{
+			Err:  qid + " is not a concept or question",
+			Fix:  usageLine,
+			Exit: 1,
+		}
+	}
+
+	// Refuse if the question already has a graded answer (§7 drop-question row).
+	an := s.AnswerFor(qid)
+	if an != nil && an.Class != "pending" {
+		return nil, nil, &ops.Refusal{
+			Err:  qid + " is already graded",
+			Exit: 1,
+		}
+	}
+
+	// Refuse if the citation has not drifted (§7 drop-question row).
+	srcRoot := s.Cfg().SrcRoot
+	drifted, driftErr := cite.CheckDrift(qn.Cite, srcRoot)
+	if driftErr != nil {
+		// Unresolvable citation: keep existing behavior, do not refuse as drift.
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("%s citation is unresolvable: %v", qid, driftErr),
+			Exit: 1,
+		}
+	}
+	if !drifted {
+		return nil, nil, &ops.Refusal{
+			Err:  qid + " citation has not drifted",
+			Fix:  "tm drop is for drifted questions; use tm grade for graded ones",
+			Exit: 1,
+		}
+	}
+
+	// Add an "unclear" answer node so the existing --re path works.
+	// The answer ID mirrors the question number (a<N> for q<N>).
+	qN := graph.QuestionN(qid)
+	aid := fmt.Sprintf("a%d", qN)
+
+	newG := *g
+	newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
+		A: &graph.AnswerNode{
+			ID:    aid,
+			Class: "unclear",
+			Label: "dropped: citation drifted",
+		},
+	})
+	newG.Edges = append(append([]*graph.Edge{}, g.Edges...), &graph.Edge{
+		From: qid,
+		To:   aid,
+	})
+
+	// Build event.
+	nodeObj := map[string]any{
+		"scope": qn.Scope,
+		"src":   qn.Cite,
+		"class": qn.Class,
+	}
+
+	// Collect edges touching the question for the event edges field.
+	var edgeList []map[string]any
+	for _, e := range g.Edges {
+		if e.From == qid || e.To == qid {
+			edgeList = append(edgeList, map[string]any{
+				"from": e.From,
+				"to":   e.To,
+				"rel":  e.Label,
+			})
+		}
+	}
+	if edgeList == nil {
+		edgeList = []map[string]any{}
+	}
+
+	row := eventlog.NewRow("drop", map[string]any{
+		"id":     qid,
+		"node":   nodeObj,
+		"edges":  edgeList,
+		"reason": "drift",
+	})
+
+	return &newG, []eventlog.Row{row}, nil
 }
