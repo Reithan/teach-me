@@ -86,7 +86,7 @@ func reportRun(ctx *Context) int {
 			if err != nil {
 				return "", false, err
 			}
-			drifted, _ := cite.CheckDrift(citeStr, root)
+			drifted, _ := checkCiteDrift(citeStr, root)
 			return text, drifted, nil
 		}
 	}
