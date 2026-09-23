@@ -339,7 +339,7 @@ Teach verdicts control the exit from teaching. They never count toward the conce
 
 Questions and answers stay in the graph until the concept passes. By construction, every question under a passing concept has been answered and graded. Nothing leaves the graph without a log event.
 
-A question dropped for drift (section 6) stays in the graph and receives an `unclear` answer node labeled `dropped: citation drifted`. `--re` targets it like any unclear probe (steps 5 or 7 above), and step 2 skips it because the tombstone label excludes it from the root-probe-unclear check. The drop carries none of the verdict consequences of a genuine unclear: it does not increment the failed-probe count and does not trigger step 2. Graded questions are never touched by `tm drop`; their verdicts were recorded against the text in the log.
+A question dropped for drift (section 6) stays in the graph and receives an `unclear` answer node labeled `dropped: citation drifted`. `--re` targets it like any unclear probe (steps 5 or 7 above), and step 2 skips it because the tombstone label excludes it from the root-probe-unclear check. The drop carries none of the verdict consequences of a genuine unclear: it does not increment the failed-probe count. Graded questions are never touched by `tm drop`; their verdicts were recorded against the text in the log.
 
 ## 9. Grader protocol
 
