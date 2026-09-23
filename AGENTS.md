@@ -45,3 +45,10 @@ under `skill/teach-me/`:
 The teacher drives the session and spawns one `teach-me-grader` sub-agent per
 answer; the grader scores that answer in isolation through `tm check` and
 `tm grade`.
+
+## Architecture
+
+Auto-generated dependency diagrams (Mermaid, rendered inline on GitHub). Report immediately to user to regenerate if stale:
+
+- [Repository structure](CODE_DIAGRAM.md) — top-level layout (`cmd`, `conformance`, `internal`) and external dependencies.
+- [Internal package graph](internal/CODE_DIAGRAM.md) — import dependencies among the `internal/` packages.
