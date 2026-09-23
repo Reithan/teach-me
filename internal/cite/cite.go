@@ -222,7 +222,7 @@ func ReadRange(c Citation, srcRoot string) (string, error) {
 	// ReadRange is a low-level file reader; callers that need URI resolution
 	// must use source.Resolver.Read instead.
 	if IsURI(c.File) {
-		return "", fmt.Errorf("citation %q: URI resolution requires source.Resolver", c.File)
+		return "", fmt.Errorf("citation %q: URI locator cannot be read here", c.File)
 	}
 
 	path := Resolve(c, srcRoot)
@@ -277,7 +277,7 @@ func HashCitation(citeStr, srcRoot string) (string, error) {
 		// hash URI citations must use source.Resolver.HashCitation instead.
 		// Return the encoded form unchanged if a hash is already present.
 		if c.Hash == "" {
-			return "", fmt.Errorf("citation %q: URI locator requires source.Resolver; use source.Resolver.HashCitation to hash URIs", citeStr)
+			return "", fmt.Errorf("citation %q: URI locator cannot be hashed here; use tm add or tm q to hash URI citations", citeStr)
 		}
 		return encoded, nil
 	}
