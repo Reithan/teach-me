@@ -213,6 +213,19 @@ var Table = []Command{
 		Run:          lintRun,
 	},
 	{
+		Name: "report",
+		PosArgs: []PosArg{
+			{Name: "<concept>"},
+		},
+		Flags: []FlagSpec{
+			{Name: "hops", TakesValue: true, ValueName: "N"},
+			{Name: "fulltext"},
+			{Name: "passed-only"},
+		},
+		ForbidGrader: true,
+		Run:          reportRun,
+	},
+	{
 		Name: "rehash",
 		PosArgs: []PosArg{
 			{Name: "[<file>]", Optional: true},
