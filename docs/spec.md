@@ -822,9 +822,9 @@ Hooks can be skipped with `--no-verify`. That is acceptable for human users, and
 2. After merge, the owner tags `main` with `v<VERSION>` and pushes the tag. Nothing else triggers a release.
 3. The workflow fails unless the tag equals `v` plus the contents of `VERSION`, then runs every `ci.yml` job.
 4. GoReleaser v2 builds `./cmd/tm` as `tm` for linux, darwin, and windows on amd64 and arm64, with `CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`, and `mod_timestamp` set to the commit time so builds are reproducible.
-5. Archives are `tar.gz`, and `zip` on Windows, named `tm_<version>_<os>_<arch>`. Each holds the binary, `README.md`, `docs/spec.md`, and `skill/teach-me/SKILL.md`, so a release always ships the skill file that matches it.
+5. Archives are `tar.gz`, and `zip` on Windows, named `tm_<version>_<os>_<arch>`. Each holds the binary, `README.md`, `docs/spec.md`, and the whole `skill/teach-me/` tree (`SKILL.md`, `agents/`, `reference/`), so a release always ships the adapters that match it.
 6. GoReleaser writes `checksums.txt` and publishes the GitHub release with notes grouped by Conventional Commit type. Tags with a prerelease suffix publish as prereleases.
-7. `actions/attest-build-provenance` attests every archive. The workflow needs `contents: write`, `id-token: write`, and `attestations: write`.
+7. `actions/attest-build-provenance` attests every archive; the step is skipped while the repository is private, since GitHub refuses attestations there. The workflow needs `contents: write`, `id-token: write`, and `attestations: write`.
 
 Install is a file copy from the release archive, or `go install <module>/cmd/tm@v<VERSION>`. While the repository is private, releases are visible only to the owner and `go install` needs `GOPRIVATE` set for the module.
 

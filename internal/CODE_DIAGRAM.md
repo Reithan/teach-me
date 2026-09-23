@@ -32,6 +32,8 @@ graph LR
         lint_b504838c["lint"]:::has_deps
         lockfile_649ab61f["lockfile"]:::has_deps
         ops_c62973cc["ops"]:::has_deps
+        report_a27297bd["report"]:::has_deps
+        source_828d338a["source"]:::has_deps
         state_aa4a5f81["state"]:::has_deps
         version_c692273d["version"]:::has_deps
     end
@@ -47,7 +49,10 @@ graph LR
     cli_2bd8e9c9 -.-> eventlog_f5caa859
     cli_2bd8e9c9 -.-> graph_29a184b6
     cli_2bd8e9c9 -.-> lint_b504838c
+    cli_2bd8e9c9 -.-> lockfile_649ab61f
     cli_2bd8e9c9 -.-> ops_c62973cc
+    cli_2bd8e9c9 -.-> report_a27297bd
+    cli_2bd8e9c9 -.-> source_828d338a
     cli_2bd8e9c9 -.-> state_aa4a5f81
     cli_2bd8e9c9 -.-> version_c692273d
     docver_6eba3a90 -.-> version_c692273d
@@ -62,13 +67,18 @@ graph LR
     ops_c62973cc -.-> lint_b504838c
     ops_c62973cc -.-> lockfile_649ab61f
     ops_c62973cc -.-> state_aa4a5f81
+    report_a27297bd -.-> cite_f7064cd7
+    report_a27297bd -.-> graph_29a184b6
+    report_a27297bd -.-> state_aa4a5f81
+    source_828d338a -.-> cite_f7064cd7
     state_aa4a5f81 -.-> cite_f7064cd7
     state_aa4a5f81 -.-> graph_29a184b6
     tools_corpus_0198e50f -.-> graph_29a184b6
     tools_corpus_0198e50f -.-> tools_gen_568ea8cb
+    tools_gen_568ea8cb -.-> cite_f7064cd7
     tools_gen_568ea8cb -.-> graph_29a184b6
 
     %% External dependencies
-    external["External Dependencies<br/><br/>bufio<br/>bytes<br/>embed<br/>encoding/json<br/>flag<br/>fmt<br/>io<br/>math/rand<br/>os<br/>path/filepath<br/>regexp<br/>sort<br/>strings<br/>time<br/>unicode/utf8"]:::external
+    external["External Dependencies<br/><br/>bufio<br/>bytes<br/>context<br/>crypto/sha256<br/>embed<br/>encoding/hex<br/>encoding/json<br/>errors<br/>flag<br/>fmt<br/>io<br/>math/rand<br/>net/http<br/>os<br/>os/exec<br/>path/filepath<br/>regexp<br/>sort<br/>strconv<br/>strings<br/>sync<br/>time<br/>unicode/utf8"]:::external
     __3a52ce78 ~~~ external
 ```
