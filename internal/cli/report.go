@@ -84,12 +84,7 @@ func reportRun(ctx *Context) int {
 			return 3
 		}
 	} else {
-		concepts, err = report.WalkAll(g, s, hops)
-		if err != nil {
-			ctx.ErrMsg = err.Error()
-			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-			return 3
-		}
+		concepts = report.WalkAll(g, s, hops)
 	}
 
 	opts := report.Options{

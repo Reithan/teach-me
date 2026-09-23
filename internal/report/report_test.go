@@ -134,20 +134,20 @@ func TestWalk(t *testing.T) {
 			g := buildGraph(tc.passed, tc.untested, tc.edges)
 			s := state.LoadFromGraph(g, state.Config{})
 			var got []report.ConceptInfo
-			var err error
 			if tc.allMode {
-				got, err = report.WalkAll(g, s, tc.hops)
+				got = report.WalkAll(g, s, tc.hops)
 			} else {
+				var err error
 				got, err = report.Walk(g, s, tc.start, tc.hops)
-			}
-			if tc.want == nil {
-				if err == nil {
-					t.Fatal("expected error, got nil")
+				if tc.want == nil {
+					if err == nil {
+						t.Fatal("expected error, got nil")
+					}
+					return
 				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
 			}
 			if strings.Join(ids(got), ",") != strings.Join(tc.want, ",") {
 				t.Errorf("got %v, want %v", ids(got), tc.want)

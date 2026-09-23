@@ -274,7 +274,7 @@ func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptIn
 //
 // Output is in topological order with roots first, declaration-order
 // tie-breaking, matching the ordering Walk produces.
-func WalkAll(g *graph.Graph, s *state.State, depth int) ([]ConceptInfo, error) {
+func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
 	const defaultDepth = 5
 	if depth < 0 {
 		depth = defaultDepth
@@ -330,7 +330,7 @@ func WalkAll(g *graph.Graph, s *state.State, depth int) ([]ConceptInfo, error) {
 
 	decl := buildDeclOrder(g, visited)
 	order := kahnSort(visited, decl, g, all)
-	return deriveConceptInfos(order, all, g, s), nil
+	return deriveConceptInfos(order, all, g, s)
 }
 
 // ── Markdown rendering ────────────────────────────────────────────────────────
