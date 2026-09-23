@@ -73,7 +73,7 @@ func TestM5Lifecycle(t *testing.T) {
 
 	// ── 2. tm add a ───────────────────────────────────────────────────────────
 	{
-		_, errOut, code := run(t, "add", "a", "src.txt:1-5", "concept a scope")
+		_, errOut, code := run(t, "add", "a", "f5ca3875b379@src.txt:1-5", "concept a scope")
 		if code != 0 {
 			t.Fatalf("add a: want exit 0, got %d; stderr:\n%s", code, errOut)
 		}
@@ -86,7 +86,7 @@ func TestM5Lifecycle(t *testing.T) {
 
 	// ── 3. tm add b --parent a:requires ──────────────────────────────────────
 	{
-		_, errOut, code := run(t, "add", "b", "src.txt:1-5", "concept b scope", "--parent", "a:requires")
+		_, errOut, code := run(t, "add", "b", "f5ca3875b379@src.txt:1-5", "concept b scope", "--parent", "a:requires")
 		if code != 0 {
 			t.Fatalf("add b: want exit 0, got %d; stderr:\n%s", code, errOut)
 		}
@@ -108,7 +108,7 @@ func TestM5Lifecycle(t *testing.T) {
 
 	// ── 4. tm add c ───────────────────────────────────────────────────────────
 	{
-		_, errOut, code := run(t, "add", "c", "src.txt:1-5", "concept c scope")
+		_, errOut, code := run(t, "add", "c", "f5ca3875b379@src.txt:1-5", "concept c scope")
 		if code != 0 {
 			t.Fatalf("add c: want exit 0, got %d; stderr:\n%s", code, errOut)
 		}
@@ -160,9 +160,9 @@ func TestM5Lifecycle(t *testing.T) {
 		}
 	}
 
-	// ── 8. tm edit c --src src.txt:3-7 ───────────────────────────────────────
+	// ── 8. tm edit c --src b8ea715cd2ec@src.txt:3-7 ───────────────────────────────────────
 	{
-		_, errOut, code := run(t, "edit", "c", "revised c scope", "--src", "src.txt:3-7")
+		_, errOut, code := run(t, "edit", "c", "revised c scope", "--src", "b8ea715cd2ec@src.txt:3-7")
 		if code != 0 {
 			t.Fatalf("edit c src: want exit 0, got %d; stderr:\n%s", code, errOut)
 		}
@@ -171,8 +171,8 @@ func TestM5Lifecycle(t *testing.T) {
 		g, _ := graph.Parse(data)
 		for _, cn := range g.UntestedConcepts {
 			if cn.ID == "c" {
-				if len(cn.Cites) != 1 || cn.Cites[0] != "src.txt:3-7" {
-					t.Errorf("edit c --src: cites want [src.txt:3-7], got %v", cn.Cites)
+				if len(cn.Cites) != 1 || cn.Cites[0] != "b8ea715cd2ec@src.txt:3-7" {
+					t.Errorf("edit c --src: cites want [b8ea715cd2ec@src.txt:3-7], got %v", cn.Cites)
 				}
 				if cn.Scope != "revised c scope" {
 					t.Errorf("edit c --src: scope want 'revised c scope', got %q", cn.Scope)

@@ -282,6 +282,10 @@ func askEmitLines(ctx *Context, batch string, questions []*graph.QuestionNode, s
 		}
 		_, _ = fmt.Fprintln(ctx.Out, line)
 		if wantSrcText {
+			// DRIFT <cite> — printed when stored hash no longer matches file content.
+			if drifted, driftErr := cite.CheckDrift(q.Cite, srcRoot); driftErr == nil && drifted {
+				_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", q.Cite)
+			}
 			cit, citErr := cite.Parse(q.Cite)
 			if citErr == nil {
 				text, readErr := cite.ReadRange(cit, srcRoot)

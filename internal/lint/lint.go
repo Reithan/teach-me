@@ -767,9 +767,11 @@ func check10(g *graph.Graph, concepts map[string]bool) []Violation {
 	return viols
 }
 
-// check11 verifies that every citation names an existing file and an
-// in-bounds line range.
-func check11(g *graph.Graph, cfg Config) []Violation {
+// check11 is a static citation check (§11): it verifies citation syntax,
+// requires a hash on every citation, and rejects raw '"' in locators.
+// No file I/O is performed; file existence and bounds are checked at
+// write time (add/q/edit) and via tm lint --drift.
+func check11(g *graph.Graph, _ Config) []Violation {
 	var viols []Violation
 
 	checkCite := func(prefix, citeStr string) {
@@ -778,9 +780,11 @@ func check11(g *graph.Graph, cfg Config) []Violation {
 			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: %v", prefix, err)})
 			return
 		}
-		if _, err := cite.ReadRange(c, cfg.SrcRoot); err != nil {
-			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: %v", prefix, err)})
+		// §11: every citation must carry a content hash.
+		if c.Hash == "" {
+			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: citation %q is missing a hash; use tm rehash or supply <hash>@<locator>:START-END", prefix, citeStr)})
 		}
+		// §11: raw '"' in a locator is rejected by Parse, so it cannot reach here.
 	}
 
 	for _, c := range g.PassedConcepts {

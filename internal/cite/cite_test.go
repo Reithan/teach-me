@@ -17,6 +17,7 @@ func TestParse(t *testing.T) {
 		want    cite.Citation
 		wantErr string
 	}{
+		// Legacy hashless form (backward compatibility).
 		{
 			name:  "simple path",
 			input: "raft.txt:120-188",
@@ -32,6 +33,38 @@ func TestParse(t *testing.T) {
 			input: "foo.txt:5-5",
 			want:  cite.Citation{File: "foo.txt", Start: 5, End: 5},
 		},
+		// New hashed form.
+		{
+			name:  "hashed relative path",
+			input: "3f9a1c2b7e0d@raft.txt:202-215",
+			want:  cite.Citation{Hash: "3f9a1c2b7e0d", File: "raft.txt", Start: 202, End: 215},
+		},
+		{
+			name:  "hashed absolute path",
+			input: "3f9a1c2b7e0d@/home/me/src/foo.go:10-24",
+			want:  cite.Citation{Hash: "3f9a1c2b7e0d", File: "/home/me/src/foo.go", Start: 10, End: 24},
+		},
+		{
+			name:  "hashed URI",
+			input: "3f9a1c2b7e0d@https://example.com/doc:88-104",
+			want:  cite.Citation{Hash: "3f9a1c2b7e0d", File: "https://example.com/doc", Start: 88, End: 104},
+		},
+		{
+			name:  "hashed URI with @ in URL",
+			input: "3f9a1c2b7e0d@https://user@example.com/doc:1-5",
+			want:  cite.Citation{Hash: "3f9a1c2b7e0d", File: "https://user@example.com/doc", Start: 1, End: 5},
+		},
+		{
+			name:  "hashed URI with port",
+			input: "3f9a1c2b7e0d@https://example.com:8080/doc:1-5",
+			want:  cite.Citation{Hash: "3f9a1c2b7e0d", File: "https://example.com:8080/doc", Start: 1, End: 5},
+		},
+		{
+			name:  "hashed path with slash",
+			input: "3f9a1c2b7e0d@src/raft.txt:1-2",
+			want:  cite.Citation{Hash: "3f9a1c2b7e0d", File: "src/raft.txt", Start: 1, End: 2},
+		},
+		// Error cases.
 		{
 			name:    "no colon",
 			input:   "raft.txt",
@@ -80,7 +113,12 @@ func TestParse(t *testing.T) {
 		{
 			name:    "file with newline",
 			input:   "foo\nbar.txt:1-2",
-			wantErr: `citation "foo\nbar.txt:1-2": file contains newline`,
+			wantErr: `citation "foo\nbar.txt:1-2": file contains newline or carriage return`,
+		},
+		{
+			name:    "locator with raw double-quote",
+			input:   `my"file.txt:1-2`,
+			wantErr: `citation "my\"file.txt:1-2": locator contains raw "; use %22`,
 		},
 	}
 
@@ -102,6 +140,202 @@ func TestParse(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Fatalf("Parse(%q): got %+v, want %+v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFormat(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		c    cite.Citation
+		want string
+	}{
+		{
+			name: "hashless",
+			c:    cite.Citation{File: "raft.txt", Start: 120, End: 188},
+			want: "raft.txt:120-188",
+		},
+		{
+			name: "hashed",
+			c:    cite.Citation{Hash: "3f9a1c2b7e0d", File: "raft.txt", Start: 202, End: 215},
+			want: "3f9a1c2b7e0d@raft.txt:202-215",
+		},
+		{
+			name: "hashed URI",
+			c:    cite.Citation{Hash: "3f9a1c2b7e0d", File: "https://example.com/doc", Start: 1, End: 5},
+			want: "3f9a1c2b7e0d@https://example.com/doc:1-5",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := cite.Format(tc.c)
+			if got != tc.want {
+				t.Fatalf("Format(%+v) = %q, want %q", tc.c, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalize(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "plain text unchanged",
+			input: "line one\nline two\nline three",
+			want:  "line one\nline two\nline three",
+		},
+		{
+			name:  "CRLF converted to LF",
+			input: "line one\r\nline two\r\nline three",
+			want:  "line one\nline two\nline three",
+		},
+		{
+			name:  "trailing whitespace stripped per line",
+			input: "line one  \nline two\t\nline three ",
+			want:  "line one\nline two\nline three",
+		},
+		{
+			name:  "trailing newline removed",
+			input: "line one\nline two\n",
+			want:  "line one\nline two",
+		},
+		{
+			name:  "internal whitespace preserved",
+			input: "  indented line\n\tTabbed line\n  another",
+			want:  "  indented line\n\tTabbed line\n  another",
+		},
+		{
+			name:  "CRLF plus trailing spaces",
+			input: "hello  \r\nworld\t\r\n",
+			want:  "hello\nworld",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "single line no trailing newline",
+			input: "hello",
+			want:  "hello",
+		},
+		{
+			// TrimSuffix removes at most one trailing LF; internal blank lines
+			// and additional trailing newlines are preserved (unlike TrimRight).
+			name:  "multiple trailing newlines: only one removed",
+			input: "line one\n\nline two\n\n",
+			want:  "line one\n\nline two\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := cite.Normalize(tc.input)
+			if got != tc.want {
+				t.Fatalf("Normalize(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestHash(t *testing.T) {
+	t.Parallel()
+
+	// Hash must be exactly 12 lowercase hex characters.
+	h := cite.Hash("hello world")
+	if len(h) != 12 {
+		t.Fatalf("Hash: got length %d, want 12", len(h))
+	}
+	for _, c := range h {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			t.Fatalf("Hash: got non-hex char %q in %q", c, h)
+		}
+	}
+
+	// Hash must be deterministic.
+	h2 := cite.Hash("hello world")
+	if h != h2 {
+		t.Fatalf("Hash: not deterministic: %q vs %q", h, h2)
+	}
+
+	// Different inputs must produce different hashes (with overwhelming probability).
+	h3 := cite.Hash("goodbye world")
+	if h == h3 {
+		t.Fatalf("Hash: different inputs produced same hash %q", h)
+	}
+
+	// Known value: SHA-256("") first 12 hex chars.
+	// sha256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+	emptyHash := cite.Hash("")
+	if emptyHash != "e3b0c44298fc" {
+		t.Fatalf("Hash(\"\") = %q, want %q", emptyHash, "e3b0c44298fc")
+	}
+}
+
+func TestIsURI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"https://example.com/doc", true},
+		{"http://example.com/doc", true},
+		{"ftp://example.com/file", true},
+		{"file:///home/user/doc", true},
+		{"git+https://example.com/repo", true},
+		{"raft.txt", false},
+		{"/absolute/path", false},
+		{"relative/path", false},
+		{"C:/windows/path", false},
+		{"", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			got := cite.IsURI(tc.input)
+			if got != tc.want {
+				t.Fatalf("IsURI(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsAbsPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"/absolute/path", true},
+		{"/", true},
+		{"C:/windows/path", true},
+		{"C:\\windows\\path", true},
+		{"relative/path", false},
+		{"raft.txt", false},
+		{"https://example.com", false},
+		{"", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			got := cite.IsAbsPath(tc.input)
+			if got != tc.want {
+				t.Fatalf("IsAbsPath(%q) = %v, want %v", tc.input, got, tc.want)
 			}
 		})
 	}
@@ -139,6 +373,24 @@ func TestResolve(t *testing.T) {
 		c := cite.Citation{File: "src/raft.txt", Start: 1, End: 5}
 		got := cite.Resolve(c, "/root")
 		want := filepath.Join("/root", "src", "raft.txt")
+		if got != want {
+			t.Fatalf("Resolve: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("absolute path returned as-is", func(t *testing.T) {
+		c := cite.Citation{File: "/home/me/doc.txt", Start: 1, End: 5}
+		got := cite.Resolve(c, "/root")
+		want := "/home/me/doc.txt"
+		if got != want {
+			t.Fatalf("Resolve: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("URI returned as-is", func(t *testing.T) {
+		c := cite.Citation{File: "https://example.com/doc", Start: 1, End: 5}
+		got := cite.Resolve(c, "/root")
+		want := "https://example.com/doc"
 		if got != want {
 			t.Fatalf("Resolve: got %q, want %q", got, want)
 		}
@@ -237,6 +489,228 @@ func TestReadRange(t *testing.T) {
 		_, err := cite.ReadRange(c, dir)
 		if err == nil {
 			t.Fatal("expected error for start < 1, got nil")
+		}
+	})
+
+	t.Run("URI returns error", func(t *testing.T) {
+		c := cite.Citation{File: "https://example.com/doc", Start: 1, End: 5}
+		_, err := cite.ReadRange(c, "/any/root")
+		if err == nil {
+			t.Fatal("expected error for URI citation, got nil")
+		}
+	})
+}
+
+func TestHashCitation(t *testing.T) {
+	t.Parallel()
+
+	writeFile := func(t *testing.T, dir, name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	t.Run("hashless form gets hashed", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "src.txt", "line 1\nline 2\nline 3\n")
+		got, err := cite.HashCitation("src.txt:1-3", dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Verify the result has the right format and correct hash.
+		c, parseErr := cite.Parse(got)
+		if parseErr != nil {
+			t.Fatalf("Parse result %q: %v", got, parseErr)
+		}
+		if c.Hash == "" {
+			t.Fatalf("HashCitation: result has no hash: %q", got)
+		}
+		if c.File != "src.txt" || c.Start != 1 || c.End != 3 {
+			t.Fatalf("HashCitation: unexpected citation: %+v", c)
+		}
+		// Verify hash is correct.
+		text, _ := cite.ReadRange(cite.Citation{File: "src.txt", Start: 1, End: 3}, dir)
+		want := cite.Hash(text)
+		if c.Hash != want {
+			t.Fatalf("HashCitation: hash %q, want %q", c.Hash, want)
+		}
+	})
+
+	t.Run("matching hash accepted", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "src.txt", "line 1\nline 2\nline 3\n")
+		text := "line 1\nline 2\nline 3"
+		h := cite.Hash(text)
+		citeStr := h + "@src.txt:1-3"
+		got, err := cite.HashCitation(citeStr, dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != citeStr {
+			t.Fatalf("HashCitation: got %q, want %q", got, citeStr)
+		}
+	})
+
+	t.Run("hash mismatch returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "src.txt", "line 1\nline 2\nline 3\n")
+		citeStr := "000000000000@src.txt:1-3"
+		_, err := cite.HashCitation(citeStr, dir)
+		if err == nil {
+			t.Fatal("expected error for hash mismatch, got nil")
+		}
+	})
+
+	t.Run("URI with hash accepted as-is", func(t *testing.T) {
+		citeStr := "3f9a1c2b7e0d@https://example.com/doc:1-5"
+		got, err := cite.HashCitation(citeStr, "/any")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != citeStr {
+			t.Fatalf("HashCitation: got %q, want %q", got, citeStr)
+		}
+	})
+
+	t.Run("URI without hash refused", func(t *testing.T) {
+		_, err := cite.HashCitation("https://example.com/doc:1-5", "/any")
+		if err == nil {
+			t.Fatal("expected error for URI without hash, got nil")
+		}
+	})
+
+	t.Run("file with double-quote in name percent-encoded", func(t *testing.T) {
+		// A file named a"b.txt must be stored as a%22b.txt in the citation
+		// because raw '"' is the Mermaid label delimiter.
+		dir := t.TempDir()
+		content := "line 1\nline 2\nline 3\n"
+		fname := `a"b.txt`
+		if err := os.WriteFile(filepath.Join(dir, fname), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		// Pass the raw name; HashCitation must encode it.
+		got, err := cite.HashCitation(`a"b.txt:1-3`, dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// The stored locator must use %22, not a raw quote.
+		c, parseErr := cite.Parse(got)
+		if parseErr != nil {
+			t.Fatalf("Parse result %q: %v", got, parseErr)
+		}
+		if c.File != "a%22b.txt" {
+			t.Errorf("locator: got %q, want %q", c.File, "a%22b.txt")
+		}
+		// Resolve must decode %22 back to '"' so the file can be read.
+		resolved := cite.Resolve(c, dir)
+		wantResolved := filepath.Join(dir, fname)
+		if resolved != wantResolved {
+			t.Errorf("Resolve: got %q, want %q", resolved, wantResolved)
+		}
+		// The hash must match a fresh HashCitation call (idempotent).
+		got2, err2 := cite.HashCitation(got, dir)
+		if err2 != nil {
+			t.Fatalf("second HashCitation: %v", err2)
+		}
+		if got2 != got {
+			t.Errorf("HashCitation idempotent: got %q, want %q", got2, got)
+		}
+	})
+}
+
+func TestCheckDrift(t *testing.T) {
+	t.Parallel()
+
+	writeFile := func(t *testing.T, dir, name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	t.Run("no drift", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "src.txt", "hello\nworld\n")
+		text := "hello\nworld"
+		h := cite.Hash(text)
+		citeStr := h + "@src.txt:1-2"
+		drifted, err := cite.CheckDrift(citeStr, dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if drifted {
+			t.Fatal("expected no drift, got drifted=true")
+		}
+	})
+
+	t.Run("drift detected", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "src.txt", "changed\nworld\n")
+		citeStr := "000000000000@src.txt:1-2"
+		drifted, err := cite.CheckDrift(citeStr, dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !drifted {
+			t.Fatal("expected drift, got drifted=false")
+		}
+	})
+
+	t.Run("hashless citation never drifts", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "src.txt", "hello\n")
+		drifted, err := cite.CheckDrift("src.txt:1-1", dir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if drifted {
+			t.Fatal("hashless citation should never report drift")
+		}
+	})
+
+	t.Run("URI never drifts in M9", func(t *testing.T) {
+		drifted, err := cite.CheckDrift("3f9a1c2b7e0d@https://example.com/doc:1-5", "/any")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if drifted {
+			t.Fatal("URI citation should not drift in M9")
+		}
+	})
+
+	t.Run("parse error returns error", func(t *testing.T) {
+		_, err := cite.CheckDrift("invalid-not-a-citation", "/any")
+		if err == nil {
+			t.Fatal("expected error for invalid citation, got nil")
+		}
+	})
+
+	t.Run("missing file returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		h := "000000000000"
+		_, err := cite.CheckDrift(h+"@nonexistent.txt:1-5", dir)
+		if err == nil {
+			t.Fatal("expected error for missing file, got nil")
+		}
+	})
+}
+
+func TestHashCitation_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("parse error returns error", func(t *testing.T) {
+		_, err := cite.HashCitation("invalid-not-a-citation", "/any")
+		if err == nil {
+			t.Fatal("expected error for invalid citation, got nil")
+		}
+	})
+
+	t.Run("missing file returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err := cite.HashCitation("nonexistent.txt:1-5", dir)
+		if err == nil {
+			t.Fatal("expected error for missing file, got nil")
 		}
 	})
 }

@@ -901,7 +901,7 @@ func TestUsageLines(t *testing.T) {
 // ── helpers shared by check/ask tests ────────────────────────────────────────
 
 // setupCheckSrcRoot creates a temp dir with src.txt (5 numbered lines) and
-// sets TM_SRC_ROOT so citations like src.txt:1-3 resolve correctly.
+// sets TM_SRC_ROOT so citations like cd3f27ccd149@src.txt:1-3 resolve correctly.
 func setupCheckSrcRoot(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
@@ -1007,7 +1007,7 @@ func TestCheck_ProbeHappyPath(t *testing.T) {
 	// Verify the full payload structure.
 	wantLines := []string{
 		"Q: What does the source say",
-		"SRC src.txt:1-3",
+		"SRC cd3f27ccd149@src.txt:1-3",
 		"  line 1",
 		"  line 2",
 		"  line 3",
@@ -1050,11 +1050,11 @@ func TestCheck_TeachHappyPath(t *testing.T) {
 
 	wantLines := []string{
 		"Q: Teach scope question",
-		"SRC src.txt:1-3",
+		"SRC cd3f27ccd149@src.txt:1-3",
 		"  line 1",
 		"  line 2",
 		"  line 3",
-		"TARGET q1: Probe scope question | src.txt:1-3",
+		"TARGET q1: Probe scope question | cd3f27ccd149@src.txt:1-3",
 		"GAP: missed the term check",
 		"A: pending teach answer",
 		"pass: A shows the scoped understanding and agrees with SRC.",
@@ -1177,7 +1177,7 @@ func TestAsk_TeachBatch_Raft(t *testing.T) {
 	if lines[0] != "teach_3" {
 		t.Errorf("first line: want 'teach_3', got %q", lines[0])
 	}
-	wantQ6 := "q6 | Why a follower rejects on term mismatch | raft.txt:216-228 | re q2"
+	wantQ6 := "q6 | Why a follower rejects on term mismatch | be8d8fe59060@raft.txt:216-228 | re q2"
 	if lines[1] != wantQ6 {
 		t.Errorf("second line: want %q, got %q", wantQ6, lines[1])
 	}
@@ -1235,7 +1235,7 @@ func TestAsk_ProbeBatch(t *testing.T) {
 	if lines[0] != "probe_1" {
 		t.Errorf("first line: want 'probe_1', got %q", lines[0])
 	}
-	wantQ2 := "q2 | Second probe question | src.txt:2-4"
+	wantQ2 := "q2 | Second probe question | 25070e52a6ae@src.txt:2-4"
 	if lines[1] != wantQ2 {
 		t.Errorf("second line: want %q, got %q", wantQ2, lines[1])
 	}
@@ -1277,8 +1277,8 @@ func TestAsk_FormatJSON(t *testing.T) {
 	if q.Scope != "Why a follower rejects on term mismatch" {
 		t.Errorf("q.scope: want 'Why a follower rejects...', got %q", q.Scope)
 	}
-	if q.Cite != "raft.txt:216-228" {
-		t.Errorf("q.cite: want 'raft.txt:216-228', got %q", q.Cite)
+	if q.Cite != "be8d8fe59060@raft.txt:216-228" {
+		t.Errorf("q.cite: want 'be8d8fe59060@raft.txt:216-228', got %q", q.Cite)
 	}
 	if q.Re != "q2" {
 		t.Errorf("q.re: want 'q2', got %q", q.Re)
@@ -1296,7 +1296,7 @@ func TestAsk_SrcText(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
-	// q2 is unanswered; its citation is src.txt:2-4 → lines 2,3,4.
+	// q2 is unanswered; its citation is 25070e52a6ae@src.txt:2-4 → lines 2,3,4.
 	if !strings.Contains(out, "  line 2") {
 		t.Errorf("want indented source line in output; got:\n%s", out)
 	}
@@ -1434,14 +1434,14 @@ func TestAsk_ReplacementBatch_ExemptFromProbeMin(t *testing.T) {
     subgraph passed["Passed"]
     end
     subgraph untested["Untested"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Testing"]
-        q1["Q1<br/>src.txt:1-3"]:::probe_1
+        q1["Q1<br/>cd3f27ccd149@src.txt:1-3"]:::probe_1
         a1["Unclear answer"]:::unclear
-        q2["Q2<br/>src.txt:1-3"]:::teach_2
+        q2["Q2<br/>cd3f27ccd149@src.txt:1-3"]:::teach_2
         a2["Pass answer"]:::pass
-        q3["Q3<br/>src.txt:1-3"]:::probe_3
+        q3["Q3<br/>cd3f27ccd149@src.txt:1-3"]:::probe_3
         mycon --> q1
         q1 --> a1
         a1 --> q2

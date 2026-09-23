@@ -3,41 +3,141 @@
 package cite
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
-// Citation is a parsed source citation consisting of a file path and an
+// Citation is a parsed source citation consisting of a locator and an
 // inclusive line range [Start, End].
+//
+// Hash is the first 12 lowercase hex characters of the SHA-256 of the
+// normalized cited text; it is empty for legacy hashless citations.
+//
+// File holds the locator: a path relative to TM_SRC_ROOT, an absolute path
+// (/... or a Windows drive letter), or a URI with a scheme (https://...).
 type Citation struct {
-	File  string
+	Hash  string // 12 lowercase hex chars; empty if hashless (legacy)
+	File  string // locator: relative path, absolute path, or URI
 	Start int
 	End   int
 }
 
-// Parse parses a citation string of the form "file:START-END".
+// uriScheme matches a leading URI scheme per RFC 3986: letter followed by
+// letters, digits, +, -, or ., then ://.
+var uriScheme = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+\-.]*://`)
+
+// IsURI reports whether the locator has a URI scheme (e.g. https://).
+func IsURI(locator string) bool {
+	return uriScheme.MatchString(locator)
+}
+
+// IsAbsPath reports whether the locator is an absolute filesystem path:
+// either starting with / (Unix) or a Windows drive letter (C:\ or C:/).
+func IsAbsPath(locator string) bool {
+	if len(locator) == 0 {
+		return false
+	}
+	if locator[0] == '/' {
+		return true
+	}
+	// Windows drive letter: X:\ or X:/
+	if len(locator) >= 3 && locator[1] == ':' && (locator[2] == '\\' || locator[2] == '/') {
+		c := locator[0]
+		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+	}
+	return false
+}
+
+// isLowerHex12 reports whether s is exactly 12 lowercase hexadecimal characters.
+func isLowerHex12(s string) bool {
+	if len(s) != 12 {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// Normalize normalizes text for hashing per spec section 3.2:
+// CRLF to LF, trailing whitespace stripped per line, lines LF-joined,
+// at most one trailing newline removed. Internal whitespace is preserved.
+func Normalize(text string) string {
+	// CRLF → LF
+	s := strings.ReplaceAll(text, "\r\n", "\n")
+	// Strip trailing whitespace per line
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+	}
+	// Join with LF, remove at most one trailing newline
+	result := strings.Join(lines, "\n")
+	return strings.TrimSuffix(result, "\n")
+}
+
+// Hash returns the first 12 lowercase hex characters of the SHA-256 of the
+// normalized text. It calls Normalize internally so callers pass raw text.
+func Hash(text string) string {
+	normalized := Normalize(text)
+	sum := sha256.Sum256([]byte(normalized))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+// Format formats a citation back to its canonical string representation.
+// If the citation has a hash, the output is "hash@locator:START-END".
+// Without a hash, the output is the legacy "locator:START-END" form.
+func Format(c Citation) string {
+	if c.Hash != "" {
+		return fmt.Sprintf("%s@%s:%d-%d", c.Hash, c.File, c.Start, c.End)
+	}
+	return fmt.Sprintf("%s:%d-%d", c.File, c.Start, c.End)
+}
+
+// Parse parses a citation string in one of two forms:
 //
-// The file part is everything before the last colon, so relative paths
-// containing slashes are accepted (e.g. "src/raft.txt:1-2"). A citation
-// without a colon, with an empty file part, with a newline in the file part,
-// without a dash separator in the range, or with non-positive or
-// out-of-order line numbers is an error.
+//   - New form: "<hash>@<locator>:START-END" where hash is exactly 12 lowercase
+//     hex characters.
+//   - Legacy form: "<locator>:START-END" (no hash).
+//
+// The locator may be a relative path, an absolute path (/... or C:\...), or a
+// URI (https://...). A '"' character in the locator is rejected; use %22.
+// The range is split on the LAST colon, so scheme separators, ports, and drive
+// letters in the locator are harmless.
 func Parse(s string) (Citation, error) {
-	idx := strings.LastIndex(s, ":")
+	var hash string
+	rest := s
+
+	// Detect hash prefix: exactly 12 lowercase hex chars followed by '@'.
+	if len(s) > 13 && s[12] == '@' && isLowerHex12(s[:12]) {
+		hash = s[:12]
+		rest = s[13:]
+	}
+
+	// Split rest on the LAST colon to separate locator from range.
+	idx := strings.LastIndex(rest, ":")
 	if idx < 0 {
 		return Citation{}, fmt.Errorf("citation %q: missing line range", s)
 	}
 
-	file := s[:idx]
-	rangeStr := s[idx+1:]
+	locator := rest[:idx]
+	rangeStr := rest[idx+1:]
 
-	if file == "" {
+	if locator == "" {
 		return Citation{}, fmt.Errorf("citation %q: empty file", s)
 	}
-	if strings.ContainsRune(file, '\n') {
-		return Citation{}, fmt.Errorf("citation %q: file contains newline", s)
+	if strings.ContainsAny(locator, "\r\n") {
+		return Citation{}, fmt.Errorf("citation %q: file contains newline or carriage return", s)
+	}
+	if strings.ContainsRune(locator, '"') {
+		return Citation{}, fmt.Errorf("citation %q: locator contains raw \"; use %%22", s)
 	}
 
 	dashIdx := strings.Index(rangeStr, "-")
@@ -71,7 +171,7 @@ func Parse(s string) (Citation, error) {
 		return Citation{}, fmt.Errorf("citation %q: end line %d precedes start line %d", s, end, start)
 	}
 
-	return Citation{File: file, Start: start, End: end}, nil
+	return Citation{Hash: hash, File: locator, Start: start, End: end}, nil
 }
 
 // SrcRoot returns the source root directory for resolving citations. It
@@ -85,8 +185,24 @@ func SrcRoot(graphDir string) string {
 }
 
 // Resolve returns the on-disk path for citation c under srcRoot.
+//
+// For relative locators, the path is joined with srcRoot.
+// For absolute locators, the path is returned as-is (cleaned).
+// For URI locators, the locator string is returned unchanged; the caller
+// must not pass URI citations to os.ReadFile.
+//
+// %22 sequences in path locators are decoded to '"' before path construction
+// so that file names containing double-quotes are resolved correctly.
 func Resolve(c Citation, srcRoot string) string {
-	return filepath.Clean(filepath.Join(srcRoot, filepath.FromSlash(c.File)))
+	if IsURI(c.File) {
+		return c.File
+	}
+	// Decode %22 → '"' in path locators (the only percent-sequence we encode).
+	file := strings.ReplaceAll(c.File, "%22", `"`)
+	if IsAbsPath(file) {
+		return filepath.Clean(filepath.FromSlash(file))
+	}
+	return filepath.Clean(filepath.Join(srcRoot, filepath.FromSlash(file)))
 }
 
 // ReadRange reads the lines [c.Start, c.End] inclusive from the file named
@@ -96,9 +212,17 @@ func Resolve(c Citation, srcRoot string) string {
 // A single trailing newline at the end of the file is trimmed before line
 // counting so that a file "a\nb\n" is treated as having 2 lines, not 3.
 //
-// Errors are returned when the file cannot be read, when Start < 1, or when
-// End exceeds the file's line count.
+// Errors are returned when:
+//   - The citation is a URI (M10 adds URI fetch support).
+//   - The file cannot be read.
+//   - Start < 1.
+//   - End exceeds the file's line count.
 func ReadRange(c Citation, srcRoot string) (string, error) {
+	// M9: URI fetch not yet implemented; M10 adds this support.
+	if IsURI(c.File) {
+		return "", fmt.Errorf("citation %q: URI resolution is not yet supported (M10)", c.File)
+	}
+
 	path := Resolve(c, srcRoot)
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -117,6 +241,85 @@ func ReadRange(c Citation, srcRoot string) (string, error) {
 	}
 
 	return strings.Join(lines[c.Start-1:c.End], "\n"), nil
+}
+
+// HashCitation resolves a citation string, computes its content hash, and
+// returns the canonical hashed form "<hash>@<locator>:START-END".
+//
+// Rules:
+//   - Any raw '"' in the locator is percent-encoded to %22 before parsing so
+//     that file names containing a double-quote can be stored (Mermaid uses '"'
+//     as a label delimiter, so raw quotes must not appear in node text).
+//   - If citeStr is already hashed and the hash matches the resolved text,
+//     the encoded form is returned unchanged.
+//   - If citeStr is already hashed and the hash does NOT match, an error is
+//     returned (hash mismatch).
+//   - If citeStr is hashless (legacy form), the hash is computed and the
+//     hashed form is returned.
+//   - URI locators cannot be resolved in M9; they are accepted only when a
+//     hash is already present and returned as-is. A URI without a hash is
+//     refused. (M10 adds URI fetch support.)
+func HashCitation(citeStr, srcRoot string) (string, error) {
+	// Percent-encode raw '"' in the locator; Parse enforces the raw-quote rule,
+	// so callers on the write path use this function instead of Parse directly.
+	encoded := strings.ReplaceAll(citeStr, `"`, "%22")
+
+	c, err := Parse(encoded)
+	if err != nil {
+		return "", err
+	}
+
+	if IsURI(c.File) {
+		// M9 temporary rule: URI locators cannot be fetched; accept only when
+		// a hash is already supplied and store as-is. M10 will add fetch support.
+		if c.Hash == "" {
+			return "", fmt.Errorf("citation %q: URI locator requires a hash in M9; use <hash>@<uri>:START-END", citeStr)
+		}
+		return encoded, nil
+	}
+
+	// Local (relative or absolute) citation: resolve, read, and hash.
+	// Hash calls Normalize internally so raw file text is passed directly.
+	text, readErr := ReadRange(c, srcRoot)
+	if readErr != nil {
+		return "", readErr
+	}
+
+	computed := Hash(text)
+
+	if c.Hash != "" && c.Hash != computed {
+		return "", fmt.Errorf(
+			"citation %q: hash mismatch (stored %s, file hashes to %s)",
+			encoded, c.Hash, computed,
+		)
+	}
+
+	c.Hash = computed
+	return Format(c), nil
+}
+
+// CheckDrift resolves a local citation and reports whether the stored hash
+// still matches the file content. Returns (drifted, error).
+//
+// drifted is false for URI citations (cannot resolve in M9) and for hashless
+// citations (no hash to compare). A read error is returned as an error, not
+// as drift.
+func CheckDrift(citeStr, srcRoot string) (drifted bool, err error) {
+	c, parseErr := Parse(citeStr)
+	if parseErr != nil {
+		return false, parseErr
+	}
+	if c.Hash == "" || IsURI(c.File) {
+		return false, nil
+	}
+
+	text, readErr := ReadRange(c, srcRoot)
+	if readErr != nil {
+		return false, readErr
+	}
+
+	computed := Hash(text)
+	return computed != c.Hash, nil
 }
 
 func isDigits(s string) bool {

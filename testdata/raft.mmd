@@ -10,27 +10,27 @@ config:
 ---
 flowchart TB
     subgraph passed["Concepts User understands"]
-        leader_election["Leader election: terms, votes, majority<br/>raft.txt:120-188"]
-        replicated_log["Replicated log: entries, indexes, terms<br/>raft.txt:40-96"]
+        leader_election["Leader election: terms, votes, majority<br/>ce1a66402eb0@raft.txt:120-188"]
+        replicated_log["Replicated log: entries, indexes, terms<br/>614c341b5f4c@raft.txt:40-96"]
         replicated_log --"elections protect"--> leader_election
     end
     subgraph untested["Concepts User has not been tested on"]
-        log_matching["Log matching property<br/>GAP: treats index match as sufficient, ignores term<br/>raft.txt:190-240"]
-        commit_rules["Commit rules: when an entry is safe to apply<br/>raft.txt:241-300"]
+        log_matching["Log matching property<br/>GAP: treats index match as sufficient, ignores term<br/>b003f09095de@raft.txt:190-240"]
+        commit_rules["Commit rules: when an entry is safe to apply<br/>78c0dac45410@raft.txt:241-300"]
         replicated_log --"constrains"--> log_matching
         leader_election --"enables"--> commit_rules
         log_matching --"required by"--> commit_rules
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["Same index and term implies same entry<br/>raft.txt:192-201"]:::probe_1
-        q2["Same index and term implies identical prefix<br/>raft.txt:202-215"]:::probe_1
+        q1["Same index and term implies same entry<br/>0503cfc52eb1@raft.txt:192-201"]:::probe_1
+        q2["Same index and term implies identical prefix<br/>fbb0469c4812@raft.txt:202-215"]:::probe_1
         a1["Matching index and term means the same command is stored"]:::pass
         a2["Says matching index is enough; never mentions term"]:::fail
-        q3["Induction step: how one check extends to the whole prefix<br/>raft.txt:229-240"]:::probe_2
-        q4["Two logs agree at index 7 but differ in term: what follows<br/>raft.txt:202-215"]:::probe_2
-        q5["What the AppendEntries consistency check compares<br/>raft.txt:216-228"]:::teach_3
+        q3["Induction step: how one check extends to the whole prefix<br/>6cabae64341e@raft.txt:229-240"]:::probe_2
+        q4["Two logs agree at index 7 but differ in term: what follows<br/>fbb0469c4812@raft.txt:202-215"]:::probe_2
+        q5["What the AppendEntries consistency check compares<br/>be8d8fe59060@raft.txt:216-228"]:::teach_3
         a5["Names prevLogIndex and prevLogTerm as the compared pair"]:::pass
-        q6["Why a follower rejects on term mismatch<br/>raft.txt:216-228"]:::teach_3
+        q6["Why a follower rejects on term mismatch<br/>be8d8fe59060@raft.txt:216-228"]:::teach_3
         log_matching --> q1
         log_matching --> q2
         q1 --> a1

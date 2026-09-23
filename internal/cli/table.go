@@ -193,8 +193,19 @@ var Table = []Command{
 		PosArgs: []PosArg{
 			{Name: "[<file>]", Optional: true},
 		},
+		Flags: []FlagSpec{
+			{Name: "drift"},
+		},
 		ForbidGrader: true,
 		Run:          lintRun,
+	},
+	{
+		Name: "rehash",
+		PosArgs: []PosArg{
+			{Name: "[<file>]", Optional: true},
+		},
+		ForbidGrader: true,
+		Run:          rehashRun,
 	},
 }
 

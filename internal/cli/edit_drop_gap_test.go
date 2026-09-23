@@ -40,7 +40,7 @@ func TestEdit_HappyPath(t *testing.T) {
 
 	file := newGraph(t, dir)
 
-	_, _, c1 := run(t, "add", "mycon", "src.txt:1-5", "Original scope")
+	_, _, c1 := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "Original scope")
 	if c1 != 0 {
 		t.Fatalf("add: exit %d", c1)
 	}
@@ -117,12 +117,12 @@ func TestEdit_SrcFlag(t *testing.T) {
 
 	file := newGraph(t, dir)
 
-	_, _, c1 := run(t, "add", "mycon", "src.txt:1-5", "My scope")
+	_, _, c1 := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "My scope")
 	if c1 != 0 {
 		t.Fatalf("add: exit %d", c1)
 	}
 
-	out, errOut, code := run(t, "edit", "mycon", "My scope", "--src", "src.txt:3-7")
+	out, errOut, code := run(t, "edit", "mycon", "My scope", "--src", "b8ea715cd2ec@src.txt:3-7")
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -138,8 +138,8 @@ func TestEdit_SrcFlag(t *testing.T) {
 	g, _ := graph.Parse(data)
 	for _, c := range g.UntestedConcepts {
 		if c.ID == "mycon" {
-			if len(c.Cites) != 1 || c.Cites[0] != "src.txt:3-7" {
-				t.Errorf("cites: want [src.txt:3-7], got %v", c.Cites)
+			if len(c.Cites) != 1 || c.Cites[0] != "b8ea715cd2ec@src.txt:3-7" {
+				t.Errorf("cites: want [b8ea715cd2ec@src.txt:3-7], got %v", c.Cites)
 			}
 		}
 	}
@@ -156,7 +156,7 @@ func TestEdit_BadSrcParse(t *testing.T) {
 	setupSrcFile(t, dir)
 	_ = newGraph(t, dir)
 
-	_, _, _ = run(t, "add", "mycon", "src.txt:1-5", "scope")
+	_, _, _ = run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope")
 
 	_, errOut, code := run(t, "edit", "mycon", "scope", "--src", "no-range")
 	if code != 3 {
@@ -179,7 +179,7 @@ func TestEdit_BadSrcOutOfBounds(t *testing.T) {
 	setupSrcFile(t, dir)
 	_ = newGraph(t, dir)
 
-	_, _, _ = run(t, "add", "mycon", "src.txt:1-5", "scope")
+	_, _, _ = run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope")
 
 	// src.txt has 10 lines; request 100.
 	_, errOut, code := run(t, "edit", "mycon", "scope", "--src", "src.txt:5-100")
@@ -290,11 +290,11 @@ func TestDrop_HappyPath(t *testing.T) {
 	file := newGraph(t, dir)
 
 	// Add two concepts and link A → B.
-	_, _, c1 := run(t, "add", "a", "src.txt:1-5", "concept a")
+	_, _, c1 := run(t, "add", "a", "f5ca3875b379@src.txt:1-5", "concept a")
 	if c1 != 0 {
 		t.Fatalf("add a: exit %d", c1)
 	}
-	_, _, c2 := run(t, "add", "b", "src.txt:1-5", "concept b")
+	_, _, c2 := run(t, "add", "b", "f5ca3875b379@src.txt:1-5", "concept b")
 	if c2 != 0 {
 		t.Fatalf("add b: exit %d", c2)
 	}
@@ -390,11 +390,11 @@ func TestDrop_HasChildren(t *testing.T) {
 	setupSrcFile(t, dir)
 	_ = newGraph(t, dir)
 
-	_, _, c1 := run(t, "add", "parent", "src.txt:1-5", "parent concept")
+	_, _, c1 := run(t, "add", "parent", "f5ca3875b379@src.txt:1-5", "parent concept")
 	if c1 != 0 {
 		t.Fatalf("add parent: exit %d", c1)
 	}
-	_, _, c2 := run(t, "add", "child", "src.txt:1-5", "child concept")
+	_, _, c2 := run(t, "add", "child", "f5ca3875b379@src.txt:1-5", "child concept")
 	if c2 != 0 {
 		t.Fatalf("add child: exit %d", c2)
 	}
@@ -503,7 +503,7 @@ func TestGap_SetNew(t *testing.T) {
 
 	file := newGraph(t, dir)
 
-	_, _, c1 := run(t, "add", "mycon", "src.txt:1-5", "My concept scope")
+	_, _, c1 := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "My concept scope")
 	if c1 != 0 {
 		t.Fatalf("add: exit %d", c1)
 	}
@@ -576,7 +576,7 @@ func TestGap_ReplaceExisting(t *testing.T) {
 
 	file := newGraph(t, dir)
 
-	_, _, c1 := run(t, "add", "mycon", "src.txt:1-5", "scope")
+	_, _, c1 := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope")
 	if c1 != 0 {
 		t.Fatalf("add: exit %d", c1)
 	}

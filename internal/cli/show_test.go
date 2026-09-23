@@ -24,7 +24,7 @@ func TestShow_Concept_Open(t *testing.T) {
 		"state: open",
 		"scope: Log matching property",
 		"gap: treats index match as sufficient, ignores term",
-		"src: raft.txt:190-240",
+		"src: b003f09095de@raft.txt:190-240",
 	}
 	for _, want := range wantLines {
 		if !strings.Contains(out, want) {
@@ -81,7 +81,7 @@ func TestShow_Question_WithAnswer(t *testing.T) {
 		"batch: probe_1",
 		"concept: log_matching",
 		"scope: Same index and term implies identical prefix",
-		"src: raft.txt:202-215",
+		"src: fbb0469c4812@raft.txt:202-215",
 	}
 	for _, want := range wantLines {
 		if !strings.Contains(out, want) {
@@ -192,7 +192,7 @@ func showHistoryFixture(t *testing.T) {
 
 	events := `{"t":"2024-01-01T00:00:00Z","ev":"grade","q":"q2","verdict":"fail","summary":"Says matching index is enough; never mentions term","raw":"it#39;s the same #quot;index#quot;","guided":false,"oos":false}
 {"t":"2024-01-01T00:01:00Z","ev":"gap","concept":"log_matching","before":"","after":"treats index match as sufficient, ignores term"}
-{"t":"2024-01-01T00:02:00Z","ev":"add","id":"commit_rules","scope":"Commit rules","src":"raft.txt:241-300","parents":[],"children":[]}
+{"t":"2024-01-01T00:02:00Z","ev":"add","id":"commit_rules","scope":"Commit rules","src":"78c0dac45410@raft.txt:241-300","parents":[],"children":[]}
 `
 	if err := os.WriteFile(logPath, []byte(events), 0o644); err != nil {
 		t.Fatal(err)

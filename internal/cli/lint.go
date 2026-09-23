@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/reithan/teach-me/internal/cite"
+	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/lint"
 	"github.com/reithan/teach-me/internal/state"
 )
@@ -55,6 +56,11 @@ func lintRun(ctx *Context) int {
 
 	ctx.GraphFile = file
 
+	// --drift mode: resolve citations and report hash mismatches.
+	if _, ok := ctx.Flags["drift"]; ok {
+		return lintDrift(ctx, data, file)
+	}
+
 	cfg := buildLintConfig(file)
 	viols := lint.Check(data, cfg)
 	if len(viols) == 0 {
@@ -80,6 +86,58 @@ func lintRun(ctx *Context) int {
 	// not an err: line. The Violations field carries the printed text for the
 	// ERRORS.jsonl row.
 	return 2
+}
+
+// lintDrift checks all local citations for content drift.
+// It prints "DRIFT <cite>" for hash mismatches and "err: <msg>" for read
+// failures, collecting all problems before exiting. Exits 1 if any drift or
+// read errors were found; exits 0 if all citations match.
+func lintDrift(ctx *Context, data []byte, file string) int {
+	g, parseErr := graph.Parse(data)
+	if parseErr != nil {
+		errMsg := fmt.Sprintf("cannot parse %s: %v", filepath.Base(file), parseErr)
+		writeErrFix(ctx.ErrOut, errMsg, "")
+		ctx.ErrMsg = errMsg
+		return 3
+	}
+
+	srcRoot := cite.SrcRoot(filepath.Dir(file))
+	anyProblem := false
+
+	// Collect all citations: concept Cites and question Cite fields.
+	var citations []string
+	for _, c := range g.PassedConcepts {
+		citations = append(citations, c.Cites...)
+	}
+	for _, c := range g.UntestedConcepts {
+		citations = append(citations, c.Cites...)
+	}
+	for _, item := range g.TestingItems {
+		if item.Q != nil && item.Q.Cite != "" {
+			citations = append(citations, item.Q.Cite)
+		}
+	}
+
+	// Check every citation; continue past read errors so all problems are reported.
+	for _, citeStr := range citations {
+		drifted, err := cite.CheckDrift(citeStr, srcRoot)
+		if err != nil {
+			errMsg := fmt.Sprintf("citation %q: %v", citeStr, err)
+			writeErrFix(ctx.ErrOut, errMsg, "")
+			anyProblem = true
+			continue
+		}
+		if drifted {
+			_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", citeStr)
+			anyProblem = true
+		}
+	}
+
+	if anyProblem {
+		return 1
+	}
+	_, _ = fmt.Fprintln(ctx.Out, "ok")
+	return 0
 }
 
 // buildLintConfig constructs a lint.Config from §13 environment variables,
