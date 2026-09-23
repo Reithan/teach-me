@@ -218,9 +218,11 @@ func Resolve(c Citation, srcRoot string) string {
 //   - Start < 1.
 //   - End exceeds the file's line count.
 func ReadRange(c Citation, srcRoot string) (string, error) {
-	// M9: URI fetch not yet implemented; M10 adds this support.
+	// URI locators require source.Resolver for content fetch.
+	// ReadRange is a low-level file reader; callers that need URI resolution
+	// must use source.Resolver.Read instead.
 	if IsURI(c.File) {
-		return "", fmt.Errorf("citation %q: URI resolution is not yet supported (M10)", c.File)
+		return "", fmt.Errorf("citation %q: URI resolution requires source.Resolver", c.File)
 	}
 
 	path := Resolve(c, srcRoot)
@@ -270,10 +272,12 @@ func HashCitation(citeStr, srcRoot string) (string, error) {
 	}
 
 	if IsURI(c.File) {
-		// M9 temporary rule: URI locators cannot be fetched; accept only when
-		// a hash is already supplied and store as-is. M10 will add fetch support.
+		// URI locators require source.Resolver (internal/source) for content fetch.
+		// HashCitation in cite cannot perform network I/O; callers that need to
+		// hash URI citations must use source.Resolver.HashCitation instead.
+		// Return the encoded form unchanged if a hash is already present.
 		if c.Hash == "" {
-			return "", fmt.Errorf("citation %q: URI locator requires a hash in M9; use <hash>@<uri>:START-END", citeStr)
+			return "", fmt.Errorf("citation %q: URI locator requires source.Resolver; use source.Resolver.HashCitation to hash URIs", citeStr)
 		}
 		return encoded, nil
 	}
