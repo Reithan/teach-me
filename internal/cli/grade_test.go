@@ -18,12 +18,12 @@ func gradeProbeIncompleteGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["pending answer"]:::pending
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -40,12 +40,12 @@ func gradeAllPassGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["pending answer"]:::pending
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["correct answer"]:::pass
         mycon --> q1
         q1 --> a1
@@ -65,12 +65,12 @@ func gradeAlreadyGradedGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["already graded"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -89,14 +89,14 @@ func gradeReplacementProbeGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["unclear answer one"]:::unclear
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["unclear answer two"]:::unclear
-        q3["Replacement probe<br/>src.txt:1-3"]:::probe_2
+        q3["Replacement probe<br/>cd3f27ccd149@src.txt:1-3"]:::probe_2
         a3["pending replacement answer"]:::pending
         mycon --> q1
         q1 --> a1
@@ -120,12 +120,12 @@ func gradeProbeUnclearRootGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["pending answer"]:::pending
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["unclear answer"]:::unclear
         mycon --> q1
         q1 --> a1
@@ -145,12 +145,12 @@ func gradeProbeWithPassAndPendingGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["pending answer"]:::pending
         mycon --> q1
         q1 --> a1
@@ -170,16 +170,16 @@ func gradeTeachPendingGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
-        q5["Teach question<br/>src.txt:1-3"]:::teach_3
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
+        q5["Teach question<br/>cd3f27ccd149@src.txt:1-3"]:::teach_3
         a5["pending teach answer"]:::pending
         mycon --> q1
         q1 --> a1
@@ -381,7 +381,7 @@ func TestGrade_StepThree_BatchIncomplete(t *testing.T) {
 	if row["oos"] != false {
 		t.Errorf("oos: want false, got %v", row["oos"])
 	}
-	// src_text: q1 cites src.txt:1-2 → "line 1\nline 2"
+	// src_text: q1 cites e266782c2841@src.txt:1-2 → "line 1\nline 2"
 	if _, ok := row["src_text"]; !ok {
 		t.Error("grade event missing src_text field")
 	}
@@ -871,14 +871,14 @@ func TestGrade_AllPass_Unblocked(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
-        child_con["Child concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
+        child_con["Child concept<br/>f5ca3875b379@src.txt:1-5"]
         mycon --"requires"--> child_con
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["pending answer"]:::pending
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["correct answer"]:::pass
         mycon --> q1
         q1 --> a1

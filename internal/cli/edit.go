@@ -43,20 +43,15 @@ func editRun(ctx *Context) int {
 	citeStr := ""
 	if vals := ctx.Flags["src"]; len(vals) > 0 {
 		citeStr = vals[0]
-		parsedCite, parseErr := cite.Parse(citeStr)
-		if parseErr != nil {
-			ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, parseErr)
-			ctx.FixMsg = usageLine
-			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
-			return 3
-		}
 		srcRoot := cite.SrcRoot(filepath.Dir(file))
-		if _, readErr := cite.ReadRange(parsedCite, srcRoot); readErr != nil {
-			ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, readErr)
+		hashedCite, hashErr := cite.HashCitation(citeStr, srcRoot)
+		if hashErr != nil {
+			ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, hashErr)
 			ctx.FixMsg = usageLine
 			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
 			return 3
 		}
+		citeStr = hashedCite
 	}
 
 	// ── Apply closure ────────────────────────────────────────────────────────

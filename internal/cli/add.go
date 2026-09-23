@@ -53,21 +53,16 @@ func addRun(ctx *Context) int {
 	}
 	ctx.GraphFile = file
 
-	// Validate citation: parse then read-range.
-	parsedCite, parseErr := cite.Parse(citeStr)
-	if parseErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, parseErr)
-		ctx.FixMsg = usageLine
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
-		return 3
-	}
+	// Hash the citation: resolve, compute SHA-256 prefix, return hashed form.
 	srcRoot := cite.SrcRoot(filepath.Dir(file))
-	if _, readErr := cite.ReadRange(parsedCite, srcRoot); readErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, readErr)
+	hashedCite, hashErr := cite.HashCitation(citeStr, srcRoot)
+	if hashErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, hashErr)
 		ctx.FixMsg = usageLine
 		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
 		return 3
 	}
+	citeStr = hashedCite
 
 	// Parse --parent and --child flags.
 	parents, childPairs, flagErr := parseEndpointFlags(ctx.Flags["parent"], ctx.Flags["child"])

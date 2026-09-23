@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/state"
 )
@@ -175,6 +177,12 @@ func showConcept(ctx *Context, s *state.State, g *graph.Graph, id string,
 	}
 	if len(concept.Cites) > 0 {
 		_, _ = fmt.Fprintf(ctx.Out, "src: %s\n", strings.Join(concept.Cites, ", "))
+		srcRoot := cite.SrcRoot(filepath.Dir(graphFile))
+		for _, citeStr := range concept.Cites {
+			if drifted, driftErr := cite.CheckDrift(citeStr, srcRoot); driftErr == nil && drifted {
+				_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", citeStr)
+			}
+		}
 	}
 
 	// Parents and children (concept-to-concept edges).
@@ -247,6 +255,10 @@ func showQuestion(ctx *Context, s *state.State, _ *graph.Graph, id string,
 	}
 	_, _ = fmt.Fprintf(ctx.Out, "scope: %s\n", q.Scope)
 	_, _ = fmt.Fprintf(ctx.Out, "src: %s\n", q.Cite)
+	srcRoot := cite.SrcRoot(filepath.Dir(graphFile))
+	if drifted, driftErr := cite.CheckDrift(q.Cite, srcRoot); driftErr == nil && drifted {
+		_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", q.Cite)
+	}
 
 	// Answer section.
 	a := answerByQID[id]

@@ -28,8 +28,8 @@ config:
 ---
 flowchart TB
     subgraph passed["Concepts User understands"]
-        prereq["Prereq concept<br/>src.txt:1-5"]
-        dependent["Dependent concept<br/>src.txt:1-5"]
+        prereq["Prereq concept<br/>f5ca3875b379@src.txt:1-5"]
+        dependent["Dependent concept<br/>f5ca3875b379@src.txt:1-5"]
         prereq --"required by"--> dependent
     end
     subgraph untested["Concepts User has not been tested on"]

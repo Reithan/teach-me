@@ -35,15 +35,15 @@ func lifecycleTeachReadyGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -191,7 +191,7 @@ func TestLifecycle_UnclearReplacement(t *testing.T) {
 	// ── DraftReplacements: add one replacement probe per unclear ─────────────
 	// probe_1 had q1 (unclear) and q2 (unclear). Replacement batch needs one
 	// --re for each unclear probe: q1 and q2.
-	out, errOut, code = run(t, "q", "mycon", "src.txt:1-5", "replacement for q1", "--re", "q1")
+	out, errOut, code = run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "replacement for q1", "--re", "q1")
 	if code != 0 {
 		t.Fatalf("q --re q1: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -200,7 +200,7 @@ func TestLifecycle_UnclearReplacement(t *testing.T) {
 		t.Fatal("q --re q1: want question ID, got empty")
 	}
 
-	out, errOut, code = run(t, "q", "mycon", "src.txt:3-5", "replacement for q2", "--re", "q2")
+	out, errOut, code = run(t, "q", "mycon", "e28e810e6e2e@src.txt:3-5", "replacement for q2", "--re", "q2")
 	if code != 0 {
 		t.Fatalf("q --re q2: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -296,7 +296,7 @@ func TestLifecycle_TeachingRound(t *testing.T) {
 
 	// ── DraftRound: add teach question targeting the failed probe q2 ─────────
 	// §12: "tm q --teach --re a failed probe. First teach question locks the probes"
-	out, errOut, code := run(t, "q", "mycon", "src.txt:1-3", "teach the missed concept", "--teach", "--re", "q2")
+	out, errOut, code := run(t, "q", "mycon", "cd3f27ccd149@src.txt:1-3", "teach the missed concept", "--teach", "--re", "q2")
 	if code != 0 {
 		t.Fatalf("q --teach --re q2: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -411,13 +411,13 @@ func TestLifecycle_OOS(t *testing.T) {
 	// Add two teach questions to teach_3 BEFORE any answers (so both can be added).
 	// q5: in-scope (will grade pass)
 	// q6: OOS (will grade fail --oos, closing that branch)
-	out, errOut, code := run(t, "q", "mycon", "src.txt:1-3", "teach in-scope", "--teach", "--re", "q2")
+	out, errOut, code := run(t, "q", "mycon", "cd3f27ccd149@src.txt:1-3", "teach in-scope", "--teach", "--re", "q2")
 	if code != 0 {
 		t.Fatalf("q --teach in-scope: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
 	q5 := strings.TrimSpace(out)
 
-	out, errOut, code = run(t, "q", "mycon", "src.txt:3-5", "teach oos branch", "--teach", "--re", "q2")
+	out, errOut, code = run(t, "q", "mycon", "e28e810e6e2e@src.txt:3-5", "teach oos branch", "--teach", "--re", "q2")
 	if code != 0 {
 		t.Fatalf("q --teach oos: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -540,7 +540,7 @@ func TestLifecycle_StallGate(t *testing.T) {
 	file := qWriteGraph(t, dir, lifecycleTeachReadyGraph())
 
 	// Add teach question.
-	out, errOut, code := run(t, "q", "mycon", "src.txt:1-3", "teach scope", "--teach", "--re", "q2")
+	out, errOut, code := run(t, "q", "mycon", "cd3f27ccd149@src.txt:1-3", "teach scope", "--teach", "--re", "q2")
 	if code != 0 {
 		t.Fatalf("q --teach --re: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -572,7 +572,7 @@ func TestLifecycle_StallGate(t *testing.T) {
 	}
 
 	// q --teach should also be refused (gated).
-	_, errOut, code = run(t, "q", "mycon", "src.txt:1-3", "new teach", "--teach", "--re", "q2")
+	_, errOut, code = run(t, "q", "mycon", "cd3f27ccd149@src.txt:1-3", "new teach", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("§12 stall gate: q --teach on gated concept: want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -631,7 +631,7 @@ func TestLifecycle_ProbeGate(t *testing.T) {
 	}
 
 	// q (new probe) should also be refused (gated).
-	_, errOut, code = run(t, "q", "mycon", "src.txt:1-5", "new probe scope")
+	_, errOut, code = run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "new probe scope")
 	if code != 1 {
 		t.Fatalf("§12 probe gate: q on gated concept: want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -668,7 +668,7 @@ func TestLifecycle_TeachingSpent(t *testing.T) {
 	file := qWriteGraph(t, dir, lifecycleTeachReadyGraph())
 
 	// Add teach question.
-	out, errOut, code := run(t, "q", "mycon", "src.txt:1-3", "teach scope", "--teach", "--re", "q2")
+	out, errOut, code := run(t, "q", "mycon", "cd3f27ccd149@src.txt:1-3", "teach scope", "--teach", "--re", "q2")
 	if code != 0 {
 		t.Fatalf("q --teach --re: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -690,7 +690,7 @@ func TestLifecycle_TeachingSpent(t *testing.T) {
 	}
 
 	// Teaching spent → q --teach must now be refused (teaching spent).
-	_, errOut, code = run(t, "q", "mycon", "src.txt:1-3", "another teach", "--teach", "--re", "q2")
+	_, errOut, code = run(t, "q", "mycon", "cd3f27ccd149@src.txt:1-3", "another teach", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("§12 teaching spent: q --teach after spent: want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -755,7 +755,7 @@ func TestLifecycle_Reopen(t *testing.T) {
 	// This is the state after a concept passes.
 	mmd := qFrontmatter + `flowchart TB
     subgraph passed["Concepts User understands"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
     end
@@ -846,7 +846,7 @@ func TestLifecycle_UpstreamInsert(t *testing.T) {
 
 	// ── Map → Orient: add upstream concept (--child clears gate) ─────────────
 	// "tm add <new> <cite> "<scope>" --child <C>" writes gate meta for C.
-	out, errOut, code := run(t, "add", "upstream", "src.txt:1-5", "upstream scope", "--child", "con:requires")
+	out, errOut, code := run(t, "add", "upstream", "f5ca3875b379@src.txt:1-5", "upstream scope", "--child", "con:requires")
 	if code != 0 {
 		t.Fatalf("add --child: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -882,7 +882,7 @@ func TestLifecycle_UpstreamInsert(t *testing.T) {
 	}
 
 	// ── Upstream passes: add probe to "upstream" → answer → grade pass ────────
-	out, errOut, code = run(t, "q", "upstream", "src.txt:1-5", "upstream probe")
+	out, errOut, code = run(t, "q", "upstream", "f5ca3875b379@src.txt:1-5", "upstream probe")
 	if code != 0 {
 		t.Fatalf("q upstream: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -956,7 +956,7 @@ func TestLifecycle_GateWithPendingProbes(t *testing.T) {
 	file := qWriteGraph(t, dir, lifecycleTeachReadyGraph())
 
 	// Add teach question (teach_3, N=3) targeting q2's fail.
-	out, errOut, code := run(t, "q", "mycon", "src.txt:1-3", "teach scope", "--teach", "--re", "q2")
+	out, errOut, code := run(t, "q", "mycon", "cd3f27ccd149@src.txt:1-3", "teach scope", "--teach", "--re", "q2")
 	if code != 0 {
 		t.Fatalf("q --teach --re: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -987,7 +987,7 @@ func TestLifecycle_GateWithPendingProbes(t *testing.T) {
 	// ── Gate cleared via upstream insert ─────────────────────────────────────
 	// base = max batch N = 3 (teach_3 N=3). After clearing, teach_3 N=3 is NOT
 	// > base=3, so probe_2 is no longer locked (BatchStateOf → Draft).
-	out, errOut, code = run(t, "add", "upstream", "src.txt:1-5", "upstream scope", "--child", "mycon:requires")
+	out, errOut, code = run(t, "add", "upstream", "f5ca3875b379@src.txt:1-5", "upstream scope", "--child", "mycon:requires")
 	if code != 0 {
 		t.Fatalf("add --child: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -1032,12 +1032,12 @@ func TestLifecycle_GateWithPendingProbes(t *testing.T) {
 
 	// ── Upstream passes ───────────────────────────────────────────────────────
 	// Need TM_PROBE_MIN=2 probes for upstream.
-	out, errOut, code = run(t, "q", "upstream", "src.txt:1-5", "upstream probe 1")
+	out, errOut, code = run(t, "q", "upstream", "f5ca3875b379@src.txt:1-5", "upstream probe 1")
 	if code != 0 {
 		t.Fatalf("q upstream 1: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
 	qUp1 := strings.TrimSpace(out)
-	out, errOut, code = run(t, "q", "upstream", "src.txt:3-5", "upstream probe 2")
+	out, errOut, code = run(t, "q", "upstream", "e28e810e6e2e@src.txt:3-5", "upstream probe 2")
 	if code != 0 {
 		t.Fatalf("q upstream 2: want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -1140,14 +1140,14 @@ func concurrentGradeGraph(n int) string {
 	b.WriteString("\n    end\n")
 	b.WriteString(`    subgraph untested["Concepts User has not been tested on"]`)
 	b.WriteString("\n")
-	b.WriteString(`        mycon["My concept<br/>src.txt:1-5"]`)
+	b.WriteString(`        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]`)
 	b.WriteString("\n    end\n")
 	b.WriteString(`    subgraph testing["Open tests validating and teaching User understanding"]`)
 	b.WriteString("\n")
 
 	// Declare all question and answer nodes.
 	for i := 1; i <= n; i++ {
-		fmt.Fprintf(&b, "        q%d[\"Probe %d<br/>src.txt:1-5\"]:::probe_1\n", i, i)
+		fmt.Fprintf(&b, "        q%d[\"Probe %d<br/>f5ca3875b379@src.txt:1-5\"]:::probe_1\n", i, i)
 		fmt.Fprintf(&b, "        a%d[\"pending answer %d\"]:::pending\n", i, i)
 	}
 	// Declare all edges.

@@ -53,7 +53,7 @@ func qSimpleGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
     end
@@ -64,7 +64,7 @@ func qSimpleGraph() string {
 func qPassedConceptGraph() string {
 	return qFrontmatter + `flowchart TB
     subgraph passed["Concepts User understands"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
     end
@@ -79,12 +79,12 @@ func qOpenProbeGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["some passing answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -103,15 +103,15 @@ func qTeachReadyGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -132,15 +132,15 @@ func qTeachReadyNoGapGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -161,18 +161,18 @@ func qTeachOpenBatchGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
-        q5["Teach question<br/>src.txt:1-3"]:::teach_3
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
+        q5["Teach question<br/>cd3f27ccd149@src.txt:1-3"]:::teach_3
         a5["good teach answer"]:::pass
-        q6["Second teach question<br/>src.txt:2-4"]:::teach_3
+        q6["Second teach question<br/>25070e52a6ae@src.txt:2-4"]:::teach_3
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -199,15 +199,15 @@ func qTeachPassTargetGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["wrong answer"]:::fail
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["also correct"]:::pass
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -228,15 +228,15 @@ func qTeachOOSTargetGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["OOS<br/>wrong answer"]:::fail
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -257,12 +257,12 @@ func qReNotUnclearGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
         mycon --> q1
         q1 --> a1
@@ -281,11 +281,11 @@ func qProbeAtMaxGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         mycon --> q1
         mycon --> q2
     end
@@ -301,16 +301,16 @@ func qTeachAtMaxGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
-        q5["First teach question<br/>src.txt:1-3"]:::teach_3
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
+        q5["First teach question<br/>cd3f27ccd149@src.txt:1-3"]:::teach_3
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -334,12 +334,12 @@ func qAllPassGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: some gap<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: some gap<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["also correct"]:::pass
         mycon --> q1
         q1 --> a1
@@ -357,12 +357,12 @@ func qNoFallbackGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: some gap<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: some gap<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
         mycon --> q1
         q1 --> a1
@@ -383,13 +383,13 @@ func qProbeWrongConceptGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
-        othercon["Other concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
+        othercon["Other concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["ambiguous answer"]:::unclear
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         othercon --> q1
         q1 --> a1
         othercon --> q2
@@ -407,19 +407,19 @@ func qTeachWrongConceptGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>GAP: the key insight was missed<br/>src.txt:1-5"]
-        othercon["Other concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
+        othercon["Other concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["correct answer"]:::pass
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["wrong answer"]:::fail
-        q3["Fallback probe 1<br/>src.txt:1-2"]:::probe_2
-        q4["Fallback probe 2<br/>src.txt:3-4"]:::probe_2
-        q5["Other concept probe<br/>src.txt:1-2"]:::probe_3
+        q3["Fallback probe 1<br/>e266782c2841@src.txt:1-2"]:::probe_2
+        q4["Fallback probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_2
+        q5["Other concept probe<br/>e266782c2841@src.txt:1-2"]:::probe_3
         a5["wrong answer"]:::fail
-        q6["Other concept probe 2<br/>src.txt:3-4"]:::probe_3
+        q6["Other concept probe 2<br/>20f437d6f701@src.txt:3-4"]:::probe_3
         mycon --> q1
         q1 --> a1
         mycon --> q2
@@ -444,7 +444,7 @@ func TestQ_UnknownConcept_Exit3(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qSimpleGraph())
 
-	_, errOut, code := run(t, "q", "nosuchconcept", "src.txt:1-5", "some scope")
+	_, errOut, code := run(t, "q", "nosuchconcept", "f5ca3875b379@src.txt:1-5", "some scope")
 	if code != 3 {
 		t.Fatalf("want exit 3, got %d; stderr:\n%s", code, errOut)
 	}
@@ -505,7 +505,7 @@ func TestQ_UnknownReQID_Exit3(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qSimpleGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "some scope", "--re", "q99")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "some scope", "--re", "q99")
 	if code != 3 {
 		t.Fatalf("want exit 3, got %d; stderr:\n%s", code, errOut)
 	}
@@ -527,7 +527,7 @@ func TestQ_ConceptPassed_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qPassedConceptGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "some scope")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "some scope")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -549,7 +549,7 @@ func TestQ_ConceptGated_Exit1(t *testing.T) {
 	t.Setenv("TM_MAX_FAILS", "1")
 	qWriteGraph(t, dir, qReNotUnclearGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "some scope")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "some scope")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -569,7 +569,7 @@ func TestQ_ProbeBatchLocked_Exit1(t *testing.T) {
 	setupRaftSrcRoot(t) // override TM_SRC_ROOT → dir with raft.txt
 	copyFixtureTo(t, raftPath, dir)
 
-	_, errOut, code := run(t, "q", "log_matching", "raft.txt:229-240", "Why the induction needs the base case")
+	_, errOut, code := run(t, "q", "log_matching", "6cabae64341e@raft.txt:229-240", "Why the induction needs the base case")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -589,7 +589,7 @@ func TestQ_ProbeBatchOpen_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qOpenProbeGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "some scope")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "some scope")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -606,7 +606,7 @@ func TestQ_TeachWithoutRe_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qTeachReadyGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -626,7 +626,7 @@ func TestQ_TeachingSpent_Exit1(t *testing.T) {
 	t.Setenv("TM_MAX_TEACH", "1")
 	qWriteGraph(t, dir, qTeachAtMaxGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q2")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -643,7 +643,7 @@ func TestQ_NoGap_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qTeachReadyNoGapGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q2")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -664,7 +664,7 @@ func TestQ_NoFailedProbeBatch_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qAllPassGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q1")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q1")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -682,7 +682,7 @@ func TestQ_NoFallbackProbe_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qNoFallbackGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q2")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -699,7 +699,7 @@ func TestQ_TeachBatchOpen_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qTeachOpenBatchGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q2")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -717,7 +717,7 @@ func TestQ_ReTeachNotFailOrUnclear_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qTeachPassTargetGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q2")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -738,7 +738,7 @@ func TestQ_ReTeachWrongConcept_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qTeachWrongConceptGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q5")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q5")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -756,7 +756,7 @@ func TestQ_ReTeachOOS_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qTeachOOSTargetGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "teach scope", "--teach", "--re", "q2")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -774,7 +774,7 @@ func TestQ_ReNotUnclearProbe_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qReNotUnclearGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "replacement scope", "--re", "q1")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "replacement scope", "--re", "q1")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -792,7 +792,7 @@ func TestQ_ReProbeWrongConcept_Exit1(t *testing.T) {
 	dir, errPath := qSetupDir(t)
 	qWriteGraph(t, dir, qProbeWrongConceptGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "replacement scope", "--re", "q1")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "replacement scope", "--re", "q1")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -811,7 +811,7 @@ func TestQ_ProbeBatchAtMax_Exit1(t *testing.T) {
 	t.Setenv("TM_PROBE_MAX", "2")
 	qWriteGraph(t, dir, qProbeAtMaxGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "extra probe")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "extra probe")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -831,7 +831,7 @@ func TestQ_TeachBatchAtMax_Exit1(t *testing.T) {
 	t.Setenv("TM_TEACH_MAX", "1")
 	qWriteGraph(t, dir, qTeachAtMaxGraph())
 
-	_, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "extra teach", "--teach", "--re", "q2")
+	_, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "extra teach", "--teach", "--re", "q2")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
 	}
@@ -851,7 +851,7 @@ func TestQ_ProbeHappyPath(t *testing.T) {
 	file := qWriteGraph(t, dir, qSimpleGraph())
 
 	// Add first probe question.
-	out, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "First probe question")
+	out, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "First probe question")
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -887,8 +887,8 @@ func TestQ_ProbeHappyPath(t *testing.T) {
 	if q1.Scope != "First probe question" {
 		t.Errorf("q1.Scope: want 'First probe question', got %q", q1.Scope)
 	}
-	if q1.Cite != "src.txt:1-5" {
-		t.Errorf("q1.Cite: want 'src.txt:1-5', got %q", q1.Cite)
+	if q1.Cite != "f5ca3875b379@src.txt:1-5" {
+		t.Errorf("q1.Cite: want 'f5ca3875b379@src.txt:1-5', got %q", q1.Cite)
 	}
 
 	// Edge mycon → q1 must exist.
@@ -930,15 +930,15 @@ func TestQ_ProbeHappyPath(t *testing.T) {
 	if last["scope"] != "First probe question" {
 		t.Errorf("event scope: want 'First probe question', got %v", last["scope"])
 	}
-	if last["src"] != "src.txt:1-5" {
-		t.Errorf("event src: want 'src.txt:1-5', got %v", last["src"])
+	if last["src"] != "f5ca3875b379@src.txt:1-5" {
+		t.Errorf("event src: want 'f5ca3875b379@src.txt:1-5', got %v", last["src"])
 	}
 	if last["re"] != "" {
 		t.Errorf("event re: want '', got %v", last["re"])
 	}
 
 	// Add second probe → must go to same batch (probe_1).
-	out2, errOut2, code2 := run(t, "q", "mycon", "src.txt:2-4", "Second probe question")
+	out2, errOut2, code2 := run(t, "q", "mycon", "25070e52a6ae@src.txt:2-4", "Second probe question")
 	if code2 != 0 {
 		t.Fatalf("second q: want exit 0, got %d; stderr:\n%s", code2, errOut2)
 	}
@@ -963,7 +963,7 @@ func TestQ_TeachHappyPath(t *testing.T) {
 	file := qWriteGraph(t, dir, qTeachReadyGraph())
 
 	// Add teach question targeting q2 (fail answer).
-	out, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "Teach scope for q2", "--teach", "--re", "q2")
+	out, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "Teach scope for q2", "--teach", "--re", "q2")
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
@@ -1045,12 +1045,12 @@ func TestQ_ProbeReplacement_HappyPath(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
+        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
-        q1["First probe<br/>src.txt:1-2"]:::probe_1
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
         a1["ambiguous answer"]:::unclear
-        q2["Second probe<br/>src.txt:3-4"]:::probe_1
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
         a2["correct answer"]:::pass
         mycon --> q1
         q1 --> a1
@@ -1064,7 +1064,7 @@ func TestQ_ProbeReplacement_HappyPath(t *testing.T) {
 	file := qWriteGraph(t, dir, mmd)
 
 	// Add replacement probe for unclear q1.
-	out, errOut, code := run(t, "q", "mycon", "src.txt:1-5", "Replacement for unclear q1", "--re", "q1")
+	out, errOut, code := run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "Replacement for unclear q1", "--re", "q1")
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
