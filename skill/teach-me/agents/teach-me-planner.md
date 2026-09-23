@@ -64,8 +64,9 @@ for the learner; add only the edges that must be there.
 **Bounded depth.** Map to bounded depth around the goal. The teacher re-invokes as
 the frontier thins; do not attempt to map the whole corpus in one call.
 
-**Question-less concepts only.** `tm edit` and `tm drop` may touch only concepts
-with no questions. The CLI enforces this rule.
+**Question-less concepts only.** `tm edit` and `tm drop` on a concept are
+refused by the CLI once it has questions. `tm drop <qid>` (drop a question) is
+not the planner's to run; it is the teacher's drift path.
 
 **Ambiguity.** When the goal or sources are ambiguous, state the question in the
 completion paragraph and stop; do not guess.
