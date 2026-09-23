@@ -546,6 +546,16 @@ The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach
 | `TM_MAX_TEACH` | 8 | in-scope teach questions per teaching round before teaching ends and the locked probes are asked |
 | `TM_MAX_STALL` | 4 | in-scope teach questions in a row, across zero-pass batches, before the gate |
 
+Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per project):
+
+| Key | Format | Meaning |
+|---|---|---|
+| `convert <mime>` | `= <command...>` | shell command that reads the source bytes on stdin and writes text on stdout; keyed by MIME type |
+| `ext <ext>` | `= <mime>` | map a file extension to a MIME type for converter lookup |
+| `version <program>` | `= <string>` | required version pin; the CLI checks that the pin is a substring of the first output line before the first use |
+| `version-cmd <program>` | `= <command...>` | version command override (default: `<program> --version`) |
+| `git` | `= <command>` | git executable; enables `HEAD` blob resolution for missing files and commit recording on `add` and `q` |
+
 ## 14. Decision record
 
 | # | Decision | Reason | Rejected | Status |
@@ -588,13 +598,25 @@ The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach
 | 36 | Help is agent-facing and split by what the call reveals: baseline help or an unknown subcommand defers to the `TM_DOC` file; a specific inquiry gets one usage or flag line; bad arguments to a real command get `err:` plus the usage line | a missing baseline is fixed by the skill file, which owns procedure; a narrow question or a slip is fixed by one parser-generated line, which cannot drift and costs the same whether or not the skill is in context | every help path defers to the skill file; every help path prints usage | agreed, v0.11 |
 | 37 | Pointers to the skill file print the tool version; the file carries `tm-version` in its frontmatter `metadata`, which the CLI checks; both live in one repository and CI enforces that they match | catches a stale skill file at the moment the agent is sent to it; same-version drift is handled in review | unversioned pointer; runtime content checks | agreed, v0.11 |
 | 38 | Every `err:` is appended to `ERRORS.jsonl`, silently | refusals show where the teacher agent goes wrong, which is the input for tuning its skill file; usage and lint errors are the input for debugging the CLI | errors only on stdout; errors mixed into the event log | agreed, v0.12 |
-| 39 | Go 1.27, standard library only at runtime, one static binary | the container has no default egress, so install is a file copy; millisecond startup on a tool called constantly; coding agents write Go well and it compiles fast | Rust (slower agent iteration), TypeScript (runtime and dependency tree in the container), Python (runtime in the container, no offsetting gain) | agreed, v0.13 |
+| 39 | Go 1.27, standard library only at runtime, one static binary; converters are external processes, not Go dependencies | the container has no default egress, so install is a file copy; millisecond startup on a tool called constantly; coding agents write Go well and it compiles fast; converter diversity is a user choice, not a CLI dependency | Rust (slower agent iteration), TypeScript (runtime and dependency tree in the container), Python (runtime in the container, no offsetting gain); built-in HTML/PDF libraries would add runtime dependencies | agreed, v0.13 |
 | 40 | Reference Mermaid parse runs in CI, not at runtime | measured about 1.35 s per call and a 182 MB, 103-package tree for `mermaid.parse` under jsdom, against about 25 ms for bare Node; native Go and Rust Mermaid parsers are independent reimplementations, not the grammar GitHub and VS Code run | reference parse on every write; a native third-party parser at runtime | agreed, v0.13 |
 | 41 | Section 16 fixes toolchain, layout, tests, CI gates, and release | the implementing agent should start with lookups to do, not choices to make | leave build decisions to the implementer | agreed |
 | 42 | Repository and module `github.com/reithan/teach-me`; binary and command `tm`; shipped skill `teach-me`, replacing the owner's existing skill of that name | a two-letter repository name collides and is hard to find; the command stays short because agents type it constantly; the project is the successor to the existing skill, so it takes its name | repository named `tm`; skill named `tm` | agreed, v0.15 |
 | 43 | Coverage is gated on the diff only: statement-level `diff-cover` against `origin/main` at 85%. No total gate. Condition coverage is deferred | a total gate penalizes code removal and refactors, since dropping well-tested lines reads as a net loss; no readily available diff filter exists for Go condition coverage | total coverage gate at 80% (v0.13); gobco plus an in-repo diff filter (v0.14) | agreed, v0.16 |
 | 44 | Git hooks in `.githooks/` via `core.hooksPath`, no framework: lint and light checks on commit, the CI suite on push, both refuse `main` | fast feedback before CI, and the same gates for a human or an agent; plain `sh` keeps the zero-dependency rule; branch protection stays the real enforcement because hooks can be skipped | a hook framework (lefthook, pre-commit); hooks as the only gate | agreed, v0.15 |
 | 45 | Repository private until the owner decides on a license, after testing the prototype build; no `LICENSE` file before then | licensing is a one-way door and should follow evidence that the tool works | choose a license up front; public from the start | agreed, v0.17 |
+| 46 | Citations carry a content hash, hash first: `<hash>@<locator>:START-END` | drift detection on every read with no side state; the hash travels wherever the citation is printed; reads like a git revision | meta line per citation; hash in the log only | agreed |
+| 47 | One locator grammar: relative path, absolute path, URI | three source kinds with one parser and one document; the kind is a prefix, not a syntax | sister lookup file of selectors; per-kind citation forms; XPath | agreed |
+| 48 | Sources converted by user-configured external converters keyed by MIME and extension, pinned by version and checked at runtime | deterministic per version; zero CLI dependencies; user-extensible to any format | built-in tag stripper; pure-Go HTML library; runtime-loaded modules (Go has none) | agreed |
+| 49 | Spec 2.1 narrowed: no external command except configured converters and git | default behavior unchanged; the rule's purpose was harness independence, which a content-only filter keeps | fetch and conversion inside the CLI with dependencies; adapter-side conversion only | agreed |
+| 50 | Drift derived at read time; a drifted ungraded question is dropped through a CLI-verified `tm drop` and replaced with `--re`; `answer` and `check` refuse it; graded questions untouched | immutability (21) holds because the CLI, not the teacher, decides a question may leave; grading a drifted question `unclear` wastes an answer and can turn into `fail` under 7 | brittle flag on the node; automatic re-citation; grade `unclear` on `DRIFT` | agreed |
+| 51 | `tm report` walks foundations: outline by default, `--fulltext` bounded by hops | requirement 1 with no model-authored intermediate text | derived study docs verified by a judge agent; anthologies of verbatim passages | agreed |
+| 52 | No-memory rule in the teacher adapter | the citation machinery is defeated silently by a notes file written from memory; the rule is the one thing the model will not enforce on itself | trust the model to source honestly | agreed |
+| 53 | `grade` keeps `src_text`; `add` and `q` do not copy text | audit needs what was judged; the hash covers detection; bounded log growth | copy every citation on write; filesystem compression | agreed |
+| 54 | Git read through the configured command; commit recorded by reading refs directly | packfile parsing is real work; unreachable commits can be garbage-collected, so the commit is provenance, not the verification mechanism | pure-Go object reader; go-git; commit hash in the citation | agreed |
+| 55 | Concept citations may be updated on drift through `recite` (hash-preserving), `reopen --src`, and a grader recheck; each logged with before and after | no verdict is graded against a concept citation, so updating it rewrites nothing a pass was earned against; the graph is already not add-only | errata nodes with edge transfer and a superseded marker; teacher override with a reason | agreed |
+| 56 | Whether a pass survives a source change is a grader's verdict from the logged answers and the current text, never the teacher's | same isolation argument as grading; the teacher's bias runs toward always or never re-testing | teacher `recite --override`; automatic reopen on any drift | agreed |
+| 57 | The model reaches the graph, log, and lock only through the CLI; adapters ask for harness deny rules on `tm new`, tell the model never to touch the files, and require it to report any accidental access as a misconfiguration | every CLI invariant assumes the CLI is the only writer and the grader's isolation assumes the model cannot read verdict history except through `show --history`; a model that opens the files bypasses all of it silently | CLI-side enforcement (impossible: it cannot see who opened a file); trust the model; encrypted or obfuscated graph | agreed |
 
 ## 15. Deferred
 
@@ -604,7 +626,12 @@ The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach
 - `--oos` on probes. Probes have no scope check yet.
 - Automatic grader spawning: a filter command the CLI runs, or a harness skill that injects `tm check` output into the grader's prompt. Both close the teacher's channel to the grader and both sit on `check` and `grade` unchanged.
 - Harness hook that authenticates the grader role.
-- Line rot beyond the existence and bounds check. `src_text` in the log records what was graded; a content hash per citation would detect drift.
+- Quote and position selectors, and fragment anchoring, for web citations.
+- Conversion cache (OS temp directory, keyed by input hash, converter, and version).
+- Learner-facing study guide from `tm report` (same walk over the passed block, question text omitted).
+- Remote git fetch.
+- `tm lint --remote` (resolve fetched citations; currently opt-in via `--drift`).
+- Mermaid size limits under long URIs: measure in M9.
 - Decay and re-test of passed concepts across days.
 - Adapters from `tm ask --format json` to a specific harness's question UI.
 
@@ -645,7 +672,9 @@ internal/graph/           model, subset parser, writer, label escaping, edge pla
 internal/state/           derived state (section 5): frontier, batch states, targets, gate, stall, spent
 internal/ops/             one file per mutating command: invariants (section 7), transitions (section 8)
 internal/lint/            section 11
-internal/cite/            citation parsing, resolution against TM_SRC_ROOT, line reads
+internal/cite/            citation parsing and hash computation
+internal/source/          source resolution: resolve, fetch, convert, git HEAD blob
+internal/report/          tm report: walk, format, inline text
 internal/eventlog/        section 10
 internal/errlog/          section 10.1
 internal/lockfile/        lock, atomic write
@@ -662,7 +691,7 @@ docs/spec.md              this document
 .golangci.yml  .goreleaser.yaml  .gitattributes  Makefile  AGENTS.md  README.md
 ```
 
-`AGENTS.md` holds the `make` targets and a pointer to `docs/spec.md`, and nothing else. The body of `skill/teach-me/SKILL.md` is the owner's to write; the implementing agent creates the frontmatter and a body that restates section 12's two unenforceable behaviors.
+`AGENTS.md` holds the `make` targets, a pointer to `docs/spec.md`, and the adapter table (teacher, grader, planner). The body of `skill/teach-me/SKILL.md` is the owner's to write; the implementing agent creates the frontmatter and a body that restates section 12's four unenforceable behaviors.
 
 ### 16.4 Fixed implementation choices
 
