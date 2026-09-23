@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/lint"
 	"github.com/reithan/teach-me/internal/lockfile"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -72,23 +74,34 @@ func rehashRun(ctx *Context) int {
 		return 3
 	}
 
-	srcRoot := cite.SrcRoot(filepath.Dir(file))
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		errMsg := fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, errMsg, "")
+		ctx.ErrMsg = errMsg
+		return 3
+	}
 
-	// Helper: hash one citation string. Returns (hashed, changed, err).
-	hashOne := func(citeStr string) (string, bool, error) {
+	// Helper: hash one citation string. Returns (hashed, changed, errMsg).
+	// errMsg is the user-facing error string (already formatted for writeErrFix).
+	hashOne := func(citeStr string) (string, bool, string) {
 		p, pErr := cite.Parse(citeStr)
 		if pErr != nil {
-			return citeStr, false, pErr
+			return citeStr, false, fmt.Sprintf("citation %q: %v", citeStr, pErr)
 		}
-		// Already hashed: skip.
+		// Already hashed: skip (rehash only fills in missing hashes).
 		if p.Hash != "" {
-			return citeStr, false, nil
+			return citeStr, false, ""
 		}
-		hashed, hErr := cite.HashCitation(citeStr, srcRoot)
+		hashed, _, hErr := resolver.HashCitation(citeStr)
 		if hErr != nil {
-			return citeStr, false, hErr
+			var ref *source.RefusalError
+			if errors.As(hErr, &ref) {
+				return citeStr, false, ref.Err
+			}
+			return citeStr, false, fmt.Sprintf("citation %q: %v", citeStr, hErr)
 		}
-		return hashed, true, nil
+		return hashed, true, ""
 	}
 
 	// Collect all changes and errors — do not stop at the first error.
@@ -98,9 +111,9 @@ func rehashRun(ctx *Context) int {
 	// Walk passed concepts.
 	for _, c := range g.PassedConcepts {
 		for i, citeStr := range c.Cites {
-			hashed, didChange, hErr := hashOne(citeStr)
-			if hErr != nil {
-				errs = append(errs, fmt.Sprintf("citation %q: %v", citeStr, hErr))
+			hashed, didChange, errMsg := hashOne(citeStr)
+			if errMsg != "" {
+				errs = append(errs, errMsg)
 				continue
 			}
 			if didChange {
@@ -112,9 +125,9 @@ func rehashRun(ctx *Context) int {
 	// Walk untested concepts.
 	for _, c := range g.UntestedConcepts {
 		for i, citeStr := range c.Cites {
-			hashed, didChange, hErr := hashOne(citeStr)
-			if hErr != nil {
-				errs = append(errs, fmt.Sprintf("citation %q: %v", citeStr, hErr))
+			hashed, didChange, errMsg := hashOne(citeStr)
+			if errMsg != "" {
+				errs = append(errs, errMsg)
 				continue
 			}
 			if didChange {
@@ -128,9 +141,9 @@ func rehashRun(ctx *Context) int {
 		if item.Q == nil || item.Q.Cite == "" {
 			continue
 		}
-		hashed, didChange, hErr := hashOne(item.Q.Cite)
-		if hErr != nil {
-			errs = append(errs, fmt.Sprintf("citation %q: %v", item.Q.Cite, hErr))
+		hashed, didChange, errMsg := hashOne(item.Q.Cite)
+		if errMsg != "" {
+			errs = append(errs, errMsg)
 			continue
 		}
 		if didChange {
