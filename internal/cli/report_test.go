@@ -70,7 +70,7 @@ func TestReport(t *testing.T) {
 		},
 		// No-concept (whole-graph) rows
 		{
-			name:      "no-concept outline: all concepts in topo order",
+			name:      "no-concept outline: every concept with its state",
 			extraArgs: []string{},
 			contains: []string{
 				"## leader_election:", "## replicated_log:",
