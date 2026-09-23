@@ -971,3 +971,553 @@ func TestFindGitRepo_InRepo(t *testing.T) {
 		t.Error("expected non-empty gitDir")
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Additional coverage tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+// meta.go: MIME, Converter, ConverterVersion fields (lines 15-22).
+
+func TestApplyMeta_AllFields(t *testing.T) {
+	fetchedAt := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	fields := map[string]any{}
+	source.ApplyMeta(fields, source.Meta{
+		Commit:           "deadbeef1234",
+		URL:              "https://example.com",
+		MIME:             "text/html",
+		Converter:        "pandoc",
+		ConverterVersion: "3.1.11",
+		FetchedAt:        fetchedAt,
+	})
+	checks := map[string]string{
+		"commit":            "deadbeef1234",
+		"url":               "https://example.com",
+		"mime":              "text/html",
+		"converter":         "pandoc",
+		"converter_version": "3.1.11",
+	}
+	for k, want := range checks {
+		if got, _ := fields[k].(string); got != want {
+			t.Errorf("fields[%q] = %q, want %q", k, got, want)
+		}
+	}
+	if _, ok := fields["fetched_at"]; !ok {
+		t.Error("fetched_at should be set when non-zero")
+	}
+}
+
+// config.go: userConfigPath with XDG_CONFIG_HOME (lines 36-43) and
+// LoadConfig itself (lines 50-51).
+
+func TestLoadConfig_XDGConfigHome(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgDir := filepath.Join(tmpDir, "tm")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config"), []byte("git=mygit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	cfg, err := source.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Git != "mygit" {
+		t.Errorf("Git = %q, want mygit", cfg.Git)
+	}
+}
+
+// config.go: parseConfigFile non-ENOENT error (lines 87-88) and
+// LoadConfigPaths err returns (lines 68-69 and 73-74).
+
+func TestLoadConfigPaths_UserConfigReadError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: chmod 0o000 has no effect")
+	}
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config")
+	if err := os.WriteFile(cfgPath, []byte("git=git\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	_, err := source.LoadConfigPaths(cfgPath, filepath.Join(tmpDir, "nofile"))
+	if err == nil {
+		t.Error("expected error for unreadable user config file, got nil")
+	}
+}
+
+func TestLoadConfigPaths_TmconfigReadError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: chmod 0o000 has no effect")
+	}
+	tmpDir := t.TempDir()
+	tmcfgPath := filepath.Join(tmpDir, ".tmconfig")
+	if err := os.WriteFile(tmcfgPath, []byte("git=git\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	_, err := source.LoadConfigPaths(filepath.Join(tmpDir, "nofile"), tmcfgPath)
+	if err == nil {
+		t.Error("expected error for unreadable .tmconfig file, got nil")
+	}
+}
+
+// config.go: line without '=' separator (line 99) and blank value (line 104).
+
+func TestLoadConfig_SkipsLineWithoutEquals(t *testing.T) {
+	cfg := newConfig(t, "bare-word-no-equals\ngit=git\n")
+	if cfg.Git != "git" {
+		t.Errorf("Git = %q, want git", cfg.Git)
+	}
+}
+
+func TestLoadConfig_SkipsBlankValue(t *testing.T) {
+	cfg := newConfig(t, "git=\n")
+	if cfg.Git != "" {
+		t.Errorf("Git = %q, want empty (blank value skipped)", cfg.Git)
+	}
+}
+
+// config.go: ExtToMIME with empty ext (lines 158-159) and without dot (lines 161-162).
+
+func TestExtToMIME_Empty(t *testing.T) {
+	cfg := newConfig(t, "ext html=text/html\n")
+	if got := cfg.ExtToMIME(""); got != "" {
+		t.Errorf("ExtToMIME(\"\") = %q, want empty", got)
+	}
+}
+
+func TestExtToMIME_WithoutDot(t *testing.T) {
+	cfg := newConfig(t, "ext html=text/html\n")
+	if got := cfg.ExtToMIME("html"); got != "text/html" {
+		t.Errorf("ExtToMIME(\"html\") = %q, want text/html", got)
+	}
+}
+
+// config.go: ConverterFor strips MIME params (lines 187-188 via stripMIMEParams).
+
+func TestConverterFor_MIMEWithSemicolon(t *testing.T) {
+	cfg := newConfig(t, "convert text/html=pandoc -f html -t plain\n")
+	cmds := cfg.ConverterFor("text/html; charset=utf-8")
+	if len(cmds) == 0 || cmds[0] != "pandoc" {
+		t.Errorf("ConverterFor(\"text/html; charset=utf-8\") = %v, want [pandoc ...]", cmds)
+	}
+}
+
+// resolver.go: RefusalError.Error() with non-empty Fix (lines 28-31).
+
+func TestRefusalError_WithFix(t *testing.T) {
+	err := &source.RefusalError{Err: "the error", Fix: "the fix"}
+	want := "the error\nthe fix"
+	if got := err.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+// resolver.go: NewResolver success path (lines 71-79).
+
+func TestNewResolver_Success(t *testing.T) {
+	// With no config file present, LoadConfig returns an empty config.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	dir := t.TempDir()
+	r, err := source.NewResolver(dir)
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
+	if r == nil {
+		t.Error("NewResolver returned nil resolver")
+	}
+}
+
+// resolver.go: NewEmptyResolver (lines 95-105).
+
+func TestNewEmptyResolver(t *testing.T) {
+	dir := t.TempDir()
+	r := source.NewEmptyResolver(dir)
+	if r == nil {
+		t.Fatal("NewEmptyResolver returned nil")
+	}
+	if r.Cfg == nil {
+		t.Fatal("Cfg is nil")
+	}
+	if r.Cfg.Git != "" {
+		t.Errorf("Git = %q, want empty", r.Cfg.Git)
+	}
+}
+
+// resolver.go: MustResolver success (line 115) and fallback (lines 112-113).
+
+func TestMustResolver_SuccessPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	r := source.MustResolver(t.TempDir())
+	if r == nil {
+		t.Error("MustResolver returned nil on success path")
+	}
+}
+
+func TestMustResolver_FallbackOnConfigError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: chmod 0o000 has no effect")
+	}
+	tmpDir := t.TempDir()
+	cfgDir := filepath.Join(tmpDir, "tm")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config"), []byte("git=git\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	r := source.MustResolver(t.TempDir())
+	if r == nil {
+		t.Error("MustResolver returned nil on config error (expected fallback)")
+	}
+}
+
+// resolver.go: HashCitation parse error (lines 137-138).
+
+func TestHashCitation_ParseError(t *testing.T) {
+	dir := t.TempDir()
+	r := source.NewResolverWithConfig(newConfig(t, ""), dir)
+	_, _, err := r.HashCitation("no-range-here")
+	if err == nil {
+		t.Error("expected parse error, got nil")
+	}
+}
+
+// resolver.go: HashCitation read error (lines 142-143) — file absent, no git.
+
+func TestHashCitation_ReadError(t *testing.T) {
+	dir := t.TempDir()
+	r := source.NewResolverWithConfig(newConfig(t, ""), dir)
+	_, _, err := r.HashCitation("nonexistent.txt:1-5")
+	if err == nil {
+		t.Error("expected error for missing file, got nil")
+	}
+}
+
+// resolver.go: CheckDrift parse error (lines 160-161).
+
+func TestCheckDrift_ParseError(t *testing.T) {
+	dir := t.TempDir()
+	r := source.NewResolverWithConfig(newConfig(t, ""), dir)
+	_, _, err := r.CheckDrift("bad@@citation")
+	if err == nil {
+		t.Error("expected parse error, got nil")
+	}
+}
+
+// resolver.go: CheckDrift read error (lines 168-169) — hashed file deleted.
+
+func TestCheckDrift_ReadError(t *testing.T) {
+	dir := t.TempDir()
+	content := "line one\nline two\n"
+	filePath := writeTempFile(t, dir, "drift_err.txt", content)
+
+	r := source.NewResolverWithConfig(newConfig(t, ""), dir)
+
+	hashed, _, err := r.HashCitation(filepath.Base(filePath) + ":1-2")
+	if err != nil {
+		t.Fatalf("HashCitation: %v", err)
+	}
+
+	if err := os.Remove(filePath); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, checkErr := r.CheckDrift(hashed)
+	if checkErr == nil {
+		t.Error("expected error from CheckDrift after file deletion")
+	}
+}
+
+// resolver.go: readURI MIME fallback to URL extension (lines 297-300).
+
+func TestReadURI_MIMEFallbackToExtension(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Set a whitespace-only Content-Type so stripMIMEParams yields ""
+		// and the resolver falls back to the URL path extension.
+		w.Header().Set("Content-Type", " ")
+		_, _ = fmt.Fprint(w, "# Title\nContent here\n")
+	}))
+	defer srv.Close()
+
+	// Map .md extension to text/markdown so it's treated as raw.
+	cfg := newConfig(t, "ext .md=text/markdown\n")
+	r := resolverFrom(cfg, t.TempDir())
+
+	c := makeCitation(srv.URL+"/doc.md", 1, 2)
+	text, meta, err := r.Read(c)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if meta.MIME != "text/markdown" {
+		t.Errorf("MIME = %q, want text/markdown", meta.MIME)
+	}
+	_ = text
+}
+
+// resolver.go: readURI with no Content-Type and no ext mapping → treated as
+// text/plain (lines 323-326).
+
+func TestReadURI_NoMIMETreatedAsPlain(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// No Content-Type set; URL has no mapped extension.
+		_, _ = fmt.Fprint(w, "plain content\n")
+	}))
+	defer srv.Close()
+
+	cfg := newConfig(t, "") // no ext mapping
+	r := resolverFrom(cfg, t.TempDir())
+
+	c := makeCitation(srv.URL+"/doc", 1, 1)
+	text, _, err := r.Read(c)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if text != "plain content" {
+		t.Errorf("text = %q, want %q", text, "plain content")
+	}
+}
+
+// resolver.go / convertAndSlice: ext mapped to mime but no converter configured
+// (line 467) — file read path reads as plain text.
+
+func TestPath_ExtMIMENoConverter(t *testing.T) {
+	dir := t.TempDir()
+	writeTempFile(t, dir, "doc.html", "<p>hello world</p>\n")
+
+	// .html → text/html but no converter configured.
+	cfg := newConfig(t, "ext .html=text/html\n")
+	r := resolverFrom(cfg, dir)
+
+	c := makeCitation("doc.html", 1, 1)
+	text, _, err := r.Read(c)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	// Without a converter the raw HTML is returned.
+	if !strings.Contains(text, "hello world") {
+		t.Errorf("text = %q should contain raw HTML", text)
+	}
+}
+
+// resolver.go / convertAndSlice: isRaw with non-empty MIME (lines 481-482).
+
+func TestPath_RawMIME(t *testing.T) {
+	dir := t.TempDir()
+	writeTempFile(t, dir, "readme.md", "line one\nline two\n")
+
+	// .md → text/markdown (raw).
+	cfg := newConfig(t, "ext .md=text/markdown\n")
+	r := resolverFrom(cfg, dir)
+
+	c := makeCitation("readme.md", 1, 2)
+	_, meta, err := r.Read(c)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if meta.MIME != "text/markdown" {
+		t.Errorf("meta.MIME = %q, want text/markdown", meta.MIME)
+	}
+}
+
+// resolver.go / runConverter: non-zero exit with empty stderr uses err.Error()
+// (lines 402-403).
+
+func TestConverter_NonZeroExitEmptyStderr(t *testing.T) {
+	dir := t.TempDir()
+	// Converter exits non-zero with no stderr output.
+	converterPath := writeScript(t, dir, "conv_noerr", "exit 1")
+	verPath := writeScript(t, dir, "conv_noerr_ver", `printf "1.0.0"`)
+
+	cfgContent := fmt.Sprintf(`convert text/html=%s
+version %s = 1.0.0
+version-cmd %s = %s`, converterPath, converterPath, converterPath, verPath)
+	cfg := newConfig(t, cfgContent)
+	r := resolverFrom(cfg, dir)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprint(w, "<p>hello</p>")
+	}))
+	defer srv.Close()
+
+	c := makeCitation(srv.URL+"/page.html", 1, 1)
+	_, _, err := r.Read(c)
+	var ref *source.RefusalError
+	if !errors.As(err, &ref) {
+		t.Fatalf("expected RefusalError, got %T: %v", err, err)
+	}
+	if !strings.Contains(ref.Err, "converter") {
+		t.Errorf("err = %q should mention converter", ref.Err)
+	}
+}
+
+// resolver.go / firstLineOf: multi-line version output (lines 515-517).
+
+func TestConverter_MultiLineVersionOutput(t *testing.T) {
+	dir := t.TempDir()
+	converterPath := writeScript(t, dir, "conv_multi", `cat`)
+	// Version script outputs multiple lines.
+	verPath := writeScript(t, dir, "conv_multi_ver", `printf "2.0.0\nExtra line\n"`)
+
+	cfgContent := fmt.Sprintf(`convert text/html=%s
+version %s = 2.0.0
+version-cmd %s = %s`, converterPath, converterPath, converterPath, verPath)
+	cfg := newConfig(t, cfgContent)
+	r := resolverFrom(cfg, dir)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprint(w, "line one\n")
+	}))
+	defer srv.Close()
+
+	c := makeCitation(srv.URL+"/page.html", 1, 1)
+	text, _, err := r.Read(c)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	_ = text
+}
+
+// resolver.go / sliceLines: start < 1 (lines 502-504) and end out of bounds
+// (lines 505-508).
+
+func TestSliceLines_StartBelowOne(t *testing.T) {
+	dir := t.TempDir()
+	writeTempFile(t, dir, "short.txt", "hello\n")
+
+	cfg := newConfig(t, "")
+	r := resolverFrom(cfg, dir)
+
+	c := cite.Citation{File: "short.txt", Start: 0, End: 1}
+	_, _, err := r.Read(c)
+	if err == nil {
+		t.Error("expected error for Start=0, got nil")
+	}
+}
+
+func TestSliceLines_EndOutOfBounds(t *testing.T) {
+	dir := t.TempDir()
+	writeTempFile(t, dir, "short2.txt", "hello\n")
+
+	cfg := newConfig(t, "")
+	r := resolverFrom(cfg, dir)
+
+	c := cite.Citation{File: "short2.txt", Start: 1, End: 99}
+	_, _, err := r.Read(c)
+	if err == nil {
+		t.Error("expected error for End out of bounds, got nil")
+	}
+}
+
+// git.go: HEAD with invalid content — neither "ref: " prefix nor hex SHA
+// (line 90 in resolveHEAD).
+
+func TestGit_HEADInvalidContent(t *testing.T) {
+	dir := t.TempDir()
+	gitDir := filepath.Join(dir, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("invalid-not-a-ref\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := source.CommitForPath(filepath.Join(dir, "file.txt"))
+	if got != "" {
+		t.Errorf("CommitForPath = %q, want empty for invalid HEAD", got)
+	}
+}
+
+// git.go: resolveCommonDir with empty common dir value (lines 102-103).
+
+func TestGit_CommonDirEmpty(t *testing.T) {
+	dir := t.TempDir()
+	gitDir := filepath.Join(dir, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// commondir file is present but its content is blank.
+	if err := os.WriteFile(filepath.Join(gitDir, "commondir"), []byte("   \n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No loose ref, no packed-refs → empty commit.
+	got := source.CommitForPath(filepath.Join(dir, "file.txt"))
+	if got != "" {
+		t.Errorf("CommitForPath = %q, want empty (ref not found)", got)
+	}
+}
+
+// git.go: resolveCommonDir with absolute common dir path (lines 105-106).
+
+func TestGit_CommonDirAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	commonDir := filepath.Join(dir, "main-git")
+	if err := os.MkdirAll(commonDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wtGitDir := filepath.Join(dir, "worktree", ".git")
+	if err := os.MkdirAll(wtGitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Write absolute path to commondir.
+	if err := os.WriteFile(filepath.Join(wtGitDir, "commondir"), []byte(commonDir+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtGitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No ref files anywhere → empty result.
+	got := source.CommitForPath(filepath.Join(dir, "worktree", "file.txt"))
+	if got != "" {
+		t.Errorf("CommitForPath = %q, want empty (no ref found)", got)
+	}
+}
+
+// git.go: packed-refs line with only one field — partial line (line 150).
+
+func TestGit_PackedRefsPartialLine(t *testing.T) {
+	dir := t.TempDir()
+	gitDir := filepath.Join(dir, ".git")
+	if err := os.MkdirAll(filepath.Join(gitDir, "refs", "heads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// packed-refs with only one field per line (no refname).
+	packedRefs := "# pack-refs with: peeled fully-peeled sorted\nabc123defg\n"
+	if err := os.WriteFile(filepath.Join(gitDir, "packed-refs"), []byte(packedRefs), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := source.CommitForPath(filepath.Join(dir, "file.txt"))
+	if got != "" {
+		t.Errorf("CommitForPath = %q, want empty (partial packed-refs line)", got)
+	}
+}
+
+// git.go: no loose ref file and no packed-refs file → findInPackedRefs
+// returns "" (lines 136-137).
+
+func TestGit_NoPackedRefsAndNoLooseRef(t *testing.T) {
+	dir := t.TempDir()
+	gitDir := filepath.Join(dir, ".git")
+	if err := os.MkdirAll(filepath.Join(gitDir, "refs", "heads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No refs/heads/main, no packed-refs.
+	got := source.CommitForPath(filepath.Join(dir, "file.txt"))
+	if got != "" {
+		t.Errorf("CommitForPath = %q, want empty (no ref)", got)
+	}
+}
