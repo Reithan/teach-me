@@ -244,3 +244,45 @@ func TestSourceCitationWiring(t *testing.T) {
 		})
 	}
 }
+
+// TestCLIResolverConfigError verifies that commands fail with exit 3 and
+// "source config" when the user config file is present but unreadable.
+// Covers the NewResolver error paths in add.go and rehash.go.
+func TestCLIResolverConfigError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root; file-permission check not applicable")
+	}
+
+	xdg := t.TempDir()
+	cfgPath := filepath.Join(xdg, "tm", "config")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Create an unreadable config file so LoadConfig returns an error.
+	if err := os.WriteFile(cfgPath, []byte("git=/usr/bin/git\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	dir := t.TempDir()
+	mmdFile := filepath.Join(dir, "g.mmd")
+	// Create the graph without the bad config in effect (new doesn't use resolver).
+	if _, errOut, code := run(t, "new", mmdFile); code != 0 {
+		t.Fatalf("tm new: exit %d; %s", code, errOut)
+	}
+	t.Setenv("TM_FILE", mmdFile)
+	tempErrlog(t)
+
+	for _, args := range [][]string{
+		{"add", "c1", "src.txt:1-1", "scope"},
+		{"rehash", mmdFile},
+	} {
+		_, errOut, code := run(t, args...)
+		if code != 3 {
+			t.Errorf("%v: exit=%d want 3; stderr=%s", args, code, errOut)
+		}
+		if !strings.Contains(errOut, "source config") {
+			t.Errorf("%v: stderr=%q; want 'source config'", args, errOut)
+		}
+	}
+}

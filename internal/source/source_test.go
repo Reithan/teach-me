@@ -209,6 +209,40 @@ func TestLoadConfig(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "unreadable .tmconfig propagates error",
+			check: func(t *testing.T, _ *source.Config) {
+				if os.Getuid() == 0 {
+					t.Skip("running as root")
+				}
+				dir := t.TempDir()
+				p := filepath.Join(dir, ".tmconfig")
+				if err := os.WriteFile(p, []byte("x\n"), 0o000); err != nil {
+					t.Fatal(err)
+				}
+				_, err := source.LoadConfigPaths(filepath.Join(dir, "nofile"), p)
+				if err == nil {
+					t.Fatal("expected error for unreadable .tmconfig")
+				}
+			},
+		},
+		{
+			name: "ext key without leading dot gets dot prepended; ExtToMIME accepts either form",
+			user: "ext html=text/html\n",
+			check: func(t *testing.T, cfg *source.Config) {
+				if cfg.ExtToMIME(".html") != "text/html" {
+					t.Error("ExtToMIME .html: want text/html")
+				}
+				if cfg.ExtToMIME("html") != "text/html" {
+					t.Error("ExtToMIME html (no dot): want text/html")
+				}
+			},
+		},
+		{
+			name:    "empty value after = is silently skipped",
+			user:    "git=/g\nconvert=\n",
+			wantGit: "/g",
+		},
 	}
 
 	for _, tc := range tests {
@@ -594,5 +628,71 @@ func TestApplyMeta(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNewResolverHashCheckDrift(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	f := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(f, []byte("line one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := source.NewResolver(dir) // uses LoadConfig internally
+	if err != nil || r == nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
+	hashed, _, err := r.HashCitation(f + ":1-1")
+	if err != nil {
+		t.Fatalf("HashCitation: %v", err)
+	}
+	if d, _, e := r.CheckDrift(f + ":1-1"); e != nil || d { // hashless → never drifted
+		t.Errorf("CheckDrift hashless: d=%v err=%v", d, e)
+	}
+	if d, _, e := r.CheckDrift(hashed); e != nil || d { // matches → not drifted
+		t.Errorf("CheckDrift not-drifted: d=%v err=%v", d, e)
+	}
+	if err := os.WriteFile(f, []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if d, _, e := r.CheckDrift(hashed); e != nil || !d { // file changed → drifted
+		t.Errorf("CheckDrift drifted: d=%v err=%v", d, e)
+	}
+	// HashCitation: parse error (covers resolver.go error branch in HashCitation).
+	if _, _, e := r.HashCitation(":::"); e == nil {
+		t.Error("HashCitation parse error: want error")
+	}
+	// HashCitation: stored hash mismatch.
+	if _, _, e := r.HashCitation(strings.Replace(hashed, hashed[:12], "000000000000", 1)); e == nil {
+		t.Error("HashCitation hash mismatch: want error")
+	}
+	// CheckDrift: parse error.
+	if _, _, e := r.CheckDrift(":::"); e == nil {
+		t.Error("CheckDrift parse error: want error")
+	}
+	// Read-error paths: remove file so Read fails.
+	_ = os.Remove(f)
+	if _, _, e := r.CheckDrift(hashed); e == nil {
+		t.Error("CheckDrift missing file: want error")
+	}
+	if _, _, e := r.HashCitation(hashed); e == nil {
+		t.Error("HashCitation missing file: want error")
+	}
+}
+
+// TestLoadConfigDirect covers LoadConfig + userConfigPath via XDG_CONFIG_HOME.
+func TestLoadConfigDirect(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	cfgPath := filepath.Join(xdg, "tm", "config")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfgPath, []byte("git=/usr/bin/git\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := source.LoadConfig()
+	if err != nil || cfg.Git != "/usr/bin/git" {
+		t.Errorf("LoadConfig: git=%q err=%v", cfg.Git, err)
 	}
 }
