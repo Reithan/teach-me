@@ -1,7 +1,8 @@
 // Package report implements the tm report walk and Markdown formatter.
 //
 // Walk traverses parent edges from a starting concept to collect its
-// foundations; Render formats them as Markdown for the teacher.
+// foundations; WalkAll traverses the whole graph from roots; Render formats
+// the result as Markdown for the teacher.
 package report
 
 import (
@@ -37,6 +38,195 @@ type Options struct {
 // the report package never calls cite.CheckDrift or cite.ReadRange directly.
 type TextReader func(citeStr, srcRoot string) (text string, drifted bool, err error)
 
+// ── internal helpers ─────────────────────────────────────────────────────────
+
+// buildConceptMap returns a map from concept ID → *graph.ConceptNode.
+func buildConceptMap(g *graph.Graph) map[string]*graph.ConceptNode {
+	all := make(map[string]*graph.ConceptNode, len(g.PassedConcepts)+len(g.UntestedConcepts))
+	for _, c := range g.PassedConcepts {
+		all[c.ID] = c
+	}
+	for _, c := range g.UntestedConcepts {
+		all[c.ID] = c
+	}
+	return all
+}
+
+// conceptParentMap returns parentMap[childID] = []parentConceptIDs.
+// Only concept-to-concept edges are included.
+func conceptParentMap(g *graph.Graph, all map[string]*graph.ConceptNode) map[string][]string {
+	pm := make(map[string][]string, len(all))
+	for _, e := range g.Edges {
+		if _, ok := all[e.From]; !ok {
+			continue
+		}
+		if _, ok := all[e.To]; !ok {
+			continue
+		}
+		pm[e.To] = append(pm[e.To], e.From)
+	}
+	return pm
+}
+
+// buildDeclOrder returns concept IDs in declaration order (passed first, then
+// untested) limited to those whose ID is in included.
+func buildDeclOrder(g *graph.Graph, included map[string]bool) []string {
+	out := make([]string, 0, len(included))
+	for _, c := range g.PassedConcepts {
+		if included[c.ID] {
+			out = append(out, c.ID)
+		}
+	}
+	for _, c := range g.UntestedConcepts {
+		if included[c.ID] {
+			out = append(out, c.ID)
+		}
+	}
+	return out
+}
+
+// kahnSort returns a topological order over the included concept IDs using
+// declaration order (decl) as the tie-breaker. Roots appear first.
+func kahnSort(included map[string]bool, decl []string, g *graph.Graph, all map[string]*graph.ConceptNode) []string {
+	childEdges := make(map[string][]string, len(included))
+	seenEdge := make(map[[2]string]bool)
+	inDeg := make(map[string]int, len(included))
+	for _, id := range decl {
+		inDeg[id] = 0
+	}
+	for _, e := range g.Edges {
+		if !included[e.From] || !included[e.To] {
+			continue
+		}
+		if _, ok := all[e.From]; !ok {
+			continue
+		}
+		if _, ok := all[e.To]; !ok {
+			continue
+		}
+		key := [2]string{e.From, e.To}
+		if seenEdge[key] {
+			continue
+		}
+		seenEdge[key] = true
+		childEdges[e.From] = append(childEdges[e.From], e.To)
+		inDeg[e.To]++
+	}
+
+	ready := make(map[string]bool, len(included))
+	for _, id := range decl {
+		if inDeg[id] == 0 {
+			ready[id] = true
+		}
+	}
+
+	order := make([]string, 0, len(included))
+	for len(order) < len(included) {
+		chosen := ""
+		for _, id := range decl {
+			if ready[id] {
+				chosen = id
+				break
+			}
+		}
+		if chosen == "" {
+			break // cycle guard; valid graphs never reach here
+		}
+		delete(ready, chosen)
+		order = append(order, chosen)
+		for _, child := range childEdges[chosen] {
+			inDeg[child]--
+			if inDeg[child] == 0 {
+				ready[child] = true
+			}
+		}
+	}
+	return order
+}
+
+// deriveConceptInfos builds a ConceptInfo for each ID in topoOrder.
+func deriveConceptInfos(topoOrder []string, all map[string]*graph.ConceptNode, g *graph.Graph, s *state.State) []ConceptInfo {
+	passedSet := make(map[string]bool, len(g.PassedConcepts))
+	for _, c := range g.PassedConcepts {
+		passedSet[c.ID] = true
+	}
+	frontier := s.Frontier()
+	frontierSet := make(map[string]bool, len(frontier))
+	for _, f := range frontier {
+		frontierSet[f] = true
+	}
+
+	questionByID := make(map[string]*graph.QuestionNode)
+	for _, item := range g.TestingItems {
+		if item.Q != nil {
+			questionByID[item.Q.ID] = item.Q
+		}
+	}
+	answerByQN := make(map[int]*graph.AnswerNode)
+	for _, item := range g.TestingItems {
+		if item.A != nil {
+			n := graph.QuestionN(item.A.ID)
+			if n > 0 {
+				answerByQN[n] = item.A
+			}
+		}
+	}
+
+	conceptProbeQs := make(map[string][]string)
+	for _, e := range g.Edges {
+		if _, isConcept := all[e.From]; !isConcept {
+			continue
+		}
+		q, isQ := questionByID[e.To]
+		if !isQ {
+			continue
+		}
+		if graph.IsProbeClass(q.Class) {
+			conceptProbeQs[e.From] = append(conceptProbeQs[e.From], q.ID)
+		}
+	}
+
+	concepts := make([]ConceptInfo, 0, len(topoOrder))
+	for _, id := range topoOrder {
+		cn := all[id]
+
+		var cState string
+		if passedSet[id] {
+			cState = "passed"
+		} else {
+			cs := s.ConceptStatus(id)
+			switch {
+			case frontierSet[id] && cs.Gated:
+				cState = "gated"
+			case frontierSet[id]:
+				cState = "open"
+			default:
+				cState = "blocked"
+			}
+		}
+
+		var failSums []string
+		for _, qid := range conceptProbeQs[id] {
+			n := graph.QuestionN(qid)
+			if n == 0 {
+				continue
+			}
+			if a := answerByQN[n]; a != nil && a.Class == "fail" {
+				failSums = append(failSums, a.Label)
+			}
+		}
+
+		concepts = append(concepts, ConceptInfo{
+			Node:          cn,
+			ConceptState:  cState,
+			FailSummaries: failSums,
+		})
+	}
+	return concepts
+}
+
+// ── public walk API ───────────────────────────────────────────────────────────
+
 // Walk returns the concepts reachable from startID via parent (prerequisite)
 // edges, in topological order with roots first.
 //
@@ -45,30 +235,12 @@ type TextReader func(citeStr, srcRoot string) (text string, drifted bool, err er
 //
 // Returns ErrUnknownConcept when startID is not a concept in g.
 func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptInfo, error) {
-	// Build a flat map of all concepts for fast lookup.
-	allConcepts := make(map[string]*graph.ConceptNode, len(g.PassedConcepts)+len(g.UntestedConcepts))
-	for _, c := range g.PassedConcepts {
-		allConcepts[c.ID] = c
-	}
-	for _, c := range g.UntestedConcepts {
-		allConcepts[c.ID] = c
-	}
-
-	if _, ok := allConcepts[startID]; !ok {
+	all := buildConceptMap(g)
+	if _, ok := all[startID]; !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownConcept, startID)
 	}
 
-	// parentMap[id] lists the parent concept IDs (concepts that id depends on).
-	parentMap := make(map[string][]string, len(allConcepts))
-	for _, e := range g.Edges {
-		if _, ok := allConcepts[e.From]; !ok {
-			continue
-		}
-		if _, ok := allConcepts[e.To]; !ok {
-			continue
-		}
-		parentMap[e.To] = append(parentMap[e.To], e.From)
-	}
+	parentMap := conceptParentMap(g, all)
 
 	// BFS from startID following parent edges, bounded by hops when hops >= 0.
 	type bfsItem struct {
@@ -91,34 +263,34 @@ func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptIn
 		}
 	}
 
-	// Declaration order for the visited set (passed first, then untested).
-	declOrder := make([]string, 0, len(visited))
-	for _, c := range g.PassedConcepts {
-		if visited[c.ID] {
-			declOrder = append(declOrder, c.ID)
-		}
-	}
-	for _, c := range g.UntestedConcepts {
-		if visited[c.ID] {
-			declOrder = append(declOrder, c.ID)
-		}
+	decl := buildDeclOrder(g, visited)
+	order := kahnSort(visited, decl, g, all)
+	return deriveConceptInfos(order, all, g, s), nil
+}
+
+// WalkAll returns every concept reachable from graph roots (concepts with no
+// parent concept) via child edges, bounded by depth. depth < 0 uses the
+// default limit of 5. depth == 0 returns roots only.
+//
+// Output is in topological order with roots first, declaration-order
+// tie-breaking, matching the ordering Walk produces.
+func WalkAll(g *graph.Graph, s *state.State, depth int) ([]ConceptInfo, error) {
+	const defaultDepth = 5
+	if depth < 0 {
+		depth = defaultDepth
 	}
 
-	// Build child edges for Kahn's algorithm (within visited concept set only).
-	childEdges := make(map[string][]string, len(visited))
+	all := buildConceptMap(g)
+	parentMap := conceptParentMap(g, all)
+
+	// Build child map (concept-level): childMap[parentID] = []childIDs.
+	childMap := make(map[string][]string, len(all))
 	seenEdge := make(map[[2]string]bool)
-	inDeg := make(map[string]int, len(visited))
-	for _, id := range declOrder {
-		inDeg[id] = 0
-	}
 	for _, e := range g.Edges {
-		if !visited[e.From] || !visited[e.To] {
+		if _, ok := all[e.From]; !ok {
 			continue
 		}
-		if _, ok := allConcepts[e.From]; !ok {
-			continue
-		}
-		if _, ok := allConcepts[e.To]; !ok {
+		if _, ok := all[e.To]; !ok {
 			continue
 		}
 		key := [2]string{e.From, e.To}
@@ -126,126 +298,42 @@ func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptIn
 			continue
 		}
 		seenEdge[key] = true
-		childEdges[e.From] = append(childEdges[e.From], e.To)
-		inDeg[e.To]++
+		childMap[e.From] = append(childMap[e.From], e.To)
 	}
 
-	// Kahn's topological sort with declaration-order tie-breaking.
-	ready := make(map[string]bool, len(visited))
-	for _, id := range declOrder {
-		if inDeg[id] == 0 {
-			ready[id] = true
+	// BFS from roots (concepts with no parents), following child edges.
+	type bfsItem struct {
+		id    string
+		depth int
+	}
+	visited := make(map[string]bool, len(all))
+	var queue []bfsItem
+	for id := range all {
+		if len(parentMap[id]) == 0 {
+			visited[id] = true
+			queue = append(queue, bfsItem{id, 0})
 		}
 	}
-
-	topoOrder := make([]string, 0, len(visited))
-	for len(topoOrder) < len(visited) {
-		// Take the first ready node in declaration order.
-		chosen := ""
-		for _, id := range declOrder {
-			if ready[id] {
-				chosen = id
-				break
-			}
-		}
-		if chosen == "" {
-			break // cycle guard; valid graphs never reach here
-		}
-		delete(ready, chosen)
-		topoOrder = append(topoOrder, chosen)
-		for _, child := range childEdges[chosen] {
-			inDeg[child]--
-			if inDeg[child] == 0 {
-				ready[child] = true
-			}
-		}
-	}
-
-	// Derive per-concept state and fail summaries.
-	passedSet := make(map[string]bool, len(g.PassedConcepts))
-	for _, c := range g.PassedConcepts {
-		passedSet[c.ID] = true
-	}
-	frontier := s.Frontier()
-	frontierSet := make(map[string]bool, len(frontier))
-	for _, f := range frontier {
-		frontierSet[f] = true
-	}
-
-	// Build question index by ID and answer index by question number.
-	questionByID := make(map[string]*graph.QuestionNode)
-	for _, item := range g.TestingItems {
-		if item.Q != nil {
-			questionByID[item.Q.ID] = item.Q
-		}
-	}
-	answerByQN := make(map[int]*graph.AnswerNode)
-	for _, item := range g.TestingItems {
-		if item.A != nil {
-			n := graph.QuestionN(item.A.ID)
-			if n > 0 {
-				answerByQN[n] = item.A
-			}
-		}
-	}
-
-	// conceptProbeQs[id] lists probe question IDs belonging to the concept.
-	conceptProbeQs := make(map[string][]string)
-	for _, e := range g.Edges {
-		if _, isConcept := allConcepts[e.From]; !isConcept {
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur.depth >= depth {
 			continue
 		}
-		q, isQ := questionByID[e.To]
-		if !isQ {
-			continue
-		}
-		if graph.IsProbeClass(q.Class) {
-			conceptProbeQs[e.From] = append(conceptProbeQs[e.From], q.ID)
+		for _, childID := range childMap[cur.id] {
+			if !visited[childID] {
+				visited[childID] = true
+				queue = append(queue, bfsItem{childID, cur.depth + 1})
+			}
 		}
 	}
 
-	concepts := make([]ConceptInfo, 0, len(topoOrder))
-	for _, id := range topoOrder {
-		cn := allConcepts[id]
-
-		// Derive concept state.
-		var cState string
-		if passedSet[id] {
-			cState = "passed"
-		} else {
-			cs := s.ConceptStatus(id)
-			switch {
-			case frontierSet[id] && cs.Gated:
-				cState = "gated"
-			case frontierSet[id]:
-				cState = "open"
-			default:
-				cState = "blocked"
-			}
-		}
-
-		// Collect fail summaries from probe questions in declaration order.
-		// Declaration order matches the order answers were recorded.
-		var failSums []string
-		for _, qid := range conceptProbeQs[id] {
-			n := graph.QuestionN(qid)
-			if n == 0 {
-				continue
-			}
-			if a := answerByQN[n]; a != nil && a.Class == "fail" {
-				failSums = append(failSums, a.Label)
-			}
-		}
-
-		concepts = append(concepts, ConceptInfo{
-			Node:          cn,
-			ConceptState:  cState,
-			FailSummaries: failSums,
-		})
-	}
-
-	return concepts, nil
+	decl := buildDeclOrder(g, visited)
+	order := kahnSort(visited, decl, g, all)
+	return deriveConceptInfos(order, all, g, s), nil
 }
+
+// ── Markdown rendering ────────────────────────────────────────────────────────
 
 // Render produces a Markdown report from a pre-walked concept list.
 // reader is used in fulltext mode to read cited source text; pass nil to skip
