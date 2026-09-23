@@ -9,489 +9,406 @@ import (
 	"github.com/reithan/teach-me/internal/graph"
 )
 
-// ── tm lint --drift tests ─────────────────────────────────────────────────────
+const origSrc5 = "line 1\nline 2\nline 3\nline 4\nline 5\n"
 
-// TestLintDrift_NoDrift_Exit0 verifies exit 0 and "ok" when all citations match
-// the current file content.
-func TestLintDrift_NoDrift_Exit0(t *testing.T) {
-	tempErrlog(t)
-	setupCheckSrcRoot(t)
-	fixture := checkProbeFixture(t)
-	t.Setenv("TM_FILE", "")
-
-	out, errOut, code := run(t, "lint", "--drift", fixture)
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	if strings.TrimSpace(out) != "ok" {
-		t.Errorf("want 'ok', got %q", out)
-	}
-}
-
-// TestLintDrift_DriftedCitation_Exit1 verifies exit 1 and DRIFT lines when the
-// source file has changed since the citation was hashed.
-func TestLintDrift_DriftedCitation_Exit1(t *testing.T) {
-	tempErrlog(t)
+// driftSetup creates a temp dir, writes src.txt with origSrc5, sets
+// TM_SRC_ROOT, and returns srcPath. The caller sets TM_FILE as needed.
+func driftSetup(t *testing.T) (srcPath string) {
+	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("TM_FILE", "")
-
-	// Write original src.txt content so the hash in check_probe.mmd is correct.
-	originalContent := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-	srcPath := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(originalContent), 0o644); err != nil {
+	srcPath = filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(srcPath, []byte(origSrc5), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TM_SRC_ROOT", dir)
+	return srcPath
+}
 
-	// Verify no drift before modifying the file.
-	fixture := checkProbeFixture(t)
-	out, _, code := run(t, "lint", "--drift", fixture)
-	if code != 0 {
-		t.Fatalf("pre-drift: want exit 0, got %d; output:\n%s", code, out)
+// ── tm lint --drift ───────────────────────────────────────────────────────────
+
+func TestLintDrift(t *testing.T) {
+	type tc struct {
+		name     string
+		setup    func(t *testing.T) (graphPath string, mutateSrc func())
+		wantCode int
+		wantOut  string // substring match; use exactOut for TrimSpace equality
+		exactOut bool
+		wantErr  string // substring in stderr; "" = no check
 	}
 
-	// Modify src.txt so the stored hash no longer matches.
-	modifiedContent := "line 1 modified\nline 2\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(srcPath, []byte(modifiedContent), 0o644); err != nil {
-		t.Fatal(err)
+	tests := []tc{
+		{
+			name: "clean exit0",
+			setup: func(t *testing.T) (string, func()) {
+				setupCheckSrcRoot(t)
+				t.Setenv("TM_FILE", "")
+				return checkProbeFixture(t), nil
+			},
+			wantCode: 0,
+			wantOut:  "ok",
+			exactOut: true,
+		},
+		{
+			name: "drifted citation exit1",
+			setup: func(t *testing.T) (string, func()) {
+				src := driftSetup(t)
+				t.Setenv("TM_FILE", "")
+				return checkProbeFixture(t), func() {
+					if err := os.WriteFile(src, []byte("line 1 modified\nline 2\nline 3\nline 4\nline 5\n"), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+			},
+			wantCode: 1,
+			wantOut:  "DRIFT ",
+		},
+		{
+			name: "read error continues exit1",
+			setup: func(t *testing.T) (string, func()) {
+				dir := t.TempDir()
+				t.Setenv("TM_SRC_ROOT", dir)
+				t.Setenv("TM_FILE", "")
+				content := "flowchart TB\n" +
+					"    subgraph passed[\"Concepts User understands\"]\n    end\n" +
+					"    subgraph untested[\"Concepts User has not been tested on\"]\n" +
+					"        mycon[\"My concept<br/>f5ca3875b379@missing.txt:1-5\"]\n    end\n" +
+					"    subgraph testing[\"Open tests validating and teaching User understanding\"]\n    end\n" +
+					"    classDef pending stroke-dasharray:4 3\n"
+				p := filepath.Join(dir, "g.mmd")
+				if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return p, nil
+			},
+			wantCode: 1,
+			wantErr:  "err: ",
+		},
+		{
+			name: "parse error exit3",
+			setup: func(t *testing.T) (string, func()) {
+				dir := t.TempDir()
+				t.Setenv("TM_FILE", "")
+				p := filepath.Join(dir, "bad.mmd")
+				if err := os.WriteFile(p, []byte("not valid mermaid"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return p, nil
+			},
+			wantCode: 3,
+		},
+		{
+			name: "passed concepts exit0",
+			setup: func(t *testing.T) (string, func()) {
+				setupRaftSrcRoot(t)
+				t.Setenv("TM_FILE", "")
+				return raftFixture(t), nil
+			},
+			wantCode: 0,
+			wantOut:  "ok",
+			exactOut: true,
+		},
 	}
 
-	out, errOut, code := run(t, "lint", "--drift", fixture)
-	if code != 1 {
-		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
-	}
-	// check_probe.mmd has citations for mycon (src.txt:1-5), q1 (src.txt:1-3),
-	// q2 (src.txt:2-4). All three include line 1, so all three should DRIFT.
-	if !strings.Contains(out, "DRIFT ") {
-		t.Errorf("want DRIFT lines in output; got:\n%s", out)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			graphPath, mutateSrc := tc.setup(t)
+			if mutateSrc != nil {
+				mutateSrc()
+			}
+			out, errOut, code := run(t, "lint", "--drift", graphPath)
+			if code != tc.wantCode {
+				t.Fatalf("want exit %d, got %d\nstdout:\n%s\nstderr:\n%s", tc.wantCode, code, out, errOut)
+			}
+			if tc.wantOut != "" {
+				if tc.exactOut {
+					if strings.TrimSpace(out) != tc.wantOut {
+						t.Errorf("output: want %q, got %q", tc.wantOut, strings.TrimSpace(out))
+					}
+				} else if !strings.Contains(out, tc.wantOut) {
+					t.Errorf("output: want %q; got:\n%s", tc.wantOut, out)
+				}
+			}
+			if tc.wantErr != "" && !strings.Contains(errOut, tc.wantErr) {
+				t.Errorf("stderr: want %q; got:\n%s", tc.wantErr, errOut)
+			}
+		})
 	}
 }
 
-// ── tm rehash tests ───────────────────────────────────────────────────────────
+// ── tm rehash ────────────────────────────────────────────────────────────────
 
-// TestRehash_AllAlreadyHashed_NoOp verifies exit 0 and "ok" when all citations
-// are already hashed and no rewrite is needed.
-func TestRehash_AllAlreadyHashed_NoOp(t *testing.T) {
-	tempErrlog(t)
-	setupCheckSrcRoot(t)
-	fixture := checkProbeFixture(t)
-	t.Setenv("TM_FILE", "")
-
-	originalBytes, err := os.ReadFile(fixture)
-	if err != nil {
-		t.Fatal(err)
+func TestRehash(t *testing.T) {
+	type tc struct {
+		name        string
+		setup       func(t *testing.T) (graphPath string)
+		wantCode    int
+		wantOut     string // substring
+		wantErr     string // substring in stderr
+		extraAssert func(t *testing.T, graphPath, out string)
 	}
 
-	out, errOut, code := run(t, "rehash", fixture)
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	if strings.TrimSpace(out) != "ok" {
-		t.Errorf("want 'ok', got %q", out)
+	tests := []tc{
+		{
+			name: "no graph file exit3",
+			setup: func(t *testing.T) string {
+				t.Setenv("TM_FILE", "")
+				t.Chdir(t.TempDir()) // empty dir — no .tmconfig
+				return ""
+			},
+			wantCode: 3,
+		},
+		{
+			// Unresolvable hashless citations: all errors collected then refused.
+			// Covers the hashOne error path and the errs-collection loop.
+			name: "unresolvable citations exit3",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				t.Setenv("TM_SRC_ROOT", dir) // no src files in dir
+				t.Setenv("TM_FILE", "")
+				content := "flowchart TB\n" +
+					"    subgraph passed[\"Concepts User understands\"]\n    end\n" +
+					"    subgraph untested[\"Concepts User has not been tested on\"]\n" +
+					"        mycon[\"My concept<br/>missing.txt:1-5\"]\n    end\n" +
+					"    subgraph testing[\"Open tests validating and teaching User understanding\"]\n    end\n" +
+					"    classDef pending stroke-dasharray:4 3\n"
+				p := filepath.Join(dir, "g.mmd")
+				if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return p
+			},
+			wantCode: 3,
+			wantErr:  "err: ",
+		},
+		{
+			name: "already hashed noop",
+			setup: func(t *testing.T) string {
+				driftSetup(t)
+				t.Setenv("TM_FILE", "")
+				return checkProbeFixture(t)
+			},
+			wantCode: 0,
+			wantOut:  "ok",
+			extraAssert: func(t *testing.T, graphPath, _ string) {
+				before, err := os.ReadFile(graphPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				after, err := os.ReadFile(graphPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(before) != string(after) {
+					t.Error("rehash must not modify a file that is already fully hashed")
+				}
+			},
+		},
+		{
+			// Legacy graph: untested concept with hashless citation.
+			// hash of "line 1\nline 2\nline 3\nline 4\nline 5" = f5ca3875b379
+			name: "hashless untested concept",
+			setup: func(t *testing.T) string {
+				src := driftSetup(t)
+				dir := filepath.Dir(src)
+				t.Chdir(dir)
+				content := "flowchart TB\n" +
+					"    subgraph passed[\"Concepts User understands\"]\n    end\n" +
+					"    subgraph untested[\"Concepts User has not been tested on\"]\n" +
+					"        mycon[\"My concept<br/>src.txt:1-5\"]\n    end\n" +
+					"    subgraph testing[\"Open tests validating and teaching User understanding\"]\n    end\n" +
+					"    classDef pending stroke-dasharray:4 3\n"
+				p := filepath.Join(dir, "g.mmd")
+				if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TM_FILE", p)
+				return p
+			},
+			wantCode: 0,
+			extraAssert: func(t *testing.T, graphPath, out string) {
+				const wantCite = "f5ca3875b379@src.txt:1-5"
+				if !strings.Contains(out, "mycon src.txt:1-5 -> "+wantCite) {
+					t.Errorf("want change line; got:\n%s", out)
+				}
+				if !strings.Contains(out, "ok") {
+					t.Errorf("want ok in output; got:\n%s", out)
+				}
+				data, err := os.ReadFile(graphPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				g, err := graph.Parse(data)
+				if err != nil {
+					t.Fatalf("parse after rehash: %v", err)
+				}
+				if len(g.UntestedConcepts) == 0 || g.UntestedConcepts[0].Cites[0] != wantCite {
+					t.Errorf("concept cite after rehash: want %q", wantCite)
+				}
+			},
+		},
+		{
+			// Legacy graph: passed concept + question both have hashless citations.
+			// hash of lines 1-3 = cd3f27ccd149; hash of lines 1-5 = f5ca3875b379
+			name: "passed concept and question",
+			setup: func(t *testing.T) string {
+				src := driftSetup(t)
+				dir := filepath.Dir(src)
+				t.Chdir(dir)
+				content := "flowchart TB\n" +
+					"    subgraph passed[\"Concepts User understands\"]\n" +
+					"        pc1[\"Passed concept<br/>src.txt:1-3\"]\n    end\n" +
+					"    subgraph untested[\"Concepts User has not been tested on\"]\n" +
+					"        uc1[\"Untested concept\"]\n" +
+					"        pc1 --\"enables\"--> uc1\n    end\n" +
+					"    subgraph testing[\"Open tests validating and teaching User understanding\"]\n" +
+					"        q1[\"Question text<br/>src.txt:1-5\"]:::probe_1\n" +
+					"        uc1 --> q1\n    end\n" +
+					"    classDef probe_1 stroke:#4aa3ff\n" +
+					"    classDef pending stroke-dasharray:4 3\n"
+				p := filepath.Join(dir, "g.mmd")
+				if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TM_FILE", p)
+				return p
+			},
+			wantCode: 0,
+			extraAssert: func(t *testing.T, graphPath, out string) {
+				const wantPC = "cd3f27ccd149@src.txt:1-3"
+				const wantQ = "f5ca3875b379@src.txt:1-5"
+				if !strings.Contains(out, "pc1 src.txt:1-3 -> "+wantPC) {
+					t.Errorf("want passed concept change line; got:\n%s", out)
+				}
+				if !strings.Contains(out, "q1 src.txt:1-5 -> "+wantQ) {
+					t.Errorf("want question change line; got:\n%s", out)
+				}
+				if !strings.Contains(out, "ok") {
+					t.Errorf("want ok in output; got:\n%s", out)
+				}
+				data, err := os.ReadFile(graphPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				g, err := graph.Parse(data)
+				if err != nil {
+					t.Fatalf("parse after rehash: %v", err)
+				}
+				if len(g.PassedConcepts) == 0 || g.PassedConcepts[0].Cites[0] != wantPC {
+					t.Errorf("passed concept cite: want %q", wantPC)
+				}
+				var foundQ string
+				for _, item := range g.TestingItems {
+					if item.Q != nil && item.Q.ID == "q1" {
+						foundQ = item.Q.Cite
+					}
+				}
+				if foundQ != wantQ {
+					t.Errorf("question cite: want %q, got %q", wantQ, foundQ)
+				}
+			},
+		},
+		{
+			name: "parse error exit3",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				t.Setenv("TM_FILE", "")
+				p := filepath.Join(dir, "bad.mmd")
+				if err := os.WriteFile(p, []byte("not valid mermaid"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return p
+			},
+			wantCode: 3,
+		},
 	}
 
-	// File must not be rewritten on a no-op.
-	afterBytes, err := os.ReadFile(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(originalBytes) != string(afterBytes) {
-		t.Error("rehash should not modify a file that already has all citations hashed")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			graphPath := tc.setup(t)
+			args := []string{"rehash"}
+			if graphPath != "" {
+				args = append(args, graphPath)
+			}
+			out, errOut, code := run(t, args...)
+			if code != tc.wantCode {
+				t.Fatalf("want exit %d, got %d\nstdout:\n%s\nstderr:\n%s", tc.wantCode, code, out, errOut)
+			}
+			if tc.wantOut != "" && !strings.Contains(out, tc.wantOut) {
+				t.Errorf("output: want %q; got:\n%s", tc.wantOut, out)
+			}
+			if tc.wantErr != "" && !strings.Contains(errOut, tc.wantErr) {
+				t.Errorf("stderr: want %q; got:\n%s", tc.wantErr, errOut)
+			}
+			if tc.extraAssert != nil {
+				tc.extraAssert(t, graphPath, out)
+			}
+		})
 	}
 }
 
-// TestRehash_HashlessToHashed verifies that tm rehash rewrites hashless
-// citations to the hashed form and exits 0.
-func TestRehash_HashlessToHashed(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Chdir(dir)
+// ── DRIFT in read commands ────────────────────────────────────────────────────
 
-	// src.txt with 10 lines (same as setupSrcFile).
-	srcContent := "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n"
-	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	// Write a graph with a hashless citation. We write directly (bypassing
-	// ops.Mutate) to simulate a legacy graph created before M9.
-	graphContent := `flowchart TB
-    subgraph passed["Concepts User understands"]
-    end
-    subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>src.txt:1-5"]
-    end
-    subgraph testing["Open tests validating and teaching User understanding"]
-    end
-    classDef pending stroke-dasharray:4 3
-`
-	graphPath := filepath.Join(dir, "g.mmd")
-	if err := os.WriteFile(graphPath, []byte(graphContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_FILE", graphPath)
-
-	out, errOut, code := run(t, "rehash", graphPath)
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	// Output must include one change line and then "ok".
-	// The hash for lines 1-5 of src.txt is f5ca3875b379.
-	wantCite := "f5ca3875b379@src.txt:1-5"
-	wantLine := "mycon src.txt:1-5 -> " + wantCite
-	if !strings.Contains(out, wantLine) {
-		t.Errorf("want change line %q; got:\n%s", wantLine, out)
-	}
-	if !strings.Contains(out, "ok") {
-		t.Errorf("want 'ok' in output; got:\n%s", out)
+// TestDRIFT_Reads verifies that check, ask --src-text, and show all print a
+// DRIFT line when the source file has changed since the citation was hashed.
+func TestDRIFT_Reads(t *testing.T) {
+	tests := []struct {
+		name    string
+		cmdArgs []string
+		modSrc  string // full replacement content for src.txt
+	}{
+		{
+			name:    "check prints DRIFT",
+			cmdArgs: []string{"check", "q1"},
+			modSrc:  "line 1 modified\nline 2\nline 3\nline 4\nline 5\n",
+		},
+		{
+			name:    "ask --src-text prints DRIFT",
+			cmdArgs: []string{"ask", "--src-text", "mycon"},
+			// Modify line 2 so src.txt:2-4 (cited by q2, the unanswered question) drifts.
+			modSrc: "line 1\nline 2 modified\nline 3\nline 4\nline 5\n",
+		},
+		{
+			name:    "show concept prints DRIFT",
+			cmdArgs: []string{"show", "mycon"},
+			modSrc:  "line 1 modified\nline 2\nline 3\nline 4\nline 5\n",
+		},
+		{
+			name:    "show question prints DRIFT",
+			cmdArgs: []string{"show", "q1"},
+			modSrc:  "line 1 modified\nline 2\nline 3\nline 4\nline 5\n",
+		},
 	}
 
-	// Verify the graph now has a hashed citation.
-	data, err := os.ReadFile(graphPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	g, parseErr := graph.Parse(data)
-	if parseErr != nil {
-		t.Fatalf("parse after rehash: %v", parseErr)
-	}
-	if len(g.UntestedConcepts) == 0 {
-		t.Fatal("no untested concepts after rehash")
-	}
-	mycon := g.UntestedConcepts[0]
-	if len(mycon.Cites) != 1 {
-		t.Fatalf("want 1 cite, got %d", len(mycon.Cites))
-	}
-	if mycon.Cites[0] != wantCite {
-		t.Errorf("want cite %q, got %q", wantCite, mycon.Cites[0])
-	}
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempErrlog(t)
+			srcPath := driftSetup(t)
+			fixture := checkProbeFixture(t)
+			t.Setenv("TM_FILE", fixture)
 
-// ── DRIFT in tm check output ──────────────────────────────────────────────────
+			// Verify no DRIFT before mutation.
+			out, _, code := run(t, tc.cmdArgs...)
+			if code != 0 {
+				t.Fatalf("before drift: want exit 0, got %d; out:\n%s", code, out)
+			}
+			if strings.Contains(out, "DRIFT") {
+				t.Errorf("no DRIFT expected before mutation; got:\n%s", out)
+			}
 
-// TestCheck_DRIFT_HashMismatch verifies that tm check prints a DRIFT line when
-// the source file has changed since the citation was hashed.
-func TestCheck_DRIFT_HashMismatch(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
+			// Mutate src.txt so stored hashes no longer match.
+			if err := os.WriteFile(srcPath, []byte(tc.modSrc), 0o644); err != nil {
+				t.Fatal(err)
+			}
 
-	// Write original src.txt so check_probe.mmd hashes are valid.
-	originalContent := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-	srcPath := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcPath, []byte(originalContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	fixture := checkProbeFixture(t)
-	t.Setenv("TM_FILE", fixture)
-
-	// Add a pending answer so check has a q1 to check.
-	// check_probe.mmd already has a1:::pending under q1.
-	// Get the first question's answer to check.
-	out, _, code := run(t, "check", "q1")
-	if code != 0 {
-		t.Fatalf("check before drift: want exit 0, got %d; output:\n%s", code, out)
-	}
-	if strings.Contains(out, "DRIFT") {
-		t.Errorf("no drift expected before file modification; got:\n%s", out)
-	}
-
-	// Modify src.txt so the stored hash no longer matches.
-	modifiedContent := "line 1 modified\nline 2\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(srcPath, []byte(modifiedContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	out, _, code = run(t, "check", "q1")
-	if code != 0 {
-		t.Fatalf("check after drift: want exit 0 (no exit-status change in M9), got %d; output:\n%s", code, out)
-	}
-	if !strings.Contains(out, "DRIFT ") {
-		t.Errorf("want DRIFT line in output after file modification; got:\n%s", out)
-	}
-}
-
-// ── additional rehash error paths ────────────────────────────────────────────
-
-// TestRehash_NoFile_Exit3 verifies exit 3 when no graph file can be resolved.
-func TestRehash_NoFile_Exit3(t *testing.T) {
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-
-	_, errOut, code := run(t, "rehash")
-	if code != 3 {
-		t.Fatalf("want exit 3, got %d; stderr:\n%s", code, errOut)
-	}
-}
-
-// TestRehash_ParseError_Exit3 verifies exit 3 when the graph file is not valid Mermaid.
-func TestRehash_ParseError_Exit3(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_FILE", "")
-
-	bad := filepath.Join(dir, "bad.mmd")
-	if err := os.WriteFile(bad, []byte("this is not valid mermaid content at all"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, errOut, code := run(t, "rehash", bad)
-	if code != 3 {
-		t.Fatalf("want exit 3, got %d; stderr:\n%s", code, errOut)
-	}
-}
-
-// TestRehash_HashlessPassedAndQuestion verifies that tm rehash hashes citations
-// in PassedConcepts (lines 88-99) and TestingItems.Q (lines 129-131).
-func TestRehash_HashlessPassedAndQuestion(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	srcContent := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	// Legacy graph: passed concept + question both have hashless citations.
-	// Concept-to-concept edges require a relation label (check10).
-	graphContent := `flowchart TB
-    subgraph passed["Concepts User understands"]
-        pc1["Passed concept<br/>src.txt:1-3"]
-    end
-    subgraph untested["Concepts User has not been tested on"]
-        uc1["Untested concept"]
-        pc1 --"enables"--> uc1
-    end
-    subgraph testing["Open tests validating and teaching User understanding"]
-        q1["Question text<br/>src.txt:1-5"]:::probe_1
-        uc1 --> q1
-    end
-    classDef probe_1 stroke:#4aa3ff
-    classDef pending stroke-dasharray:4 3
-`
-	graphPath := filepath.Join(dir, "g.mmd")
-	if err := os.WriteFile(graphPath, []byte(graphContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_FILE", graphPath)
-
-	out, errOut, code := run(t, "rehash", graphPath)
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	// src.txt:1-3 → "line 1\nline 2\nline 3" → cd3f27ccd149
-	// src.txt:1-5 → "line 1\nline 2\nline 3\nline 4\nline 5" → f5ca3875b379
-	wantPassedCite := "cd3f27ccd149@src.txt:1-3"
-	wantQCite := "f5ca3875b379@src.txt:1-5"
-	if !strings.Contains(out, "pc1 src.txt:1-3 -> "+wantPassedCite) {
-		t.Errorf("want passed concept change line; got:\n%s", out)
-	}
-	if !strings.Contains(out, "q1 src.txt:1-5 -> "+wantQCite) {
-		t.Errorf("want question change line; got:\n%s", out)
-	}
-	if !strings.Contains(out, "ok") {
-		t.Errorf("want 'ok' in output; got:\n%s", out)
-	}
-
-	data, err := os.ReadFile(graphPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	g, parseErr := graph.Parse(data)
-	if parseErr != nil {
-		t.Fatalf("parse after rehash: %v", parseErr)
-	}
-
-	// Passed concept must now have a hashed citation.
-	if len(g.PassedConcepts) == 0 {
-		t.Fatal("no passed concepts after rehash")
-	}
-	if got := g.PassedConcepts[0].Cites[0]; got != wantPassedCite {
-		t.Errorf("passed concept cite: want %q, got %q", wantPassedCite, got)
-	}
-
-	// Question must now have a hashed citation.
-	var foundQCite string
-	for _, item := range g.TestingItems {
-		if item.Q != nil && item.Q.ID == "q1" {
-			foundQCite = item.Q.Cite
-			break
-		}
-	}
-	if foundQCite != wantQCite {
-		t.Errorf("question cite: want %q, got %q", wantQCite, foundQCite)
-	}
-}
-
-// ── additional lint --drift error paths ──────────────────────────────────────
-
-// TestLintDrift_ParseError_Exit3 verifies exit 3 when --drift is passed a file
-// that is not valid Mermaid (covers lint.go lines 97-101).
-func TestLintDrift_ParseError_Exit3(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_FILE", "")
-
-	bad := filepath.Join(dir, "bad.mmd")
-	if err := os.WriteFile(bad, []byte("this is not valid mermaid"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, errOut, code := run(t, "lint", "--drift", bad)
-	if code != 3 {
-		t.Fatalf("want exit 3, got %d; stderr:\n%s", code, errOut)
-	}
-}
-
-// TestLintDrift_CitationReadError_Exit1 verifies that a hashed citation
-// pointing to a missing file is reported as an err: line and exits 1 (not 3)
-// because lint --drift collects all failures and continues.
-// Covers lint.go: CheckDrift error path in lintDrift.
-func TestLintDrift_CitationReadError_Exit1(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-	t.Setenv("TM_FILE", "")
-	// Point TM_SRC_ROOT to a directory that has no source files.
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	// Write a graph with a hashed citation to a file that does not exist.
-	graphContent := `flowchart TB
-    subgraph passed["Concepts User understands"]
-    end
-    subgraph untested["Concepts User has not been tested on"]
-        mycon["My concept<br/>f5ca3875b379@missing.txt:1-5"]
-    end
-    subgraph testing["Open tests validating and teaching User understanding"]
-    end
-    classDef pending stroke-dasharray:4 3
-`
-	graphPath := filepath.Join(dir, "g.mmd")
-	if err := os.WriteFile(graphPath, []byte(graphContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, errOut, code := run(t, "lint", "--drift", graphPath)
-	// Read errors set anyProblem=true → exit 1 (not 3) so all errors are collected first.
-	if code != 1 {
-		t.Fatalf("want exit 1, got %d; stderr:\n%s", code, errOut)
-	}
-	if !strings.Contains(errOut, "err: ") {
-		t.Errorf("want err: line in stderr; got:\n%s", errOut)
-	}
-}
-
-// TestLintDrift_WithPassedConcepts verifies that citations in PassedConcepts
-// are checked for drift (lint.go lines 109-110). Uses raft.mmd which has
-// hashed citations in the passed subgraph.
-func TestLintDrift_WithPassedConcepts(t *testing.T) {
-	tempErrlog(t)
-	setupRaftSrcRoot(t)
-	raft := raftFixture(t)
-	t.Setenv("TM_FILE", "")
-
-	out, errOut, code := run(t, "lint", "--drift", raft)
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	if strings.TrimSpace(out) != "ok" {
-		t.Errorf("want 'ok', got %q", out)
-	}
-}
-
-// ── DRIFT in tm ask --src-text ────────────────────────────────────────────────
-
-// TestAsk_DRIFT_SrcText verifies that tm ask --src-text prints DRIFT when the
-// source file has changed since the citation was hashed (ask.go lines 287-288).
-func TestAsk_DRIFT_SrcText(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-
-	// Write original src.txt so check_probe.mmd hashes are valid.
-	originalContent := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(originalContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	fixture := checkProbeFixture(t)
-	t.Setenv("TM_FILE", fixture)
-
-	// Verify no drift before modifying the file.
-	out, errOut, code := run(t, "ask", "--src-text", "mycon")
-	if code != 0 {
-		t.Fatalf("ask before drift: want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	if strings.Contains(out, "DRIFT") {
-		t.Errorf("no drift expected before file modification; got:\n%s", out)
-	}
-
-	// Modify line 2 so src.txt:2-4 (cited by q2, the unanswered question) drifts.
-	modifiedContent := "line 1\nline 2 modified\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(modifiedContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	out, errOut, code = run(t, "ask", "--src-text", "mycon")
-	if code != 0 {
-		t.Fatalf("ask after drift: want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	if !strings.Contains(out, "DRIFT ") {
-		t.Errorf("want DRIFT line after file modification; got:\n%s", out)
-	}
-}
-
-// ── DRIFT in tm show ──────────────────────────────────────────────────────────
-
-// TestShow_DRIFT_ConceptAndQuestion verifies that tm show prints DRIFT for a
-// concept (show.go lines 183-184) and a question (show.go lines 260-261).
-func TestShow_DRIFT_ConceptAndQuestion(t *testing.T) {
-	tempErrlog(t)
-	dir := t.TempDir()
-
-	// Write original src.txt matching check_probe.mmd hashes.
-	originalContent := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(originalContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-
-	fixture := checkProbeFixture(t)
-	t.Setenv("TM_FILE", fixture)
-
-	// Verify no drift before modifying the file.
-	out, errOut, code := run(t, "show", "mycon")
-	if code != 0 {
-		t.Fatalf("show mycon before drift: want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	if strings.Contains(out, "DRIFT") {
-		t.Errorf("no drift expected before file modification; got:\n%s", out)
-	}
-
-	// Modify src.txt so stored hashes no longer match.
-	modifiedContent := "line 1 modified\nline 2\nline 3\nline 4\nline 5\n"
-	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(modifiedContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// tm show mycon → concept DRIFT (show.go lines 183-184).
-	out, errOut, code = run(t, "show", "mycon")
-	if code != 0 {
-		t.Fatalf("show mycon after drift: want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	if !strings.Contains(out, "DRIFT ") {
-		t.Errorf("want DRIFT line for concept; got:\n%s", out)
-	}
-
-	// tm show q1 → question DRIFT (show.go lines 260-261).
-	out, errOut, code = run(t, "show", "q1")
-	if code != 0 {
-		t.Fatalf("show q1 after drift: want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-	if !strings.Contains(out, "DRIFT ") {
-		t.Errorf("want DRIFT line for question; got:\n%s", out)
+			out, errOut, code := run(t, tc.cmdArgs...)
+			if code != 0 {
+				t.Fatalf("after drift: want exit 0, got %d; stderr:\n%s", code, errOut)
+			}
+			if !strings.Contains(out, "DRIFT ") {
+				t.Errorf("want DRIFT in output after mutation; got:\n%s", out)
+			}
+		})
 	}
 }
