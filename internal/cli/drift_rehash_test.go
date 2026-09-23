@@ -161,7 +161,7 @@ func TestRehash(t *testing.T) {
 		{
 			// Unresolvable hashless citations: all errors collected then refused.
 			// Covers the hashOne error path and the errs-collection loop.
-			name: "unresolvable citations exit3",
+			name: "unresolvable citations RefusalError exit1",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
 				t.Setenv("TM_SRC_ROOT", dir) // no src files in dir
@@ -178,7 +178,7 @@ func TestRehash(t *testing.T) {
 				}
 				return p
 			},
-			wantCode: 3,
+			wantCode: 1,
 			wantErr:  "err: ",
 		},
 		{

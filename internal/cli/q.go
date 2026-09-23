@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -65,13 +65,15 @@ func qRun(ctx *Context) int {
 	ctx.GraphFile = file
 
 	// Hash the citation: resolve, compute SHA-256 prefix, return hashed form.
-	srcRoot := cite.SrcRoot(filepath.Dir(file))
-	hashedCite, hashErr := cite.HashCitation(citeStr, srcRoot)
-	if hashErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("citation %q: %v", citeStr, hashErr)
-		ctx.FixMsg = usageLine
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
 		return 3
+	}
+	hashedCite, citeMeta, hashErr := resolver.HashCitation(citeStr)
+	if hashErr != nil {
+		return citeHashError(ctx, citeStr, hashErr, usageLine)
 	}
 	citeStr = hashedCite
 
@@ -248,7 +250,7 @@ func qRun(ctx *Context) int {
 
 			newQID = qid
 			re := reQID // "" when no --re
-			row := eventlog.NewRow("q", map[string]any{
+			probeFields := map[string]any{
 				"q":       qid,
 				"concept": conceptID,
 				"batch":   batchClass,
@@ -256,7 +258,9 @@ func qRun(ctx *Context) int {
 				"scope":   scope,
 				"src":     citeStr,
 				"re":      re,
-			})
+			}
+			source.ApplyMeta(probeFields, citeMeta)
+			row := eventlog.NewRow("q", probeFields)
 			// Gate clearing via --override (spec §7 line 278, Q3/Q7).
 			rows := []eventlog.Row{row}
 			finalG := &newG
@@ -412,7 +416,7 @@ func qRun(ctx *Context) int {
 		})
 
 		newQID = qid
-		row := eventlog.NewRow("q", map[string]any{
+		teachFields := map[string]any{
 			"q":       qid,
 			"concept": conceptID,
 			"batch":   batchClass,
@@ -420,7 +424,9 @@ func qRun(ctx *Context) int {
 			"scope":   scope,
 			"src":     citeStr,
 			"re":      reQID,
-		})
+		}
+		source.ApplyMeta(teachFields, citeMeta)
+		row := eventlog.NewRow("q", teachFields)
 		// Gate clearing via --override (spec §7 line 278, Q3/Q7).
 		rows := []eventlog.Row{row}
 		finalG := &newG

@@ -13,6 +13,7 @@ import (
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -262,16 +263,21 @@ func askRun(ctx *Context) int {
 		}
 	}
 
-	srcRoot := s.Cfg().SrcRoot
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
 
 	if format == "json" {
-		return askEmitJSON(ctx, selectedBatch, unanswered, s, srcRoot, wantSrcText)
+		return askEmitJSON(ctx, selectedBatch, unanswered, s, resolver, wantSrcText)
 	}
-	return askEmitLines(ctx, selectedBatch, unanswered, s, srcRoot, wantSrcText)
+	return askEmitLines(ctx, selectedBatch, unanswered, s, resolver, wantSrcText)
 }
 
 // askEmitLines emits the lines-format output for tm ask.
-func askEmitLines(ctx *Context, batch string, questions []*graph.QuestionNode, s *state.State, srcRoot string, wantSrcText bool) int {
+func askEmitLines(ctx *Context, batch string, questions []*graph.QuestionNode, s *state.State, resolver *source.Resolver, wantSrcText bool) int {
 	_, _ = fmt.Fprintln(ctx.Out, batch)
 	for _, q := range questions {
 		line := q.ID + " | " + q.Scope + " | " + q.Cite
@@ -283,12 +289,12 @@ func askEmitLines(ctx *Context, batch string, questions []*graph.QuestionNode, s
 		_, _ = fmt.Fprintln(ctx.Out, line)
 		if wantSrcText {
 			// DRIFT <cite> — printed when stored hash no longer matches file content.
-			if drifted, driftErr := cite.CheckDrift(q.Cite, srcRoot); driftErr == nil && drifted {
+			if drifted, _, driftErr := resolver.CheckDrift(q.Cite); driftErr == nil && drifted {
 				_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", q.Cite)
 			}
 			cit, citErr := cite.Parse(q.Cite)
 			if citErr == nil {
-				text, readErr := cite.ReadRange(cit, srcRoot)
+				text, _, readErr := resolver.Read(cit)
 				if readErr == nil {
 					for _, l := range strings.Split(text, "\n") {
 						_, _ = fmt.Fprintf(ctx.Out, "  %s\n", l)
@@ -316,7 +322,7 @@ type askJSONResponse struct {
 }
 
 // askEmitJSON emits the JSON-format output for tm ask.
-func askEmitJSON(ctx *Context, batch string, questions []*graph.QuestionNode, s *state.State, srcRoot string, wantSrcText bool) int {
+func askEmitJSON(ctx *Context, batch string, questions []*graph.QuestionNode, s *state.State, resolver *source.Resolver, wantSrcText bool) int {
 	qs := make([]askJSONQuestion, 0, len(questions))
 	for _, q := range questions {
 		jq := askJSONQuestion{
@@ -332,7 +338,7 @@ func askEmitJSON(ctx *Context, batch string, questions []*graph.QuestionNode, s 
 		if wantSrcText {
 			cit, citErr := cite.Parse(q.Cite)
 			if citErr == nil {
-				text, readErr := cite.ReadRange(cit, srcRoot)
+				text, _, readErr := resolver.Read(cit)
 				if readErr == nil {
 					jq.SrcText = text
 				}

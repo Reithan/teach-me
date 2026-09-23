@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/graph"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -75,7 +77,12 @@ func checkRun(ctx *Context) int {
 		return 1
 	}
 
-	srcRoot := s.Cfg().SrcRoot
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
 	isTeach := graph.IsTeachClass(qn.Class)
 
 	var b strings.Builder
@@ -92,12 +99,12 @@ func checkRun(ctx *Context) int {
 	//   <cited lines, verbatim, indented 2 spaces>
 	fmt.Fprintf(&b, "SRC %s\n", qn.Cite)
 	// DRIFT <cite> — printed when the stored hash no longer matches file content.
-	if drifted, driftErr := cite.CheckDrift(qn.Cite, srcRoot); driftErr == nil && drifted {
+	if drifted, _, driftErr := resolver.CheckDrift(qn.Cite); driftErr == nil && drifted {
 		fmt.Fprintf(&b, "DRIFT %s\n", qn.Cite)
 	}
 	cit, citErr := cite.Parse(qn.Cite)
 	if citErr == nil {
-		lines, readErr := cite.ReadRange(cit, srcRoot)
+		lines, _, readErr := resolver.Read(cit)
 		if readErr == nil {
 			for _, l := range strings.Split(lines, "\n") {
 				fmt.Fprintf(&b, "  %s\n", l)

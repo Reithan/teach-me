@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/graph"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -177,9 +177,14 @@ func showConcept(ctx *Context, s *state.State, g *graph.Graph, id string,
 	}
 	if len(concept.Cites) > 0 {
 		_, _ = fmt.Fprintf(ctx.Out, "src: %s\n", strings.Join(concept.Cites, ", "))
-		srcRoot := cite.SrcRoot(filepath.Dir(graphFile))
+		resolver, resolverErr := source.NewResolver(filepath.Dir(graphFile))
+		if resolverErr != nil {
+			ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+			return 3
+		}
 		for _, citeStr := range concept.Cites {
-			if drifted, driftErr := cite.CheckDrift(citeStr, srcRoot); driftErr == nil && drifted {
+			if drifted, _, driftErr := resolver.CheckDrift(citeStr); driftErr == nil && drifted {
 				_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", citeStr)
 			}
 		}
@@ -255,8 +260,13 @@ func showQuestion(ctx *Context, s *state.State, _ *graph.Graph, id string,
 	}
 	_, _ = fmt.Fprintf(ctx.Out, "scope: %s\n", q.Scope)
 	_, _ = fmt.Fprintf(ctx.Out, "src: %s\n", q.Cite)
-	srcRoot := cite.SrcRoot(filepath.Dir(graphFile))
-	if drifted, driftErr := cite.CheckDrift(q.Cite, srcRoot); driftErr == nil && drifted {
+	resolver, resolverErr := source.NewResolver(filepath.Dir(graphFile))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
+	if drifted, _, driftErr := resolver.CheckDrift(q.Cite); driftErr == nil && drifted {
 		_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", q.Cite)
 	}
 
