@@ -28,7 +28,7 @@ type Citation struct {
 }
 
 // uriScheme matches a leading URI scheme per RFC 3986: letter followed by
-// letters, digits, +, -, or ., then ://
+// letters, digits, +, -, or ., then ://.
 var uriScheme = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+\-.]*://`)
 
 // IsURI reports whether the locator has a URI scheme (e.g. https://).
@@ -60,7 +60,7 @@ func isLowerHex12(s string) bool {
 	}
 	for i := range len(s) {
 		c := s[i]
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false
 		}
 	}
@@ -132,8 +132,8 @@ func Parse(s string) (Citation, error) {
 	if locator == "" {
 		return Citation{}, fmt.Errorf("citation %q: empty file", s)
 	}
-	if strings.ContainsRune(locator, '\n') {
-		return Citation{}, fmt.Errorf("citation %q: file contains newline", s)
+	if strings.ContainsAny(locator, "\r\n") {
+		return Citation{}, fmt.Errorf("citation %q: file contains newline or carriage return", s)
 	}
 	if strings.ContainsRune(locator, '"') {
 		return Citation{}, fmt.Errorf("citation %q: locator contains raw \"; use %%22", s)

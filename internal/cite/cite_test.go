@@ -113,7 +113,7 @@ func TestParse(t *testing.T) {
 		{
 			name:    "file with newline",
 			input:   "foo\nbar.txt:1-2",
-			wantErr: `citation "foo\nbar.txt:1-2": file contains newline`,
+			wantErr: `citation "foo\nbar.txt:1-2": file contains newline or carriage return`,
 		},
 		{
 			name:    "locator with raw double-quote",
@@ -251,7 +251,7 @@ func TestHash(t *testing.T) {
 		t.Fatalf("Hash: got length %d, want 12", len(h))
 	}
 	for _, c := range h {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Fatalf("Hash: got non-hex char %q in %q", c, h)
 		}
 	}
@@ -631,6 +631,41 @@ func TestCheckDrift(t *testing.T) {
 		}
 		if drifted {
 			t.Fatal("URI citation should not drift in M9")
+		}
+	})
+
+	t.Run("parse error returns error", func(t *testing.T) {
+		_, err := cite.CheckDrift("invalid-not-a-citation", "/any")
+		if err == nil {
+			t.Fatal("expected error for invalid citation, got nil")
+		}
+	})
+
+	t.Run("missing file returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		h := "000000000000"
+		_, err := cite.CheckDrift(h+"@nonexistent.txt:1-5", dir)
+		if err == nil {
+			t.Fatal("expected error for missing file, got nil")
+		}
+	})
+}
+
+func TestHashCitation_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("parse error returns error", func(t *testing.T) {
+		_, err := cite.HashCitation("invalid-not-a-citation", "/any")
+		if err == nil {
+			t.Fatal("expected error for invalid citation, got nil")
+		}
+	})
+
+	t.Run("missing file returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err := cite.HashCitation("nonexistent.txt:1-5", dir)
+		if err == nil {
+			t.Fatal("expected error for missing file, got nil")
 		}
 	})
 }
