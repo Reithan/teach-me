@@ -250,7 +250,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when `TM_DOC` is set; otherwise one usage line per command |
 | `tm --help <command>`, `tm <command> --help [<flag>]` | specific inquiry | that command's usage line, or one line on the flag |
 
-Reads that resolve source text (`tm ask --src-text`, `tm show`, `tm report`) recompute the citation hash on every call. On mismatch the text is still printed, preceded by a `DRIFT <cite>` line.
+Reads that resolve source text (`tm ask --src-text`, `tm show`, `tm report`) recompute the citation hash on every call. On mismatch the text is still printed; a `DRIFT <cite>` line sits between the citation line and the text.
 
 Samples:
 
