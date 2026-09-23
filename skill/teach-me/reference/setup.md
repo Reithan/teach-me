@@ -29,31 +29,34 @@ converter without a pinned version.
 
 ## Suggested defaults
 
-**pandoc** (HTML, EPUB, DOCX, and more to plain text):
-
 ```
-convert text/html = pandoc --from html --to plain
+convert text/html = pandoc -f html -t gfm --wrap=none
+convert application/pdf = pdftotext -layout - -
+ext html = text/html
+ext pdf = application/pdf
 version pandoc = 3.1.11
-```
-
-**pdftotext** (PDF to plain text):
-
-```
-convert application/pdf = pdftotext - -
 version pdftotext = 24.02.0
 version-cmd pdftotext = pdftotext -v
-ext .pdf = application/pdf
-```
-
-The `version-cmd` line is required for pdftotext: it writes its version to stderr
-with `-v`, not to stdout with `--version`. Without the override the version check
-reads empty output and fails.
-
-**git** (for HEAD blob resolution and commit recording on local repos):
-
-```
 git = git
 ```
+
+**pandoc:** `-t gfm` keeps headings intact; `--wrap=none` preserves source
+line boundaries so line ranges stay stable.
+
+**pdftotext:** `-layout` preserves column layout. `version-cmd` is required
+because pdftotext prints its version to stderr with `-v`, not to stdout with
+`--version`. Without the override the version check reads empty output and
+refuses every citation.
+
+**Version-mismatch refusal** (example):
+
+```
+err: pandoc is 3.2.0, config pins 3.1.11
+fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may drift
+```
+
+Update the `version` line to match the installed version. Citations made under
+the old version may have drifted; verify them after upgrading.
 
 ## Test conversion
 
