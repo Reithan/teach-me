@@ -243,6 +243,24 @@ func TestLoadConfig(t *testing.T) {
 			user:    "git=/g\nconvert=\n",
 			wantGit: "/g",
 		},
+		{
+			name: "XDG_CONFIG_HOME is used to locate user config",
+			check: func(t *testing.T, _ *source.Config) {
+				xdg := t.TempDir()
+				t.Setenv("XDG_CONFIG_HOME", xdg)
+				cfgPath := filepath.Join(xdg, "tm", "config")
+				if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(cfgPath, []byte("git=/usr/bin/git\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				cfg, err := source.LoadConfig()
+				if err != nil || cfg.Git != "/usr/bin/git" {
+					t.Errorf("LoadConfig via XDG: git=%q err=%v", cfg.Git, err)
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -468,6 +486,7 @@ func TestPath(t *testing.T) {
 		wantErr              bool
 		wantInErr            string
 		skipNoGit            bool
+		extra                func(t *testing.T, dir string, r *source.Resolver)
 	}{
 		{
 			name: "raw file read",
@@ -487,6 +506,71 @@ func TestPath(t *testing.T) {
 			name: "missing file inside git repo is read from HEAD blob",
 			file: "file.txt", start: 1, end: 1, wantText: "blob line",
 			skipNoGit: true,
+		},
+		{
+			// HashCitation produces a stable content hash; CheckDrift returns
+			// false for a hashless citation, false when content matches, and
+			// true after the file is mutated.  Also verifies NewResolver loads
+			// config internally via LoadConfig (no explicit config path needed).
+			name: "HashCitation produces hash; CheckDrift detects mutation",
+			file: "a.txt", start: 1, end: 2,
+			extra: func(t *testing.T, dir string, r *source.Resolver) {
+				// NewResolver calls LoadConfig internally; verify it succeeds.
+				t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+				nr, err := source.NewResolver(dir)
+				if err != nil || nr == nil {
+					t.Errorf("NewResolver: %v", err)
+				}
+				f := filepath.Join(dir, "a.txt")
+				plain := f + ":1-2"
+				if drifted, _, err := r.CheckDrift(plain); err != nil || drifted {
+					t.Errorf("CheckDrift hashless: drifted=%v err=%v", drifted, err)
+				}
+				hashed, _, err := r.HashCitation(plain)
+				if err != nil {
+					t.Fatalf("HashCitation: %v", err)
+				}
+				if drifted, _, err := r.CheckDrift(hashed); err != nil || drifted {
+					t.Errorf("CheckDrift match: drifted=%v err=%v", drifted, err)
+				}
+				if err := os.WriteFile(f, []byte("alpha\nchanged\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if drifted, _, err := r.CheckDrift(hashed); err != nil || !drifted {
+					t.Errorf("CheckDrift mutated: drifted=%v err=%v", drifted, err)
+				}
+			},
+		},
+		{
+			// HashCitation and CheckDrift reject bad citation syntax and return
+			// an error when the stored hash does not match current content or
+			// the source file has been removed.
+			name: "HashCitation and CheckDrift: bad syntax and missing file return errors",
+			file: "a.txt", start: 1, end: 2,
+			extra: func(t *testing.T, dir string, r *source.Resolver) {
+				if _, _, err := r.HashCitation(":::"); err == nil {
+					t.Error("HashCitation bad syntax: want error")
+				}
+				if _, _, err := r.CheckDrift(":::"); err == nil {
+					t.Error("CheckDrift bad syntax: want error")
+				}
+				f := filepath.Join(dir, "a.txt")
+				hashed, _, err := r.HashCitation(f + ":1-2")
+				if err != nil {
+					t.Fatalf("HashCitation: %v", err)
+				}
+				wrong := strings.Replace(hashed, hashed[:12], "000000000000", 1)
+				if _, _, err := r.HashCitation(wrong); err == nil {
+					t.Error("HashCitation hash mismatch: want error")
+				}
+				_ = os.Remove(f)
+				if _, _, err := r.CheckDrift(hashed); err == nil {
+					t.Error("CheckDrift missing file: want error")
+				}
+				if _, _, err := r.HashCitation(hashed); err == nil {
+					t.Error("HashCitation missing file: want error")
+				}
+			},
 		},
 	}
 
@@ -534,6 +618,9 @@ func TestPath(t *testing.T) {
 			}
 			if tc.wantText != "" && text != tc.wantText {
 				t.Errorf("text = %q, want %q", text, tc.wantText)
+			}
+			if tc.extra != nil {
+				tc.extra(t, dir, r)
 			}
 		})
 	}
@@ -628,71 +715,5 @@ func TestApplyMeta(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestNewResolverHashCheckDrift(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	dir := t.TempDir()
-	f := filepath.Join(dir, "f.txt")
-	if err := os.WriteFile(f, []byte("line one\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	r, err := source.NewResolver(dir) // uses LoadConfig internally
-	if err != nil || r == nil {
-		t.Fatalf("NewResolver: %v", err)
-	}
-	hashed, _, err := r.HashCitation(f + ":1-1")
-	if err != nil {
-		t.Fatalf("HashCitation: %v", err)
-	}
-	if d, _, e := r.CheckDrift(f + ":1-1"); e != nil || d { // hashless → never drifted
-		t.Errorf("CheckDrift hashless: d=%v err=%v", d, e)
-	}
-	if d, _, e := r.CheckDrift(hashed); e != nil || d { // matches → not drifted
-		t.Errorf("CheckDrift not-drifted: d=%v err=%v", d, e)
-	}
-	if err := os.WriteFile(f, []byte("changed\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if d, _, e := r.CheckDrift(hashed); e != nil || !d { // file changed → drifted
-		t.Errorf("CheckDrift drifted: d=%v err=%v", d, e)
-	}
-	// HashCitation: parse error (covers resolver.go error branch in HashCitation).
-	if _, _, e := r.HashCitation(":::"); e == nil {
-		t.Error("HashCitation parse error: want error")
-	}
-	// HashCitation: stored hash mismatch.
-	if _, _, e := r.HashCitation(strings.Replace(hashed, hashed[:12], "000000000000", 1)); e == nil {
-		t.Error("HashCitation hash mismatch: want error")
-	}
-	// CheckDrift: parse error.
-	if _, _, e := r.CheckDrift(":::"); e == nil {
-		t.Error("CheckDrift parse error: want error")
-	}
-	// Read-error paths: remove file so Read fails.
-	_ = os.Remove(f)
-	if _, _, e := r.CheckDrift(hashed); e == nil {
-		t.Error("CheckDrift missing file: want error")
-	}
-	if _, _, e := r.HashCitation(hashed); e == nil {
-		t.Error("HashCitation missing file: want error")
-	}
-}
-
-// TestLoadConfigDirect covers LoadConfig + userConfigPath via XDG_CONFIG_HOME.
-func TestLoadConfigDirect(t *testing.T) {
-	xdg := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", xdg)
-	cfgPath := filepath.Join(xdg, "tm", "config")
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(cfgPath, []byte("git=/usr/bin/git\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := source.LoadConfig()
-	if err != nil || cfg.Git != "/usr/bin/git" {
-		t.Errorf("LoadConfig: git=%q err=%v", cfg.Git, err)
 	}
 }
