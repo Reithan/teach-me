@@ -847,7 +847,7 @@ internal/ops/             one file per mutating command: invariants (section 7),
 internal/lint/            section 11
 internal/cite/            citation parsing and hash computation
 internal/config/          config file lookup and targeted key writes: file, src-root, doc, repo aliases
-internal/source/          source resolution: resolve, fetch, convert, git locators, cache, migrate
+internal/source/          source resolution: resolve, fetch, convert, git locators, cache
 internal/report/          tm report: walk, format, inline text
 internal/eventlog/        section 10
 internal/errlog/          section 10.1
