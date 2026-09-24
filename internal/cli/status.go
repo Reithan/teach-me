@@ -116,6 +116,9 @@ func statusSummary(ctx *Context, s *state.State, showPassed bool) int {
 	for _, c := range g.UntestedConcepts {
 		allConceptSet[c.ID] = true
 	}
+	for _, c := range g.ReserveConcepts {
+		allConceptSet[c.ID] = true
+	}
 
 	frontier := s.Frontier()
 	blocked := s.Blocked()
@@ -129,9 +132,15 @@ func statusSummary(ctx *Context, s *state.State, showPassed bool) int {
 		blockedSet[b] = true
 	}
 
-	// Line 1: counts.
-	_, _ = fmt.Fprintf(ctx.Out, "passed %d  open %d  blocked %d\n",
-		len(g.PassedConcepts), len(frontier), len(blocked))
+	// Line 1: counts. Append "  reserve N" only when nonzero (spec §6 sample).
+	reserveN := len(g.ReserveConcepts)
+	if reserveN > 0 {
+		_, _ = fmt.Fprintf(ctx.Out, "passed %d  open %d  blocked %d  reserve %d\n",
+			len(g.PassedConcepts), len(frontier), len(blocked), reserveN)
+	} else {
+		_, _ = fmt.Fprintf(ctx.Out, "passed %d  open %d  blocked %d\n",
+			len(g.PassedConcepts), len(frontier), len(blocked))
+	}
 
 	// Optional: list passed concepts (--passed flag).
 	if showPassed {
@@ -167,15 +176,22 @@ func statusSummary(ctx *Context, s *state.State, showPassed bool) int {
 		}
 	}
 
+	// Build reserve set once for the blocking-parent check below.
+	reserveSet := make(map[string]bool, len(g.ReserveConcepts))
+	for _, rc := range g.ReserveConcepts {
+		reserveSet[rc.ID] = true
+	}
+
 	// Blocked concept lines, preserving UntestedConcepts declaration order.
 	for _, c := range g.UntestedConcepts {
 		if !blockedSet[c.ID] {
 			continue
 		}
-		// Find the first non-passed concept parent in Edges declaration order.
+		// Find the first untested (non-passed, non-reserve) concept parent in
+		// Edges declaration order. Reserve parents do not block the frontier.
 		blockingParent := ""
 		for _, e := range g.Edges {
-			if e.To == c.ID && allConceptSet[e.From] && !passedSet[e.From] {
+			if e.To == c.ID && allConceptSet[e.From] && !passedSet[e.From] && !reserveSet[e.From] {
 				blockingParent = e.From
 				break
 			}
@@ -207,6 +223,9 @@ func statusConcept(ctx *Context, s *state.State, conceptID string) int {
 	for _, c := range g.UntestedConcepts {
 		allConceptSet[c.ID] = true
 	}
+	for _, c := range g.ReserveConcepts {
+		allConceptSet[c.ID] = true
+	}
 
 	// Unknown concept → exit 3.
 	if !allConceptSet[conceptID] {
@@ -234,6 +253,16 @@ func statusConcept(ctx *Context, s *state.State, conceptID string) int {
 			line += " " + strings.Join(unblocked, " ")
 		}
 		_, _ = fmt.Fprintln(ctx.Out, line)
+		return 0
+	}
+
+	// Reserve concept: print a single-line summary and return.
+	reserveSet := make(map[string]bool, len(g.ReserveConcepts))
+	for _, c := range g.ReserveConcepts {
+		reserveSet[c.ID] = true
+	}
+	if reserveSet[conceptID] {
+		_, _ = fmt.Fprintf(ctx.Out, "%s  reserve\n", conceptID)
 		return 0
 	}
 

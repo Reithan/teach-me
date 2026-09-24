@@ -619,12 +619,13 @@ func makeLines(n int) []byte {
 	return []byte(b.String())
 }
 
-// setupRaftSrcRoot creates a temp dir with raft.txt (≥300 lines) and sets
-// TM_SRC_ROOT so raft.mmd citations resolve correctly.
+// setupRaftSrcRoot creates a temp dir with raft.txt (≥350 lines to cover the
+// log_compaction reserve cite at 301-340) and sets TM_SRC_ROOT so raft.mmd
+// citations resolve correctly.
 func setupRaftSrcRoot(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "raft.txt"), makeLines(300), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "raft.txt"), makeLines(350), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TM_SRC_ROOT", dir)

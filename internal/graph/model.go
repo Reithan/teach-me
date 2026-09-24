@@ -2,7 +2,7 @@
 // label-escaping for the Mermaid subset described in spec section 4.
 package graph
 
-// Block identifies one of the three fixed subgraph sections, in file order.
+// Block identifies one of the four fixed subgraph sections, in file order.
 type Block int
 
 const (
@@ -10,8 +10,12 @@ const (
 	BlockPassed Block = 0
 	// BlockUntested is the "untested" subgraph: concepts not yet tested.
 	BlockUntested Block = 1
+	// BlockReserve is the "reserve" subgraph: concepts mapped but not needed for
+	// the current goal. A file written before v0.3 may omit this block; the parser
+	// reads a missing reserve as empty. The writer always emits all four blocks.
+	BlockReserve Block = 2
 	// BlockTesting is the "testing" subgraph: open questions and answers.
-	BlockTesting Block = 2
+	BlockTesting Block = 3
 )
 
 // DroppedLabel is the answer-node label written when a question is dropped
@@ -94,6 +98,7 @@ type Graph struct {
 	// Subgraph titles as they appear in the file.
 	PassedTitle   string
 	UntestedTitle string
+	ReserveTitle  string
 	TestingTitle  string
 
 	// Concepts in the passed block, in declaration order.
@@ -102,6 +107,10 @@ type Graph struct {
 	// Gate meta lines and concepts in the untested block, in order.
 	UntestedMetas    []GateMeta
 	UntestedConcepts []*ConceptNode
+
+	// Concepts in the reserve block, in declaration order.
+	// Empty when no reserve block exists in the file (pre-v0.3).
+	ReserveConcepts []*ConceptNode
 
 	// Question and answer items in the testing block, in declaration order.
 	TestingItems []TestingItem
@@ -120,6 +129,9 @@ func (g *Graph) nodeBlocks() map[string]Block {
 	}
 	for _, c := range g.UntestedConcepts {
 		m[c.ID] = BlockUntested
+	}
+	for _, c := range g.ReserveConcepts {
+		m[c.ID] = BlockReserve
 	}
 	for _, item := range g.TestingItems {
 		if item.Q != nil {

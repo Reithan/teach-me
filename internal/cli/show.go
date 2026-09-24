@@ -91,6 +91,10 @@ func showRun(ctx *Context) int {
 	for _, c := range g.UntestedConcepts {
 		untestedSet[c.ID] = true
 	}
+	reserveSet := make(map[string]bool, len(g.ReserveConcepts))
+	for _, c := range g.ReserveConcepts {
+		reserveSet[c.ID] = true
+	}
 
 	// Build question and answer maps.
 	qMap := make(map[string]*graph.QuestionNode)
@@ -107,8 +111,8 @@ func showRun(ctx *Context) int {
 	}
 
 	switch {
-	case passedSet[id] || untestedSet[id]:
-		return showConcept(ctx, s, g, id, passedSet, untestedSet, answerByQID, withHistory, file)
+	case passedSet[id] || untestedSet[id] || reserveSet[id]:
+		return showConcept(ctx, s, g, id, passedSet, untestedSet, reserveSet, answerByQID, withHistory, file)
 	case qMap[id] != nil:
 		return showQuestion(ctx, s, g, id, qMap, answerByQID, withHistory, file)
 	case aMap[id] != nil:
@@ -122,7 +126,7 @@ func showRun(ctx *Context) int {
 
 // showConcept prints the node record for a concept.
 func showConcept(ctx *Context, s *state.State, g *graph.Graph, id string,
-	passedSet, untestedSet map[string]bool,
+	passedSet, untestedSet, reserveSet map[string]bool,
 	answerByQID map[string]*graph.AnswerNode,
 	withHistory bool, graphFile string,
 ) int {
@@ -133,18 +137,30 @@ func showConcept(ctx *Context, s *state.State, g *graph.Graph, id string,
 	for k := range untestedSet {
 		allConceptSet[k] = true
 	}
+	for k := range reserveSet {
+		allConceptSet[k] = true
+	}
 
 	// Determine concept state.
 	nodeState := "passed"
 	var concept *graph.ConceptNode
-	if passedSet[id] {
+	switch {
+	case passedSet[id]:
 		for _, c := range g.PassedConcepts {
 			if c.ID == id {
 				concept = c
 				break
 			}
 		}
-	} else {
+	case reserveSet[id]:
+		nodeState = "reserve"
+		for _, c := range g.ReserveConcepts {
+			if c.ID == id {
+				concept = c
+				break
+			}
+		}
+	default:
 		frontier := s.Frontier()
 		frontierSet := make(map[string]bool, len(frontier))
 		for _, f := range frontier {

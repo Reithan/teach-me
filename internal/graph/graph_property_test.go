@@ -59,7 +59,7 @@ func TestGraphProperty_RoundTrip(t *testing.T) {
 }
 
 // TestGraphProperty_Structure verifies structural invariants of Write output:
-//  1. Three blocks in fixed order (passed, untested, testing).
+//  1. Four blocks in fixed order (passed, untested, reserve, testing).
 //  2. Each question has a valid batch class.
 //  3. Each edge appears in the block required by the §4.2 rule.
 //  4. In each block, all declarations appear before all edges.
@@ -81,17 +81,18 @@ func TestGraphProperty_Structure(t *testing.T) {
 func checkWriteStructure(t *testing.T, g *graph.Graph, out string, seed int64) {
 	t.Helper()
 
-	// 1. Three blocks in fixed order.
+	// 1. Four blocks in fixed order: passed, untested, reserve, testing.
 	passedIdx := strings.Index(out, "subgraph passed")
 	untestedIdx := strings.Index(out, "subgraph untested")
+	reserveIdx := strings.Index(out, "subgraph reserve")
 	testingIdx := strings.Index(out, "subgraph testing")
-	if passedIdx < 0 || untestedIdx < 0 || testingIdx < 0 {
+	if passedIdx < 0 || untestedIdx < 0 || reserveIdx < 0 || testingIdx < 0 {
 		t.Errorf("seed %d: missing one or more subgraph blocks", seed)
 		return
 	}
-	if passedIdx >= untestedIdx || untestedIdx >= testingIdx {
-		t.Errorf("seed %d: blocks not in order passed=%d untested=%d testing=%d",
-			seed, passedIdx, untestedIdx, testingIdx)
+	if passedIdx >= untestedIdx || untestedIdx >= reserveIdx || reserveIdx >= testingIdx {
+		t.Errorf("seed %d: blocks not in order passed=%d untested=%d reserve=%d testing=%d",
+			seed, passedIdx, untestedIdx, reserveIdx, testingIdx)
 	}
 
 	// 2. Each question has a valid batch class.
@@ -104,10 +105,11 @@ func checkWriteStructure(t *testing.T, g *graph.Graph, out string, seed int64) {
 
 	// 3. Each edge appears in the correct block per the §4.2 rule.
 	// The generator uses the naming convention: pc* → passed, uc* → untested,
-	// q*/a* → testing.  We determine the expected block from that convention.
-	regions := [3]string{
+	// rc* → reserve, q*/a* → testing.  We determine the expected block from that.
+	regions := [4]string{
 		out[passedIdx:untestedIdx],
-		out[untestedIdx:testingIdx],
+		out[untestedIdx:reserveIdx],
+		out[reserveIdx:testingIdx],
 		out[testingIdx:],
 	}
 	for _, e := range g.Edges {
@@ -126,13 +128,14 @@ func checkWriteStructure(t *testing.T, g *graph.Graph, out string, seed int64) {
 
 	// 4. In each block, all declarations appear before all edges.
 	checkDeclsBeforeEdges(t, seed, "passed", out[passedIdx:untestedIdx])
-	checkDeclsBeforeEdges(t, seed, "untested", out[untestedIdx:testingIdx])
+	checkDeclsBeforeEdges(t, seed, "untested", out[untestedIdx:reserveIdx])
+	checkDeclsBeforeEdges(t, seed, "reserve", out[reserveIdx:testingIdx])
 	checkDeclsBeforeEdges(t, seed, "testing", out[testingIdx:])
 }
 
 // edgeBlock determines the expected home block for edge e using the §4.2 rule.
 // It relies on the generator's naming convention: pc* → passed, uc* → untested,
-// q*/a* → testing.
+// rc* → reserve, q*/a* → testing.
 func edgeBlock(e *graph.Edge) graph.Block {
 	blockOf := func(id string) graph.Block {
 		switch {
@@ -140,6 +143,8 @@ func edgeBlock(e *graph.Edge) graph.Block {
 			return graph.BlockTesting
 		case strings.HasPrefix(id, "uc"):
 			return graph.BlockUntested
+		case strings.HasPrefix(id, "rc"):
+			return graph.BlockReserve
 		default:
 			return graph.BlockPassed
 		}
@@ -159,6 +164,8 @@ func blockName(b graph.Block) string {
 		return "passed"
 	case graph.BlockUntested:
 		return "untested"
+	case graph.BlockReserve:
+		return "reserve"
 	case graph.BlockTesting:
 		return "testing"
 	default:

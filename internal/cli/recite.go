@@ -36,7 +36,7 @@ func reciteRun(ctx *Context) int {
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		srcRoot := s.Cfg().SrcRoot
 
-		// Find the concept (passed or untested).
+		// Find the concept (passed, untested, or reserve).
 		var targetNode *graph.ConceptNode
 		for _, c := range g.PassedConcepts {
 			if c.ID == concept {
@@ -46,6 +46,14 @@ func reciteRun(ctx *Context) int {
 		}
 		if targetNode == nil {
 			for _, c := range g.UntestedConcepts {
+				if c.ID == concept {
+					targetNode = c
+					break
+				}
+			}
+		}
+		if targetNode == nil {
+			for _, c := range g.ReserveConcepts {
 				if c.ID == concept {
 					targetNode = c
 					break
@@ -120,7 +128,8 @@ func reciteRun(ctx *Context) int {
 
 		// Build updated graph (copy-on-write).
 		newG := *g
-		if targetNode.Block == graph.BlockPassed {
+		switch targetNode.Block {
+		case graph.BlockPassed:
 			newPassed := make([]*graph.ConceptNode, len(g.PassedConcepts))
 			copy(newPassed, g.PassedConcepts)
 			for i, c := range newPassed {
@@ -130,7 +139,17 @@ func reciteRun(ctx *Context) int {
 				}
 			}
 			newG.PassedConcepts = newPassed
-		} else {
+		case graph.BlockReserve:
+			newReserve := make([]*graph.ConceptNode, len(g.ReserveConcepts))
+			copy(newReserve, g.ReserveConcepts)
+			for i, c := range newReserve {
+				if c.ID == concept {
+					newReserve[i] = &newNode
+					break
+				}
+			}
+			newG.ReserveConcepts = newReserve
+		default:
 			newUntested := make([]*graph.ConceptNode, len(g.UntestedConcepts))
 			copy(newUntested, g.UntestedConcepts)
 			for i, c := range newUntested {

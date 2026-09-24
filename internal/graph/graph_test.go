@@ -7,12 +7,14 @@ import (
 	"testing"
 )
 
-// TestGoldenRoundTrip parses each golden .mmd file under testdata/ and verifies
-// that Write produces byte-identical output (canonical round-trip).
+// TestGoldenRoundTrip parses each v0.3+ (four-block) golden .mmd file and
+// verifies that Write produces byte-identical output (canonical round-trip).
+// Three-block (pre-v0.3) fixtures are intentionally excluded because Write
+// always emits all four blocks; those files are covered by
+// TestThreeBlockFileUpgradesOnWrite instead.
 func TestGoldenRoundTrip(t *testing.T) {
 	goldens := []string{
 		"../../testdata/raft.mmd",
-		"../../testdata/gated.mmd",
 	}
 	for _, path := range goldens {
 		t.Run(path, func(t *testing.T) {
@@ -51,6 +53,68 @@ func TestGoldenRoundTrip(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestThreeBlockFileUpgradesOnWrite verifies that a pre-v0.3 three-block file
+// is accepted by Parse and that Write produces exactly the same bytes as the
+// original with one empty reserve block inserted between the untested and
+// testing subgraphs — every other byte is identical.
+//
+// testdata/gated.mmd is intentionally kept in three-block format; it is the
+// canonical proof that live pre-v0.3 files continue to work unchanged.
+func TestThreeBlockFileUpgradesOnWrite(t *testing.T) {
+	const path = "../../testdata/gated.mmd"
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+
+	// Sanity: confirm the fixture really is three-block.
+	if bytes.Contains(original, []byte("subgraph reserve")) {
+		t.Fatalf("%s already has a reserve block; revert it to three-block format", path)
+	}
+
+	g, err := Parse(original)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	got := Write(g)
+
+	// Build the expected output: original bytes with exactly one empty reserve
+	// block inserted just before "    subgraph testing[".
+	const testingMarker = "    subgraph testing[\""
+	const reserveBlock = "    subgraph reserve[\"Concepts held in reserve\"]\n    end\n"
+	idx := bytes.Index(original, []byte(testingMarker))
+	if idx < 0 {
+		t.Fatalf("%s: testing subgraph marker not found", path)
+	}
+	want := append(
+		append([]byte(nil), original[:idx]...),
+		append([]byte(reserveBlock), original[idx:]...)...,
+	)
+
+	if !bytes.Equal(got, want) {
+		wantLines := bytes.Split(want, []byte("\n"))
+		gotLines := bytes.Split(got, []byte("\n"))
+		n := len(wantLines)
+		if len(gotLines) > n {
+			n = len(gotLines)
+		}
+		t.Errorf("three-block upgrade: Write output does not match expected")
+		for i := range n {
+			var w, g2 []byte
+			if i < len(wantLines) {
+				w = wantLines[i]
+			}
+			if i < len(gotLines) {
+				g2 = gotLines[i]
+			}
+			if !bytes.Equal(w, g2) {
+				t.Errorf("  line %d:\n    want: %q\n    got:  %q", i+1, w, g2)
+			}
+		}
 	}
 }
 
@@ -830,5 +894,59 @@ func TestAnswerNodeAskedRoundTrip(t *testing.T) {
 				t.Errorf("OOS: want %v, got %v", tc.oos, got.OOS)
 			}
 		})
+	}
+}
+
+// TestParse_ReserveBlockPaths exercises optional-reserve parsing edge cases
+// that are not hit by the golden round-trip tests.
+func TestParse_ReserveBlockPaths(t *testing.T) {
+	// Blank line between the untested end and the reserve header exercises the
+	// blank-line skip in peekNextSubgraphID (lines 127-128 of parse.go).
+	withBlankLine := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n    end\n" +
+		"    subgraph untested[\"U\"]\n    end\n" +
+		"\n" + // blank line → exercises peekNextSubgraphID continue branch
+		"    subgraph reserve[\"R\"]\n    end\n" +
+		"    subgraph testing[\"T\"]\n    end\n"
+	if _, err := Parse([]byte(withBlankLine)); err != nil {
+		t.Errorf("blank-line-before-reserve: unexpected error: %v", err)
+	}
+
+	// File ends after untested block (no testing block at all) → error.
+	// This causes peekNextSubgraphID to exhaust all remaining lines (all blank)
+	// and return "" (line 138 of parse.go).
+	missingTesting := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n    end\n" +
+		"    subgraph untested[\"U\"]\n    end\n" +
+		"\n" // trailing blank line, no testing subgraph
+	if _, err := Parse([]byte(missingTesting)); err == nil {
+		t.Error("missing-testing-block: expected error, got nil")
+	}
+
+	// Reserve header without title bracket: "subgraph reserve" (no ["..."]).
+	// peekNextSubgraphID calls parseSubgraphID which takes the idx<0 path
+	// (lines 122-123 of parse.go), returning "reserve".
+	// Then parseBlock(g, BlockReserve) calls parseSubgraphHeader which errors.
+	// parse() returns that error at lines 81-82 of parse.go.
+	noBracket := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n    end\n" +
+		"    subgraph untested[\"U\"]\n    end\n" +
+		"    subgraph reserve\n    end\n" + // no title bracket
+		"    subgraph testing[\"T\"]\n    end\n"
+	if _, err := Parse([]byte(noBracket)); err == nil {
+		t.Error("reserve-no-bracket: expected error, got nil")
+	}
+
+	// Unrecognized line inside the reserve block forces the parser to call
+	// blockIDStr(BlockReserve) in its error message (lines 143-145 of parse.go).
+	unrecognizedLine := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n    end\n" +
+		"    subgraph untested[\"U\"]\n    end\n" +
+		"    subgraph reserve[\"Held\"]\n" +
+		"        NOT_A_VALID_LINE\n" +
+		"    end\n" +
+		"    subgraph testing[\"T\"]\n    end\n"
+	if _, err := Parse([]byte(unrecognizedLine)); err == nil {
+		t.Error("reserve-unrecognized-line: expected error, got nil")
 	}
 }

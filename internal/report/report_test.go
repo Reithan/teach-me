@@ -299,3 +299,47 @@ func TestRender(t *testing.T) {
 		})
 	}
 }
+
+// TestWalkAll_ExcludesReserveConcepts verifies that WalkAll omits reserve
+// concepts and edges involving them (spec §6: reserve concepts are omitted).
+func TestWalkAll_ExcludesReserveConcepts(t *testing.T) {
+	g := &graph.Graph{}
+	// Passed
+	g.PassedConcepts = []*graph.ConceptNode{
+		{ID: "p1", Scope: "passed 1", Block: graph.BlockPassed},
+	}
+	// Untested
+	g.UntestedConcepts = []*graph.ConceptNode{
+		{ID: "u1", Scope: "untested 1", Block: graph.BlockUntested},
+	}
+	// Reserve
+	g.ReserveConcepts = []*graph.ConceptNode{
+		{ID: "r1", Scope: "reserve 1", Block: graph.BlockReserve},
+	}
+	// Edges: p1→u1 (normal), r1→u1 (involves reserve)
+	g.Edges = []*graph.Edge{
+		{From: "p1", To: "u1", Label: "requires"},
+		{From: "r1", To: "u1", Label: "bounds"},
+	}
+
+	s := state.LoadFromGraph(g, state.Config{})
+	got := report.WalkAll(g, s, -1)
+
+	// Reserve concept must not appear.
+	for _, ci := range got {
+		if ci.Node.ID == "r1" {
+			t.Errorf("WalkAll returned reserve concept %q; it should be excluded", ci.Node.ID)
+		}
+	}
+	// Passed and untested concepts must appear.
+	found := map[string]bool{}
+	for _, ci := range got {
+		found[ci.Node.ID] = true
+	}
+	if !found["p1"] {
+		t.Errorf("WalkAll did not return passed concept p1; got %v", ids(got))
+	}
+	if !found["u1"] {
+		t.Errorf("WalkAll did not return untested concept u1; got %v", ids(got))
+	}
+}

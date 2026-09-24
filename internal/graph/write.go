@@ -27,6 +27,7 @@ func Write(g *Graph) []byte {
 
 	writePassedBlock(&b, g, blocks)
 	writeUntestedBlock(&b, g, blocks)
+	writeReserveBlock(&b, g, blocks)
 	writeTestingBlock(&b, g, blocks)
 	writeClassDefs(&b, g)
 
@@ -43,7 +44,7 @@ func writePassedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 	for _, e := range g.Edges {
 		if edgeHomeBlock(e, blocks) == BlockPassed {
 			writeLeadingComments(b, e.LeadingComments)
-			writeEdge(b, e, indent2)
+			writeEdge(b, e)
 		}
 	}
 	writeSubgraphClose(b)
@@ -63,7 +64,29 @@ func writeUntestedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 	for _, e := range g.Edges {
 		if edgeHomeBlock(e, blocks) == BlockUntested {
 			writeLeadingComments(b, e.LeadingComments)
-			writeEdge(b, e, indent2)
+			writeEdge(b, e)
+		}
+	}
+	writeSubgraphClose(b)
+}
+
+// writeReserveBlock emits the reserve subgraph. The title defaults to
+// "Concepts held in reserve" when ReserveTitle is empty (e.g. when the block
+// was absent in a pre-v0.3 file and the caller did not set it).
+func writeReserveBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
+	title := g.ReserveTitle
+	if title == "" {
+		title = "Concepts held in reserve"
+	}
+	writeSubgraphOpen(b, "reserve", title)
+	for _, cn := range g.ReserveConcepts {
+		writeLeadingComments(b, cn.LeadingComments)
+		writeConceptNode(b, cn)
+	}
+	for _, e := range g.Edges {
+		if edgeHomeBlock(e, blocks) == BlockReserve {
+			writeLeadingComments(b, e.LeadingComments)
+			writeEdge(b, e)
 		}
 	}
 	writeSubgraphClose(b)
@@ -84,7 +107,7 @@ func writeTestingBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 	for _, e := range g.Edges {
 		if edgeHomeBlock(e, blocks) == BlockTesting {
 			writeLeadingComments(b, e.LeadingComments)
-			writeEdge(b, e, indent2)
+			writeEdge(b, e)
 		}
 	}
 	writeSubgraphClose(b)
@@ -171,9 +194,9 @@ func writeAnswerNode(b *strings.Builder, a *AnswerNode) {
 	b.WriteByte('\n')
 }
 
-// writeEdge emits one edge line with the given indent.
-func writeEdge(b *strings.Builder, e *Edge, indent string) {
-	b.WriteString(indent)
+// writeEdge emits one edge line at the node/edge indent level.
+func writeEdge(b *strings.Builder, e *Edge) {
+	b.WriteString(indent2)
 	b.WriteString(e.From)
 	if e.Label == "" {
 		b.WriteString(" --> ")
