@@ -470,12 +470,12 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `ev` | Fields |
 |---|---|
 | `new`, `load` | `file` |
-| `add` | `id`, `scope`, `src`, `parents`, `children`; optional: `commit` (when locator is inside a git repo), `url` (final URL after redirects), `mime`, `converter`, `converter_version`, `fetched_at` |
+| `add` | `id`, `scope`, `src`, `parents`, `children`; optional: `ref` (the git ref as typed), `commit` (resolved SHA for a `git:` file-at-ref citation), `url` (final URL after redirects), `mime`, `converter`, `converter_version`, `fetched_at` |
 | `link` | `from`, `to`, `rel` |
 | `edit` | `id`, `before`, `after` |
 | `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and `answer: <pending answer text>` if a pending answer existed |
 | `gap` | `concept`, `before`, `after` |
-| `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
+| `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `ref`, `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
 | `answer` | `q`, `raw`, `asked`; optional: `concede: true` (when `--concede`) |
 | `grade` | `q`, `verdict`, `recorded` (differs from `verdict` under 8.2), `summary`, `raw`, `src_text`, `guided`, `oos`; optional: `via: concede` (on the `--concede` path) |
 | `pass` | `concept`, `batches`, `unblocked` |
@@ -488,6 +488,8 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `rehash` | `id`, `before` (old citation), `after` (new citation with hash) |
 | `recite` | `id`, `before` (old citation), `after` (new citation at new range) |
 | `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; per question: `q`, `src_text_before`, `src_text_after` |
+| `aid` | `id` (concept or qid), `path`, `action` (`add`, `rm`) |
+| `migrate` | `from`, `to` (format numbers), `rewritten` (count), `left` (count), `unresolved` (IDs left as plain paths) |
 
 `src_text` in `grade` records what the grader saw, so a later audit survives edits to the source file.
 
