@@ -2,7 +2,7 @@
 name: teach-me
 description: "Drive a teaching session with the tm CLI: diagnose what a learner understands over a Mermaid concept graph, probe and grade their answers via grader sub-agents, and teach each diagnosed gap."
 metadata:
-  tm-version: "0.2"
+  tm-version: "0.3"
 ---
 
 # teach-me skill
@@ -50,6 +50,8 @@ Three parties share the file:
 |---|---|---|
 | You (teacher) | `tm` output, cited source files | every command except `check` and `grade` |
 | Grader sub-agent | `tm check` output only | `tm grade` |
+| Planner sub-agent | source files, `tm status`, `tm show`, `tm find` | `tm add`, `tm link`, `tm edit`, `tm drop` |
+| Pruner sub-agent | `tm status`, `tm show`, `tm find`, `tm report` | `tm prune`, `tm reserve`, `tm activate`, `tm edit` |
 | Human learner | the rendered graph, your questions | answers; hand-edits |
 
 Citations are `hash@locator:START-END`. Relative locators resolve against the
@@ -86,6 +88,8 @@ be obtained, say so and stop.
 move. The full state machine is spec §12; the phases:
 
 1. **Source.** On `tm new` (fresh session only):
+   - Ask the learner for their learning goal in their own words and what they
+     already know. Record both; the planner and pruner need them.
    - Ask the learner for source materials — notes, textbook chapters, docs, a
      repo, papers. Markdown or any line-addressable text. Ask where the lesson
      files should live; the graph goes there, and `tm` records the pointer in
@@ -119,12 +123,18 @@ move. The full state machine is spec §12; the phases:
 
 3. **Map**, when the frontier is thin or a prerequisite is missing. Spawn the
    `teach-me-planner` sub-agent with: the learning goal as the learner stated it,
-   the source locations, and the request scope — `initial` for a fresh map,
-   `extend around <concept>` when the frontier is thin, or
-   `errata for <concepts>` when sources or prerequisites have changed. For extend
-   or errata, also include the output of `tm report <concept>` so the planner
-   sees the existing foundations. Read the planner's results through `tm status`
-   and `tm show`; ignore its prose summary.
+   what the learner says they already know, the source locations, and the request
+   scope — `initial` for a fresh map, `extend around <concept>` when the frontier
+   is thin, or `errata for <concepts>` when sources or prerequisites have changed.
+   For extend or errata, also include the output of `tm report <concept>` so the
+   planner sees the existing foundations. Read the planner's results through
+   `tm status` and `tm show`; ignore its prose summary.
+
+   After every planner run, spawn `teach-me-pruner` with: the goal concept ID,
+   the goal in the learner's words, what the learner says they already know, the
+   output of `tm report <goal> --hops 99`, and a budget (default: 3 active
+   concepts beyond the goal). Read the pruner's result through `tm status`; the
+   `reserve` count and the frontier show whether the prune did its job.
 
 4. **Pick** a frontier concept.
 
@@ -151,6 +161,14 @@ move. The full state machine is spec §12; the phases:
      questions build on the passed foundations, record the gap with `tm gap`,
      then teach with `tm q --teach --re <qid>`. Once the teach batch resolves
      all pass, the locked fallback probes become answerable.
+   - gated → follow the `fix:` line in order: (1) `tm activate <parent>` if a
+     reserve parent fits the GAP; (2) spawn the planner to add the missing
+     foundation with `--child`; (3) `tm reopen <parent>` if a passed parent must
+     be retested. `--override "<reason>"` only when the learner says the gate
+     tripped on contested verdicts; never use it on your own read of the verdicts,
+     since that is the bias grader isolation exists to block.
+   - learner asks to skip a concept → `tm reserve <concept>` if it has no
+     questions. It stops blocking its children and can be activated later.
 
 9. Repeat from step 4 until `untested` holds no concept you intend to test.
 
@@ -182,7 +200,7 @@ Generated from the CLI; for one command or flag, run `tm <command> --help`:
 ## Reference
 
 Read `docs/spec.md` for full command semantics, invariants, and edge cases. Key
-sections: §8 transitions, §9 grader protocol, §9.1 recheck payload, §5 derived
-state, §12 intended usage, and §13 configuration (batch sizes and gate limits:
-`TM_PROBE_MIN`/`MAX`, `TM_TEACH_MIN`/`MAX`, `TM_MAX_FAILS`, `TM_MAX_TEACH`,
-`TM_MAX_STALL`).
+sections: §5 derived state (including reserve parents), §8 transitions, §9 grader
+protocol, §9.1 recheck payload, §12 intended usage and Prune phase, and §13
+configuration (batch sizes and gate limits: `TM_PROBE_MIN`/`MAX`,
+`TM_TEACH_MIN`/`MAX`, `TM_MAX_FAILS`, `TM_MAX_TEACH`, `TM_MAX_STALL`).
