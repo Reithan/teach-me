@@ -531,7 +531,9 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
 14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`.
 15. When `%% tm:next` is present, its `q` value must be strictly greater than every `qN` and `aN` suffix in the file, and its `batch` value must be strictly greater than every `probe_N` and `teach_N` suffix. Lint refuses a stale counter with `fix: raise the counters in %% tm:next`.
-16. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
+16. No citation's locator lies under aids-dir (section 3). Lint refuses one with `fix: cite the primary source; link the aid with tm aid <id> <path>`. This is path arithmetic on the locator, not a file read.
+17. The `%% tm:format` marker, when present, is at most the binary's format. Lint refuses a higher format with a `fix:` to upgrade tm. A lower format is a `migrate` matter, not a lint failure; `lint` accepts it so `migrate` can lint its own result.
+18. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
 
 Runtime lint checks the subset grammar only and links no Mermaid parser. Whether the subset is valid Mermaid is a property of the grammar and the writer, so it is proven in CI by the conformance suite (16.6), against the real parser.
 
