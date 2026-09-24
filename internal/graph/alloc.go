@@ -109,21 +109,33 @@ func maxFromLog(logPath string) (qMax, bMax int) {
 	return qMax, bMax
 }
 
-// scanLogRow walks all string values in the map and updates the max counters.
+// scanLogRow walks all string values in the map (including nested maps and
+// arrays) and updates the max counters. JSON arrays unmarshal as []any.
 func scanLogRow(m map[string]any, qMax, bMax *int) {
 	for _, v := range m {
-		switch val := v.(type) {
-		case string:
-			if ValidQuestionID(val) || ValidAnswerID(val) {
-				if n := QuestionN(val); n > *qMax {
-					*qMax = n
-				}
+		scanLogValue(v, qMax, bMax)
+	}
+}
+
+// scanLogValue recurses into any JSON value and extracts max IDs.
+func scanLogValue(v any, qMax, bMax *int) {
+	switch val := v.(type) {
+	case string:
+		if ValidQuestionID(val) || ValidAnswerID(val) {
+			if n := QuestionN(val); n > *qMax {
+				*qMax = n
 			}
-			if n := BatchN(val); n > *bMax {
-				*bMax = n
-			}
-		case map[string]any:
-			scanLogRow(val, qMax, bMax)
+		}
+		if n := BatchN(val); n > *bMax {
+			*bMax = n
+		}
+	case map[string]any:
+		for _, child := range val {
+			scanLogValue(child, qMax, bMax)
+		}
+	case []any:
+		for _, elem := range val {
+			scanLogValue(elem, qMax, bMax)
 		}
 	}
 }

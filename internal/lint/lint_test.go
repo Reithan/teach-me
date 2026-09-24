@@ -1004,3 +1004,117 @@ func TestCheck5_ReserveEdgeInWrongBlock(t *testing.T) {
 		t.Errorf("expected edge-in-wrong-block violation mentioning reserve; got %v", viols)
 	}
 }
+
+// ── Check 15: tm:next counter validation ────────────────────────────────────
+
+// A valid graph with %% tm:next where counters exceed all IDs in the file.
+const check15ValidGraph = `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+        %% tm:next q=4 batch=3
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+        q1["Q1<br/>3f9a1c2b7e0d@src.txt:1-2"]:::probe_1
+        q2["Q2<br/>3f9a1c2b7e0d@src.txt:1-2"]:::probe_1
+        a1["A1"]:::pass
+        a2["A2"]:::pass
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+func TestCheck15_ValidCounters_NoViolation(t *testing.T) {
+	viols := lint.Check([]byte(check15ValidGraph), defaultCfg())
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "tm:next") {
+			t.Errorf("unexpected check15 violation: %q", v.Msg)
+		}
+	}
+}
+
+func TestCheck15_Absent_NoViolation(t *testing.T) {
+	// A graph without tm:next must not trigger check15.
+	const noNextGraph = `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+        q1["Q1<br/>3f9a1c2b7e0d@src.txt:1-2"]:::probe_1
+        a1["A1"]:::pass
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+	viols := lint.Check([]byte(noNextGraph), defaultCfg())
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "tm:next") {
+			t.Errorf("unexpected check15 violation when line absent: %q", v.Msg)
+		}
+	}
+}
+
+// q counter equals a qN suffix (not strictly greater) → violation.
+const check15QTooLowGraph = `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+        %% tm:next q=2 batch=5
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+        q2["Q2<br/>3f9a1c2b7e0d@src.txt:1-2"]:::probe_1
+        a2["A2"]:::pass
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+func TestCheck15_QTooLow_Violation(t *testing.T) {
+	viols := lint.Check([]byte(check15QTooLowGraph), defaultCfg())
+	if !hasMsgContaining(viols, "tm:next") || !hasMsgContaining(viols, "q2") || !hasMsgContaining(viols, "raise the counters") {
+		t.Errorf("expected check15 violation for q counter too low; got %v", viols)
+	}
+}
+
+// batch counter equals a probe_N suffix (not strictly greater) → violation.
+const check15BatchTooLowGraph = `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+        %% tm:next q=5 batch=1
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+        q1["Q1<br/>3f9a1c2b7e0d@src.txt:1-2"]:::probe_1
+        a1["A1"]:::pass
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+func TestCheck15_BatchTooLow_Violation(t *testing.T) {
+	viols := lint.Check([]byte(check15BatchTooLowGraph), defaultCfg())
+	if !hasMsgContaining(viols, "tm:next") || !hasMsgContaining(viols, "probe_1") || !hasMsgContaining(viols, "raise the counters") {
+		t.Errorf("expected check15 violation for batch counter too low; got %v", viols)
+	}
+}
