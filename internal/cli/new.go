@@ -3,25 +3,29 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/reithan/teach-me/internal/config"
 	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/lint"
 )
 
-// newRun is the Run handler for `tm new <file> [--title "<t>"]`.
+// newRun is the Run handler for
+// `tm new <file> [--title "<t>"] [--src-root <dir>] [--local]`.
 //
-// Creates a skeleton graph file and makes it active by writing .tmconfig.
-// Output on success: "ok\n".
+// Creates a skeleton graph file and makes it active by writing the `file`
+// pointer (and `src-root` when given) into the user config, or into .tmconfig
+// in the working directory with --local (§3). Output on success: "ok\n".
 //
 // Exit codes:
 //
 //	0  ok
 //	1  file already exists (invariant refusal)
 //	2  skeleton fails lint (internal error — the skeleton must always pass)
-//	3  file or .tmconfig write error
+//	3  file or config write error
 func newRun(ctx *Context) int {
 	file := ctx.Positionals[0]
 	ctx.GraphFile = file
@@ -77,9 +81,9 @@ func newRun(ctx *Context) int {
 		return 3
 	}
 
-	// Write .tmconfig so subsequent commands resolve the active graph (§3).
-	if werr := writeTMConfig(file); werr != nil {
-		ctx.ErrMsg = fmt.Sprintf("cannot write .tmconfig: %v", werr)
+	// Write the active-graph pointer so subsequent commands resolve it (§3).
+	if werr := writeActivePointer(ctx, file); werr != nil {
+		ctx.ErrMsg = werr.Error()
 		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
 		return 3
 	}
@@ -158,8 +162,31 @@ func yamlStringScalar(t string) string {
 	return b.String()
 }
 
-// writeTMConfig writes .tmconfig in the current working directory with a
-// "file=<path>\n" line matching the format state.ResolveFile expects (§3).
-func writeTMConfig(file string) error {
-	return os.WriteFile(".tmconfig", []byte("file="+file+"\n"), 0o644)
+// writeActivePointer records file as the active graph, plus the source root
+// when --src-root was given (§3). By default both go into the user config as
+// absolute paths, so the pointer holds from any working directory. With
+// --local they go into .tmconfig in the working directory, as given, which is
+// the per-directory mode for two lessons on one machine.
+func writeActivePointer(ctx *Context, file string) error {
+	_, local := ctx.Flags["local"]
+	kv := map[string]string{"file": file}
+	if v := ctx.Flags["src-root"]; len(v) > 0 && v[0] != "" {
+		kv["src-root"] = v[0]
+	}
+	path := config.UserPath()
+	if local {
+		path = config.LocalName
+	} else {
+		for k, v := range kv {
+			abs, err := filepath.Abs(v)
+			if err != nil {
+				return fmt.Errorf("cannot resolve %s: %v", v, err)
+			}
+			kv[k] = abs
+		}
+	}
+	if err := config.Set(path, kv); err != nil {
+		return fmt.Errorf("cannot write %s: %v", path, err)
+	}
+	return nil
 }

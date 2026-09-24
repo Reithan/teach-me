@@ -8,10 +8,11 @@ import (
 	"github.com/reithan/teach-me/internal/state"
 )
 
-// loadRun is the Run handler for `tm load <file>`.
+// loadRun is the Run handler for `tm load <file> [--src-root <dir>] [--local]`.
 //
-// Makes an existing graph active by writing .tmconfig and appending a load
-// event. Output: the chained status output, identical to running
+// Makes an existing graph active by writing the `file` pointer (and
+// `src-root` when given) into the user config, or into .tmconfig with
+// --local, and appending a load event. Output: the chained status output, identical to running
 // `tm status --file <file>` (§6 command table, §1 chaining rule).
 //
 // load is a read-only operation on the graph: it does not take the lock and
@@ -21,7 +22,7 @@ import (
 // Exit codes:
 //
 //	0  ok
-//	3  file missing, parse error, or .tmconfig write error
+//	3  file missing, parse error, or config write error
 func loadRun(ctx *Context) int {
 	file := ctx.Positionals[0]
 	ctx.GraphFile = file
@@ -34,9 +35,9 @@ func loadRun(ctx *Context) int {
 		return 3
 	}
 
-	// Write .tmconfig only on success, so a failed load leaves no sidecar.
-	if werr := writeTMConfig(file); werr != nil {
-		ctx.ErrMsg = fmt.Sprintf("cannot write .tmconfig: %v", werr)
+	// Write the pointer only on success, so a failed load changes nothing.
+	if werr := writeActivePointer(ctx, file); werr != nil {
+		ctx.ErrMsg = werr.Error()
 		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
 		return 3
 	}
@@ -46,7 +47,7 @@ func loadRun(ctx *Context) int {
 	evlog.Append(eventlog.NewRow("load", map[string]any{"file": file}))
 
 	// Chain the status output: set FileFlag so statusRun resolves the graph
-	// directly without touching .tmconfig or $TM_FILE (§1 chaining rule).
+	// directly without touching the config or $TM_FILE (§1 chaining rule).
 	ctx.FileFlag = file
 	return statusRun(ctx)
 }
