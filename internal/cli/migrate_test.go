@@ -347,6 +347,138 @@ func TestMigrate_PositionalArgBeatsConfig(t *testing.T) {
 	}
 }
 
+// singleCiteF1Graph is a minimal format-1 graph with exactly one concept
+// citation and no questions, keeping pipeline call counts to one per rule.
+const singleCiteF1Graph = `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        c1["Concept one<br/>f5ca3875b379@src.txt:1-5"]
+    end
+    subgraph reserve["Concepts held in reserve"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+// TestMigrateRulePipeline exercises all four pipeline exit paths defined in
+// runMigrateRules using stub rules injected via cli.SetMigrateRulesForTest.
+// Each case asserts both the command output and the per-stub call count.
+func TestMigrateRulePipeline(t *testing.T) {
+	tests := []struct {
+		name        string
+		buildStubs  func(calls *[4]int) []func(string, string) (string, string, bool)
+		wantCalls   [4]int
+		wantSummary string // substring expected in stdout
+		wantLeftID  string // if non-empty, "left <id>" expected in stdout
+		wantReason  string // if non-empty, expected reason substring in stdout
+	}{
+		{
+			// First stub converts; the pipeline stops before reaching the second.
+			name: "(a) first rule converts, second never runs",
+			buildStubs: func(calls *[4]int) []func(string, string) (string, string, bool) {
+				return []func(string, string) (string, string, bool){
+					func(_, cite string) (string, string, bool) { calls[0]++; return cite, "converted", true },
+					func(_, _ string) (string, string, bool) { calls[1]++; return "", "", false },
+				}
+			},
+			wantCalls:   [4]int{1, 0},
+			wantSummary: "1 rewritten, 0 left",
+		},
+		{
+			// First stub declines with a non-empty reason; pipeline stops and
+			// reports that reason; the second stub is never reached.
+			name: "(b) first rule declines with reason, second never runs",
+			buildStubs: func(calls *[4]int) []func(string, string) (string, string, bool) {
+				return []func(string, string) (string, string, bool){
+					func(_, _ string) (string, string, bool) {
+						calls[0]++
+						return "", "stubbed reason", false
+					},
+					func(_, _ string) (string, string, bool) { calls[1]++; return "", "", false },
+				}
+			},
+			wantCalls:   [4]int{1, 0},
+			wantSummary: "0 rewritten, 1 left",
+			wantLeftID:  "c1",
+			wantReason:  "stubbed reason",
+		},
+		{
+			// First stub returns empty reason (not my case); the pipeline
+			// continues and the second stub converts.
+			name: "(c) first rule passes with empty reason, second converts",
+			buildStubs: func(calls *[4]int) []func(string, string) (string, string, bool) {
+				return []func(string, string) (string, string, bool){
+					func(_, _ string) (string, string, bool) { calls[0]++; return "", "", false },
+					func(_, cite string) (string, string, bool) {
+						calls[1]++
+						return cite, "converted by second", true
+					},
+				}
+			},
+			wantCalls:   [4]int{1, 1},
+			wantSummary: "1 rewritten, 0 left",
+		},
+		{
+			// The single stub always declines with an empty reason; no rule
+			// claims the citation so it is left with the default "plain path".
+			name: "(d) no rule claims it, plain path",
+			buildStubs: func(calls *[4]int) []func(string, string) (string, string, bool) {
+				return []func(string, string) (string, string, bool){
+					func(_, _ string) (string, string, bool) { calls[0]++; return "", "", false },
+				}
+			},
+			wantCalls:   [4]int{1},
+			wantSummary: "0 rewritten, 1 left",
+			wantLeftID:  "c1",
+			wantReason:  "plain path",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tempErrlog(t)
+
+			gPath := filepath.Join(dir, "g.mmd")
+			if err := os.WriteFile(gPath, []byte(singleCiteF1Graph), 0o644); err != nil {
+				t.Fatalf("write graph: %v", err)
+			}
+			t.Setenv("TM_FILE", gPath)
+
+			var calls [4]int
+			stubs := tc.buildStubs(&calls)
+			t.Cleanup(cli.SetMigrateRulesForTest(stubs))
+
+			out, errOut, code := run(t, "migrate")
+			if code != 0 {
+				t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, out, errOut)
+			}
+
+			if tc.wantSummary != "" && !strings.Contains(out, tc.wantSummary) {
+				t.Errorf("summary: want %q in output; got:\n%s", tc.wantSummary, out)
+			}
+			if tc.wantLeftID != "" && !strings.Contains(out, "left "+tc.wantLeftID) {
+				t.Errorf("left line: want 'left %s' in output; got:\n%s", tc.wantLeftID, out)
+			}
+			if tc.wantReason != "" && !strings.Contains(out, tc.wantReason) {
+				t.Errorf("reason: want %q in output; got:\n%s", tc.wantReason, out)
+			}
+
+			// Assert per-stub call counts.
+			for i, want := range tc.wantCalls {
+				if calls[i] != want {
+					t.Errorf("stub[%d] calls: want %d, got %d", i, want, calls[i])
+				}
+			}
+		})
+	}
+}
+
 // TestBuildEventForID verifies the contract that M15c migrate rules rely on:
 // (a) two add events for the same ID → later one wins,
 // (b) q events keyed by the "q" field are found by that qid,
