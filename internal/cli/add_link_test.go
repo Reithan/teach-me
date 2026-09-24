@@ -56,6 +56,7 @@ flowchart TB
         passed_c["Passed concept scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         untested_c["Untested concept scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]

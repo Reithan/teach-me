@@ -35,6 +35,7 @@ func lifecycleTeachReadyGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -758,6 +759,7 @@ func TestLifecycle_Reopen(t *testing.T) {
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
     end
     subgraph testing["Open tests validating and teaching User understanding"]
     end
@@ -1140,6 +1142,7 @@ func concurrentGradeGraph(n int) string {
 	b.WriteString("\n    end\n")
 	b.WriteString(`    subgraph untested["Concepts User has not been tested on"]`)
 	b.WriteString("\n")
+	b.WriteString("        %% tm:format 2\n")
 	b.WriteString(`        mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]`)
 	b.WriteString("\n    end\n")
 	b.WriteString(`    subgraph testing["Open tests validating and teaching User understanding"]`)

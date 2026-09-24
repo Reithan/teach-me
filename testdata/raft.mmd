@@ -15,6 +15,7 @@ flowchart TB
         replicated_log --"elections protect"--> leader_election
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         log_matching["Log matching property<br/>GAP: treats index match as sufficient, ignores term<br/>b003f09095de@raft.txt:190-240"]
         commit_rules["Commit rules: when an entry is safe to apply<br/>78c0dac45410@raft.txt:241-300"]
         replicated_log --"constrains"--> log_matching

@@ -3,6 +3,7 @@ flowchart TB
         consensus["Consensus: agreement among replicas<br/>24bf22e06a01@algo.txt:1-50"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         %% tm:gate safety base=1
         safety["Safety: committed values never lost<br/>GAP: conflates committed with durable<br/>2b5758b4a3b8@algo.txt:51-100"]
         liveness["Liveness: eventual progress<br/>f436c9a4ff9c@algo.txt:101-150"]
