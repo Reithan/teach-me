@@ -311,6 +311,17 @@ var Table = []Command{
 		SkipFormatCheck: true, // repo commands do not touch a graph
 		Run:             repoRun,
 	},
+	{
+		// cache manages the conversion and fetch cache (§13.1, §3).
+		// Subcommands: clear, list.
+		Name: "cache",
+		PosArgs: []PosArg{
+			{Name: "clear|list", Values: []string{"clear", "list"}},
+		},
+		ForbidGrader:    true,
+		SkipFormatCheck: true, // cache commands do not touch a graph
+		Run:             cacheRun,
+	},
 }
 
 // tableIndex is a name → Command lookup map built from Table at init time.
