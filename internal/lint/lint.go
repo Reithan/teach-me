@@ -808,6 +808,12 @@ func check11(g *graph.Graph, _ Config) []Violation {
 			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: citation %q is missing a hash; use tm rehash or supply <hash>@<locator>:START-END", prefix, citeStr)})
 		}
 		// §11: raw '"' in a locator is rejected by Parse, so it cannot reach here.
+		// §11.14: for git: locators, check for structural errors including raw ":".
+		if cite.IsGit(c.File) {
+			if _, gitErr := cite.ParseGit(c.File); gitErr != nil {
+				viols = append(viols, Violation{Msg: fmt.Sprintf("%s: citation %q: %s", prefix, citeStr, gitErr.Error())})
+			}
+		}
 	}
 
 	for _, c := range g.PassedConcepts {
