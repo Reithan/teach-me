@@ -184,3 +184,32 @@ func TestErrlog_DispatcherErrorLandsBesideConfiguredGraph(t *testing.T) {
 		t.Errorf("ERRORS.jsonl must not land in the working directory")
 	}
 }
+
+// TestPointer_UnwritableUserConfig: when the user config cannot be written,
+// tm new and tm load report it and exit 3 rather than silently leaving the
+// graph unreachable from the next call.
+func TestPointer_UnwritableUserConfig(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file modes")
+	}
+	freshConfig(t)
+	tempErrlog(t)
+	// XDG_CONFIG_HOME points at a regular file, so tm/config cannot be created.
+	blocker := filepath.Join(t.TempDir(), "xdg")
+	if err := os.WriteFile(blocker, []byte("not a dir\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", blocker)
+
+	lesson := t.TempDir()
+	file := filepath.Join(lesson, "g.mmd")
+	for _, args := range [][]string{{"new", file}, {"load", file}} {
+		_, errOut, code := run(t, args...)
+		if code != 3 || !strings.Contains(errOut, "cannot write "+config.UserPath()) {
+			t.Errorf("tm %s: exit %d, stderr %q; want exit 3 naming the config path", args[0], code, errOut)
+		}
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Errorf("tm new must still have created the graph: %v", err)
+	}
+}
