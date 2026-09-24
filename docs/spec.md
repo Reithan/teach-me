@@ -486,7 +486,7 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `prune` | `goal`, `keep` (null without `--keep`), `moved` (IDs parked, in file order) |
 | `gate` | `concept`, `trip` (`probes`, `stall`), `base`, `via` (`add`, `activate`, `reopen`, `override`), `reason` |
 | `rehash` | `id`, `before` (old citation), `after` (new citation with hash) |
-| `recite` | `id`, `before` (old citation), `after` (new citation at new range) |
+| `recite` | `id`, `before` (old citation), `after` (new citation at new range); optional: `ref` (the git ref as typed), `commit` (resolved SHA for a `git:` file-at-ref citation) |
 | `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; per question: `q`, `src_text_before`, `src_text_after` |
 | `aid` | `id` (concept or qid), `path`, `action` (`add`, `rm`) |
 | `migrate` | `from`, `to` (format numbers), `rewritten` (count), `left` (count), `unresolved` (IDs left as plain paths) |
