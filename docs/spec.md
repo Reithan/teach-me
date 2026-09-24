@@ -706,6 +706,16 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 
 **Security.** Converters process untrusted bytes fetched from URLs named in the graph; a hand-edited graph can make the CLI fetch and convert anything it names. The user chooses the converters. The skill has the model advise on the config lines and confirm with the user before writing the config.
 
+### 13.2 Migration
+
+`tm migrate [<file>]` upgrades a format-1 graph to format 2 (section 4.6). It never changes a hash or a range: a citation is rewritten only to a locator that resolves to the same hash, so immutable questions (section 5) are rewritten safely, the hash proving their content is unchanged. Per citation with a plain-path locator, in order:
+
+1. If the `add`/`q` event logged a `commit` and the path is inside a repo matching a configured alias (by path prefix), try `git:<alias>@<commit>:<repo-relative path>` and keep it if the hash matches. If no alias matches, report `needs: tm repo add <alias> <repo path>` and leave the citation.
+2. Else if the event logged a `url`, fetch it through the current converter and keep `<url>` if the hash matches.
+3. Else leave it: a legitimate plain path.
+
+Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per citation left with its reason, then a summary. `tm migrate` always writes `%% tm:format 2` and exits 0 even when some citations stay, because plain paths keep resolving. `--dry-run` prints the same report without writing. The run takes the lock like any mutation, lints the result, and logs one `migrate` event (section 10). The teacher resolves leftovers by hand: once a source is registered, `tm recite` re-points a concept citation; a question's plain path stays as written.
+
 ## 14. Decision record
 
 | # | Decision | Reason | Rejected | Status |
