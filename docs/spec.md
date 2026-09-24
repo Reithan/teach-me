@@ -61,12 +61,14 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 
 ## 3. Files
 
-- Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; there is no cache or side state.
+- Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; the graph carries no cache or side state. Its first `untested` meta line records the graph format (§4.6); every command except `migrate`, `lint`, and help refuses a graph whose format is below the binary's with `fix: tm migrate`.
 - Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history` and `tm check --drift`.
 - Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolves at all (a usage error with no pointer set). Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
 - Lock: `<name>.mmd.lock`. Every mutating command takes the lock, writes a temp file, lints the result, then renames over the graph. Graders run in parallel, so this is required.
 - File resolution: `--file` > `$TM_FILE` > `file` key in `.tmconfig` in the working directory > `file` key in the user config. `tm new` and `tm load` write the `file` key (and `src-root` when given) into the user config as absolute paths, so the pointer holds from any working directory; with `--local` they write `.tmconfig` in the working directory instead, for two lessons on one machine. Use the env var or `--file` when two concurrent sessions need different graphs.
 - Citations resolve against `$TM_SRC_ROOT`, defaulting to the graph's directory.
+- Aids: `<graph dir>/aids` by default, overridden by the `aids-dir` config key. Everything the teacher authors — examples, study guides, generated diffs, copies it fetches for itself — lives here. Aids are linked to concepts or questions (§4.6) and are never cited (§7, §11).
+- Cache: the conversion and fetch cache lives in the user cache dir (`$XDG_CACHE_HOME/tm`, default `~/.cache/tm`; the `os.UserCacheDir()` equivalent on other systems), never in the graph directory or under src-root. It holds converted text and `fetched_at` keyed by locator, converter, and converter version (section 13). It is not state: deleting it changes nothing but cost.
 - Configuration: user-level `$XDG_CONFIG_HOME/tm/config` (default `~/.config/tm/config`), key=value format (section 13). `.tmconfig` keys override the user config per project. Converters, the active graph, the source root, and the doc path are all machine-specific, so they live in the user config by default. Environment variables are set per call in an agent harness and rarely survive to the next call, which is why every session-scoped setting has a config key.
 
 ## 4. Graph format
