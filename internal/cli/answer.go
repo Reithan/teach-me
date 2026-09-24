@@ -135,7 +135,7 @@ func answerRun(ctx *Context) int {
 			if overrideReason == "" {
 				return nil, nil, &ops.Refusal{
 					Err:  fmt.Sprintf("%s is gated", conceptID),
-					Fix:  fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID),
+					Fix:  buildGateFixMsg(conceptID, s),
 					Exit: 1,
 				}
 			}
