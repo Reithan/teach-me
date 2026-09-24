@@ -15,9 +15,11 @@ import (
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+const repoFileContent = "line1\nline2\nline3\n"
+
 // repoInitGit initialises a real git repo in dir, commits file.txt with
-// content, and returns the full HEAD commit SHA.
-func repoInitGit(t *testing.T, dir, content string) string {
+// repoFileContent, and returns the full HEAD commit SHA.
+func repoInitGit(t *testing.T, dir string) string {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
@@ -30,7 +32,7 @@ func repoInitGit(t *testing.T, dir, content string) string {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte(repoFileContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "file.txt"}, {"commit", "-m", "init"}} {
@@ -235,7 +237,7 @@ func TestRepo_AddSHARewriting(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir, "line1\nline2\nline3\n")
+	fullSHA := repoInitGit(t, repoDir)
 	sha12 := fullSHA[:12]
 	branch := repoGetBranch(t, repoDir)
 
@@ -305,7 +307,7 @@ func TestRepo_QGitLocator(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir, "line1\nline2\nline3\n")
+	fullSHA := repoInitGit(t, repoDir)
 	sha12 := fullSHA[:12]
 	branch := repoGetBranch(t, repoDir)
 

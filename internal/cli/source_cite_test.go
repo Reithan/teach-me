@@ -179,14 +179,14 @@ func TestSourceCitationWiring(t *testing.T) {
 			},
 		},
 		{
-			name:     "successful path add inside git records commit",
+			name:     "plain path add inside git does not record commit",
 			citeArg:  "file.txt:1-1",
 			wantCode: 0,
 			needGit:  true,
 			checkEvent: func(t *testing.T, mmdFile string) {
 				fields := srcEventFields(t, mmdFile, "add")
-				if v, ok := fields["commit"]; !ok || v == "" {
-					t.Errorf("add event missing commit field; fields: %v", fields)
+				if _, ok := fields["commit"]; ok {
+					t.Errorf("add event must not contain commit field for plain path; fields: %v", fields)
 				}
 			},
 		},
