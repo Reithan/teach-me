@@ -337,6 +337,8 @@ The `reserve` count is printed only when it is nonzero.
 | Command | Refuses when |
 |---|---|
 | any mutating command | the graph fails lint |
+| any command except `migrate`, `lint`, help | the graph's format is below the binary's (`fix: tm migrate`) |
+| any command | the graph's format is above the binary's (`fix:` to upgrade tm) |
 | `add` | ID exists (`fix: tm reopen` when it is passed), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
 | `link` | unknown ID, non-concept endpoint, or cycle |
 | `edit` | the ID is a question or answer; the concept is passed or has any question |
@@ -346,10 +348,13 @@ The `reserve` count is printed only when it is nonzero.
 | `reserve` | the concept is not in `untested`, or has any question |
 | `activate` | the concept is not in `reserve` |
 | `prune` | the goal is not in `untested` (`fix: tm activate <goal>` when it is in `reserve`), or `--keep` is below 1 |
-| `add`, `q` | the cited file cannot be fetched (URI locator, fetch failed) |
+| `add`, `q` | the cited URI cannot be fetched (fetch failed after a cache miss or expiry) |
 | `add`, `q` | a converter is required for the MIME type or extension and none is configured |
 | `add`, `q`, `recite` | the configured converter's version does not match its pinned value |
-| `add`, `q` | the path is not in the working tree and git is not configured (sparse checkout or deleted file) |
+| `add`, `q` | a plain-path locator is not in the working tree (`fix: cite it as git:<alias>@<ref>:<path>` when it is committed) |
+| `add`, `q`, `recite` | a `git:` locator names an unknown alias (`fix: tm repo add <alias> <path>`) |
+| `add`, `q`, `recite` | a `git:` locator is used with no `git` configured, or its `<ref>`, `<a>`, or `<b>` does not resolve |
+| `add`, `q`, `recite` | the resolved locator lies under aids-dir (`err: <path> is an aid, not a source`; `fix: cite the primary source; link the aid with tm aid <id> <path>`) |
 | `recite` | the new range does not hash to the existing citation hash |
 | `check --drift` | the event log is missing or unreadable (`fix: tm reopen`) |
 | `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |
