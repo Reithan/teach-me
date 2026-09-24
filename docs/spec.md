@@ -623,6 +623,7 @@ The **Prune phase** follows every Map. The planner's prompt primes inclusion, an
 | `TM_ROLE` | unset | `teacher` or `grader`; soft guard |
 | `TM_ERRORS` | `ERRORS.jsonl` beside the graph | error log path |
 | `TM_DOC` | unset | path to the skill or agent file that documents `tm` for this harness; baseline help defers to it, and its `metadata.tm-version` is checked. Overrides the `doc` config key for one call |
+| `TM_CACHE_TTL` | `24h` | conversion and fetch cache TTL (Go duration); overrides the `cache-ttl` key for one call; `0` disables the cache |
 | `TM_PROBE_MIN` / `TM_PROBE_MAX` | 2 / 5 | probe batch size |
 | `TM_TEACH_MIN` / `TM_TEACH_MAX` | 1 / 3 | teach batch size |
 | `TM_MAX_FAILS` | 2 | failed probe batches before the gate |
@@ -640,7 +641,10 @@ Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per pr
 | `ext <ext>` | `= <mime>` | map a file extension to a MIME type for converter lookup |
 | `version <program>` | `= <string>` | required version pin; the CLI checks that the pin is a substring of the first output line before the first use |
 | `version-cmd <program>` | `= <command...>` | version command override (default: `<program> --version`) |
-| `git` | `= <command>` | git executable; enables `HEAD` blob resolution for missing files and commit recording on `add` and `q` |
+| `git` | `= <command>` | git executable; required for any `git:` locator (section 4.4). `HEAD` is not special and the CLI never contacts a remote |
+| `repo <alias>` | `= <path>` | local path for a `git:` alias; written by `tm repo add`, removed by `tm repo rm`. The alias in the graph is portable; the path is machine-specific |
+| `cache-ttl` | `= <duration>` | conversion and fetch cache TTL (Go duration); default `24h`; `0` disables the cache |
+| `aids-dir` | `= <dir>` | where teacher aids live (section 3); default `<graph dir>/aids` |
 
 
 ### 13.1 Source resolution
