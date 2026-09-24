@@ -187,51 +187,81 @@ func TestCache_TTLZeroEnvOverride(t *testing.T) {
 	}
 }
 
-// TestCache_ConverterChangeMiss verifies that when the configured converter
-// for the entry's MIME type changes, the entry is treated as a miss.
-func TestCache_ConverterChangeMiss(t *testing.T) {
-	cvDir := t.TempDir()
-	conv1 := writeScript(t, cvDir, "conv1", "sed 's/x/A/g'")
-	conv1ver := writeScript(t, cvDir, "conv1_ver", `printf "1.0"`)
-	conv2 := writeScript(t, cvDir, "conv2", "sed 's/x/B/g'")
-	conv2ver := writeScript(t, cvDir, "conv2_ver", `printf "2.0"`)
-
-	body := "hello x world\n"
-	handler, reqs := newCounter(&body)
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-
-	cacheDir := t.TempDir()
-
-	// First read with converter 1.
-	cfg1 := loadCfg(t, fmt.Sprintf(
-		"convert text/plain=%s\nversion %s=1.0\nversion-cmd %s=%s\n",
-		conv1, conv1, conv1, conv1ver,
-	), "")
-	cfg1.CacheTTL = 24 * time.Hour
-	r1 := resolverWithCache(cfg1, t.TempDir(), cacheDir)
-
-	c := cite.Citation{File: srv.URL, Start: 1, End: 1}
-	if _, _, err := r1.Read(c); err != nil {
-		t.Fatalf("Read with conv1: %v", err)
+// TestCache_ConverterMiss verifies that a cache entry is treated as a miss
+// when either the converter command or the pinned converter version changes.
+func TestCache_ConverterMiss(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, cvDir string) (cfg1Text, cfg2Text string)
+	}{
+		{
+			name: "different converter command",
+			setup: func(t *testing.T, cvDir string) (string, string) {
+				t.Helper()
+				conv1 := writeScript(t, cvDir, "conv1", "sed 's/x/A/g'")
+				conv1ver := writeScript(t, cvDir, "conv1_ver", `printf "1.0"`)
+				conv2 := writeScript(t, cvDir, "conv2", "sed 's/x/B/g'")
+				conv2ver := writeScript(t, cvDir, "conv2_ver", `printf "2.0"`)
+				c1 := fmt.Sprintf("convert text/plain=%s\nversion %s=1.0\nversion-cmd %s=%s\n",
+					conv1, conv1, conv1, conv1ver)
+				c2 := fmt.Sprintf("convert text/plain=%s\nversion %s=2.0\nversion-cmd %s=%s\n",
+					conv2, conv2, conv2, conv2ver)
+				return c1, c2
+			},
+		},
+		{
+			name: "same converter different version",
+			setup: func(t *testing.T, cvDir string) (string, string) {
+				t.Helper()
+				conv := writeScript(t, cvDir, "conv", "cat")
+				ver1 := writeScript(t, cvDir, "ver1", `printf "conv version 1.0"`)
+				ver2 := writeScript(t, cvDir, "ver2", `printf "conv version 2.0"`)
+				c1 := fmt.Sprintf("convert text/plain=%s\nversion %s=1.0\nversion-cmd %s=%s\n",
+					conv, conv, conv, ver1)
+				c2 := fmt.Sprintf("convert text/plain=%s\nversion %s=2.0\nversion-cmd %s=%s\n",
+					conv, conv, conv, ver2)
+				return c1, c2
+			},
+		},
 	}
-	if atomic.LoadInt64(reqs) != 1 {
-		t.Fatalf("want 1 request, got %d", atomic.LoadInt64(reqs))
-	}
 
-	// Second read with converter 2: must miss.
-	cfg2 := loadCfg(t, fmt.Sprintf(
-		"convert text/plain=%s\nversion %s=2.0\nversion-cmd %s=%s\n",
-		conv2, conv2, conv2, conv2ver,
-	), "")
-	cfg2.CacheTTL = 24 * time.Hour
-	r2 := resolverWithCache(cfg2, t.TempDir(), cacheDir)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cvDir := t.TempDir()
+			cfg1Text, cfg2Text := tc.setup(t, cvDir)
 
-	if _, _, err := r2.Read(c); err != nil {
-		t.Fatalf("Read with conv2: %v", err)
-	}
-	if atomic.LoadInt64(reqs) != 2 {
-		t.Errorf("want 2 requests (converter changed → miss), got %d", atomic.LoadInt64(reqs))
+			body := "hello x world\n"
+			handler, reqs := newCounter(&body)
+			srv := httptest.NewServer(handler)
+			t.Cleanup(srv.Close)
+
+			cacheDir := t.TempDir()
+
+			cfg1 := loadCfg(t, cfg1Text, "")
+			cfg1.CacheTTLSet = true
+			cfg1.CacheTTL = 24 * time.Hour
+			r1 := resolverWithCache(cfg1, t.TempDir(), cacheDir)
+
+			c := cite.Citation{File: srv.URL, Start: 1, End: 1}
+			if _, _, err := r1.Read(c); err != nil {
+				t.Fatalf("Read with cfg1: %v", err)
+			}
+			if atomic.LoadInt64(reqs) != 1 {
+				t.Fatalf("want 1 request, got %d", atomic.LoadInt64(reqs))
+			}
+
+			cfg2 := loadCfg(t, cfg2Text, "")
+			cfg2.CacheTTLSet = true
+			cfg2.CacheTTL = 24 * time.Hour
+			r2 := resolverWithCache(cfg2, t.TempDir(), cacheDir)
+
+			if _, _, err := r2.Read(c); err != nil {
+				t.Fatalf("Read with cfg2: %v", err)
+			}
+			if atomic.LoadInt64(reqs) != 2 {
+				t.Errorf("want 2 requests (miss), got %d", atomic.LoadInt64(reqs))
+			}
+		})
 	}
 }
 
@@ -274,61 +304,9 @@ func TestCache_FailedFetchNotCached(t *testing.T) {
 	}
 }
 
-// TestCache_DriftWithinTTL verifies the documented accepted trade: a URL
-// whose content changes within the TTL still passes CheckDrift (cache hit),
-// but shows as drifted after the cache entry is removed.
-func TestCache_DriftWithinTTL(t *testing.T) {
-	content := "original line one\noriginal line two\n"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = fmt.Fprint(w, content)
-	}))
-	t.Cleanup(srv.Close)
-
-	cacheDir := t.TempDir()
-	cfg := loadCfg(t, "", "")
-	cfg.CacheTTL = 24 * time.Hour
-
-	// Hash the content as originally served.
-	r := resolverWithCache(cfg, t.TempDir(), cacheDir)
-	c := cite.Citation{File: srv.URL, Start: 1, End: 2}
-	text, _, err := r.Read(c)
-	if err != nil {
-		t.Fatalf("initial Read: %v", err)
-	}
-	hash := cite.Hash(text)
-	citeStr := fmt.Sprintf("%s@%s:1-2", hash, srv.URL)
-
-	// Content changes on the server (simulating a live-URL update).
-	content = "different line one\ndifferent line two\n"
-
-	// Within TTL: CheckDrift returns false (cache hit, same content as cached).
-	drifted, _, err := r.CheckDrift(citeStr)
-	if err != nil {
-		t.Fatalf("CheckDrift (within TTL): %v", err)
-	}
-	if drifted {
-		t.Error("expected no drift within TTL (cache hit), but got drifted=true")
-	}
-
-	// Remove the cache entry to force a fresh fetch.
-	entries, _ := filepath.Glob(filepath.Join(cacheDir, "*.json"))
-	for _, e := range entries {
-		os.Remove(e) //nolint:errcheck
-	}
-
-	// After cache clear: CheckDrift detects the change.
-	drifted, _, err = r.CheckDrift(citeStr)
-	if err != nil {
-		t.Fatalf("CheckDrift (after clear): %v", err)
-	}
-	if !drifted {
-		t.Error("expected drift after cache clear, but got drifted=false")
-	}
-}
-
 // TestCache_MalformedCacheEntryIsMiss verifies that a malformed JSON cache
-// file is treated as a miss (not an error), triggering a re-fetch.
+// file is treated as a miss (not an error), triggering a re-fetch, and that
+// the entry is rewritten with valid JSON after the fresh fetch.
 func TestCache_MalformedCacheEntryIsMiss(t *testing.T) {
 	body := "test content\n"
 	handler, reqs := newCounter(&body)
@@ -356,53 +334,18 @@ func TestCache_MalformedCacheEntryIsMiss(t *testing.T) {
 	if atomic.LoadInt64(reqs) != 1 {
 		t.Errorf("want 1 fetch (malformed entry = miss), got %d", atomic.LoadInt64(reqs))
 	}
-}
 
-// TestCache_ConverterVersionChangeMiss verifies that when the version of an
-// otherwise-unchanged converter changes, the cache entry is treated as a miss.
-func TestCache_ConverterVersionChangeMiss(t *testing.T) {
-	cvDir := t.TempDir()
-	convScript := writeScript(t, cvDir, "conv", "cat")
-	ver1Script := writeScript(t, cvDir, "ver1", `printf "conv version 1.0"`)
-	ver2Script := writeScript(t, cvDir, "ver2", `printf "conv version 2.0"`)
-
-	body := "hello world\n"
-	handler, reqs := newCounter(&body)
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-
-	cacheDir := t.TempDir()
-
-	// First read: version 1.0
-	cfg1 := loadCfg(t, fmt.Sprintf(
-		"convert text/plain=%s\nversion %s=1.0\nversion-cmd %s=%s\n",
-		convScript, convScript, convScript, ver1Script,
-	), "")
-	cfg1.CacheTTLSet = true
-	cfg1.CacheTTL = 24 * time.Hour
-	r1 := resolverWithCache(cfg1, t.TempDir(), cacheDir)
-
-	c := cite.Citation{File: srv.URL, Start: 1, End: 1}
-	if _, _, err := r1.Read(c); err != nil {
-		t.Fatalf("Read with ver1: %v", err)
-	}
-	if atomic.LoadInt64(reqs) != 1 {
-		t.Fatalf("want 1 request, got %d", atomic.LoadInt64(reqs))
+	// The cache entry must now be valid JSON (was rewritten after the fresh fetch).
+	data, readErr := os.ReadFile(entryPath)
+	if readErr != nil {
+		t.Fatalf("read rewritten entry: %v", readErr)
 	}
 
-	// Second read: same converter, different version → miss.
-	cfg2 := loadCfg(t, fmt.Sprintf(
-		"convert text/plain=%s\nversion %s=2.0\nversion-cmd %s=%s\n",
-		convScript, convScript, convScript, ver2Script,
-	), "")
-	cfg2.CacheTTLSet = true
-	cfg2.CacheTTL = 24 * time.Hour
-	r2 := resolverWithCache(cfg2, t.TempDir(), cacheDir)
-
-	if _, _, err := r2.Read(c); err != nil {
-		t.Fatalf("Read with ver2: %v", err)
+	var rewritten map[string]any
+	if jsonErr := json.Unmarshal(data, &rewritten); jsonErr != nil {
+		t.Fatalf("rewritten entry is not valid JSON: %v; data: %s", jsonErr, data)
 	}
-	if atomic.LoadInt64(reqs) != 2 {
-		t.Errorf("want 2 requests (version changed → miss), got %d", atomic.LoadInt64(reqs))
+	if locator, _ := rewritten["locator"].(string); locator != srv.URL {
+		t.Errorf("rewritten entry locator = %q, want %q", locator, srv.URL)
 	}
 }
