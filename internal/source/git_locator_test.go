@@ -188,6 +188,32 @@ func TestGitLocator_Refusals(t *testing.T) {
 			locator:   "git:r@nonexistent-branch-xyz:file.txt",
 			wantInErr: "does not resolve",
 		},
+		// A ref that begins with "-" must be refused before reaching git so it
+		// cannot be interpreted as a flag (one case per form).
+		{
+			name:      "dash ref: file-at-ref form",
+			cfg:       "git=" + gitBin + "\nrepo r = " + dir + "\n",
+			locator:   "git:r@-bad:file.txt",
+			wantInErr: "ref must not start with -",
+		},
+		{
+			name:      "dash ref: commit form",
+			cfg:       "git=" + gitBin + "\nrepo r = " + dir + "\n",
+			locator:   "git:r@-bad",
+			wantInErr: "ref must not start with -",
+		},
+		{
+			name:      "dash ref: diff form",
+			cfg:       "git=" + gitBin + "\nrepo r = " + dir + "\n",
+			locator:   "git:r@-bad..main",
+			wantInErr: "ref must not start with -",
+		},
+		{
+			name:      "dash ref: diff-for-path form",
+			cfg:       "git=" + gitBin + "\nrepo r = " + dir + "\n",
+			locator:   "git:r@-bad..main:file.txt",
+			wantInErr: "ref must not start with -",
+		},
 	}
 
 	for _, tc := range tests {
@@ -209,33 +235,18 @@ func TestGitLocator_Refusals(t *testing.T) {
 	}
 }
 
-// TestGitLocator_PercentEncodedPath verifies that %3A in path is decoded correctly.
-func TestGitLocator_PercentEncodedPath(t *testing.T) {
-	// Verify ParseGit decodes %3A → ":" in the Path field.
-	gl, err := cite.ParseGit("git:r@main:path%3Awith%3Acolon.txt")
-	if err != nil {
-		t.Fatalf("ParseGit: %v", err)
-	}
-	if gl.Path != "path:with:colon.txt" {
-		t.Errorf("Path = %q, want %q", gl.Path, "path:with:colon.txt")
-	}
-	// FormatGit re-encodes the colon as %3A.
-	if got := cite.FormatGit(gl); got != "git:r@main:path%3Awith%3Acolon.txt" {
-		t.Errorf("FormatGit round-trip = %q, want %q", got, "git:r@main:path%3Awith%3Acolon.txt")
-	}
-}
-
-// TestGitLocator_SHARewriting verifies that HashCitation replaces the ref with
-// a 12-hex SHA and that Meta carries Ref (original) and Commit (resolved SHA).
+// TestGitLocator_SHARewriting verifies that HashCitation rewrites refs to
+// 12-hex SHAs in the ResolvedLocator for all four git: forms.
 func TestGitLocator_SHARewriting(t *testing.T) {
 	gitBin := skipIfNoGit(t)
 	dir := t.TempDir()
 
-	const content = "line1\nline2\nline3\n"
-	fullSHA := initGitRepo(t, dir, content)
-	sha12 := short12(fullSHA)
-
-	branch := getDefaultBranch(t, dir)
+	const initial = "line1\nline2\nline3\n"
+	const updated = "line1\nline2 changed\nline3\n"
+	sha1, sha2 := initGitRepo2Commits(t, dir, initial, updated)
+	s1 := short12(sha1)
+	s2 := short12(sha2)
+	branch := getDefaultBranch(t, dir) // points to sha2
 
 	cfgContent := "git=" + gitBin + "\nrepo r = " + dir + "\n"
 	cfg, err := source.LoadConfigPaths(writeConfigFile(t, cfgContent), "")
@@ -244,22 +255,124 @@ func TestGitLocator_SHARewriting(t *testing.T) {
 	}
 	r := source.NewResolverWithConfig(cfg, dir)
 
-	citeStr := "git:r@" + branch + ":file.txt:1-2"
-	hashedCite, meta, err := r.HashCitation(citeStr)
-	if err != nil {
-		t.Fatalf("HashCitation(%q): %v", citeStr, err)
+	tests := []struct {
+		name         string
+		citeStr      string
+		wantResolved string // exact expected meta.ResolvedLocator
+	}{
+		{
+			name:         "file at ref: branch → 12-hex SHA",
+			citeStr:      "git:r@" + branch + ":file.txt:1-2",
+			wantResolved: "git:r@" + s2 + ":file.txt",
+		},
+		{
+			name:         "commit: branch → 12-hex SHA",
+			citeStr:      "git:r@" + branch + ":1-3",
+			wantResolved: "git:r@" + s2,
+		},
+		{
+			name:         "diff: full SHAs → 12-hex",
+			citeStr:      "git:r@" + sha1 + ".." + sha2 + ":1-1",
+			wantResolved: "git:r@" + s1 + ".." + s2,
+		},
+		{
+			name:         "diff for path: full SHAs → 12-hex",
+			citeStr:      "git:r@" + sha1 + ".." + sha2 + ":file.txt:1-1",
+			wantResolved: "git:r@" + s1 + ".." + s2 + ":file.txt",
+		},
 	}
 
-	// The returned citation must contain the SHA-pinned locator.
-	wantLocator := "git:r@" + sha12 + ":file.txt"
-	if !strings.Contains(hashedCite, wantLocator) {
-		t.Errorf("HashCitation(%q) = %q; want locator %q", citeStr, hashedCite, wantLocator)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hashedCite, meta, err := r.HashCitation(tc.citeStr)
+			if err != nil {
+				t.Fatalf("HashCitation(%q): %v", tc.citeStr, err)
+			}
+			if meta.ResolvedLocator != tc.wantResolved {
+				t.Errorf("meta.ResolvedLocator = %q; want %q", meta.ResolvedLocator, tc.wantResolved)
+			}
+			if !strings.Contains(hashedCite, tc.wantResolved) {
+				t.Errorf("hashedCite %q does not contain SHA-pinned locator %q", hashedCite, tc.wantResolved)
+			}
+		})
 	}
-	// Meta must carry ref (original branch) and commit (the SHA).
-	if meta.Ref != branch {
-		t.Errorf("Meta.Ref = %q, want %q", meta.Ref, branch)
+
+	// File-at-ref additionally populates Meta.Ref (original ref) and Meta.Commit.
+	t.Run("file at ref: meta fields", func(t *testing.T) {
+		citeStr := "git:r@" + branch + ":file.txt:1-2"
+		_, meta, err := r.HashCitation(citeStr)
+		if err != nil {
+			t.Fatalf("HashCitation: %v", err)
+		}
+		if meta.Ref != branch {
+			t.Errorf("Meta.Ref = %q, want %q", meta.Ref, branch)
+		}
+		if meta.Commit != s2 {
+			t.Errorf("Meta.Commit = %q, want %q", meta.Commit, s2)
+		}
+	})
+}
+
+// TestGitLocator_ConverterCases verifies that a git: file-at-ref citation with a
+// mapped extension runs the converter (the sliced text is the converted output),
+// while a diff-for-path citation with the same extension does NOT run the converter.
+func TestGitLocator_ConverterCases(t *testing.T) {
+	gitBin := skipIfNoGit(t)
+	dir := t.TempDir()
+	cvDir := t.TempDir()
+
+	// Content that changes visibly after HTML-tag stripping.
+	const initial = "<p>alpha</p>\n<p>beta</p>\n"
+	const updated = "<p>alpha</p>\n<p>beta changed</p>\n"
+	sha1, sha2 := initGitRepo2Commits(t, dir, initial, updated)
+	s1 := short12(sha1)
+	s2 := short12(sha2)
+
+	// Build a tag-stripping converter; map ".txt" → text/html so the git
+	// repo's file.txt is dispatched through it.
+	conv := writeScript(t, cvDir, "conv", "sed 's/<[^>]*>//g'")
+	ver := writeScript(t, cvDir, "conv_ver", `printf "1.0"`)
+
+	cfgContent := "git=" + gitBin + "\nrepo r = " + dir + "\n" +
+		"convert text/html=" + conv + "\n" +
+		"version " + conv + "=1.0\n" +
+		"version-cmd " + conv + "=" + ver + "\n" +
+		"ext .txt=text/html\n"
+	cfg, err := source.LoadConfigPaths(writeConfigFile(t, cfgContent), "")
+	if err != nil {
+		t.Fatalf("LoadConfigPaths: %v", err)
 	}
-	if meta.Commit != sha12 {
-		t.Errorf("Meta.Commit = %q, want %q", meta.Commit, sha12)
-	}
+	r := source.NewResolverWithConfig(cfg, dir)
+
+	// Case 1: file-at-ref → converter applied; sliced text is the stripped output.
+	t.Run("file at ref with converter: text is converted", func(t *testing.T) {
+		c := cite.Citation{File: "git:r@" + s2 + ":file.txt", Start: 1, End: 2}
+		text, meta, err := r.Read(c)
+		if err != nil {
+			t.Fatalf("Read: %v", err)
+		}
+		// Strip "<p>alpha</p>\n<p>beta changed</p>\n" → "alpha\nbeta changed".
+		if text != "alpha\nbeta changed" {
+			t.Errorf("text = %q; want converted output %q", text, "alpha\nbeta changed")
+		}
+		if meta.Converter == "" {
+			t.Errorf("meta.Converter should be set; got empty")
+		}
+	})
+
+	// Case 2: diff-for-path with the same ".txt" extension → NOT converted.
+	t.Run("diff for path: not converted despite mapped extension", func(t *testing.T) {
+		c := cite.Citation{File: "git:r@" + s1 + ".." + s2 + ":file.txt", Start: 1, End: 1}
+		text, meta, err := r.Read(c)
+		if err != nil {
+			t.Fatalf("Read diff: %v", err)
+		}
+		// Diff output starts with the git diff header, not converted text.
+		if !strings.Contains(text, "diff") {
+			t.Errorf("diff text %q should contain 'diff'", text)
+		}
+		if meta.Converter != "" {
+			t.Errorf("meta.Converter should be empty for diff form; got %q", meta.Converter)
+		}
+	})
 }

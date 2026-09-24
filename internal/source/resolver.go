@@ -189,6 +189,13 @@ func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
 
 	// Resolve a ref to a 12-hex SHA via rev-parse.
 	resolveRef := func(ref string) (string, error) {
+		// Refuse refs that begin with "-": git would interpret them as options.
+		if strings.HasPrefix(ref, "-") {
+			return "", &RefusalError{
+				Err: "ref must not start with -",
+				Fix: "use git:<alias>@<ref>[:<path>] where ref is a branch, tag, or SHA",
+			}
+		}
 		cmd := exec.Command(r.Cfg.Git, "-C", repoPath, "rev-parse", "--verify", "--short=12", ref+"^{commit}") //nolint:gosec
 		out, err := cmd.Output()
 		if err != nil {

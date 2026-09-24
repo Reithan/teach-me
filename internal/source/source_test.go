@@ -67,8 +67,8 @@ func skipIfNoGit(t *testing.T) string {
 	return p
 }
 
-// initGitRepo creates a real git repo, commits file.txt, and returns the HEAD SHA.
-func initGitRepo(t *testing.T, dir, content string) string {
+// initGitRepo creates a real git repo and commits file.txt.
+func initGitRepo(t *testing.T, dir, content string) {
 	t.Helper()
 	for _, args := range [][]string{
 		{"init"}, {"config", "user.email", "t@t"}, {"config", "user.name", "T"},
@@ -87,11 +87,6 @@ func initGitRepo(t *testing.T, dir, content string) string {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		t.Fatalf("rev-parse HEAD: %v", err)
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // makeFakeGit creates a .git directory with the given HEAD, optional loose ref, and packed-refs.
@@ -242,6 +237,20 @@ func TestLoadConfig(t *testing.T) {
 			name:    "empty value after = is silently skipped",
 			user:    "git=/g\nconvert=\n",
 			wantGit: "/g",
+		},
+		{
+			name: "invalid repo alias in user config returns error",
+			check: func(t *testing.T, _ *source.Config) {
+				dir := t.TempDir()
+				p := filepath.Join(dir, "config")
+				if err := os.WriteFile(p, []byte("repo bad alias!="+dir+"\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				_, err := source.LoadConfigPaths(p, filepath.Join(dir, "nofile"))
+				if err == nil {
+					t.Fatal("expected error for invalid repo alias")
+				}
+			},
 		},
 		{
 			name: "XDG_CONFIG_HOME is used to locate user config",
@@ -695,10 +704,10 @@ func TestApplyMeta(t *testing.T) {
 		{
 			name: "all non-empty fields are added",
 			meta: source.Meta{
-				Commit: "abc", URL: "https://x.com", MIME: "text/html",
+				Commit: "abc", Ref: "main", URL: "https://x.com", MIME: "text/html",
 				Converter: "pandoc", ConverterVersion: "3.1", FetchedAt: time.Now(),
 			},
-			wantKeys: []string{"commit", "url", "mime", "converter", "converter_version", "fetched_at"},
+			wantKeys: []string{"commit", "ref", "url", "mime", "converter", "converter_version", "fetched_at"},
 		},
 	}
 
