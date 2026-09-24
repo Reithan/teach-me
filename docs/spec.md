@@ -61,7 +61,7 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 
 ## 3. Files
 
-- Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; the graph carries no cache or side state. Its first `untested` meta line records the graph format (§4.6); every command except `migrate`, `lint`, and help refuses a graph whose format is below the binary's with `fix: tm migrate`.
+- Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; the graph carries no cache or side state. Its first `untested` meta line records the graph format when present; absent, the format is 1 (§4.6). Every command except `migrate`, `lint`, and help refuses a graph whose format is below the binary's with `fix: tm migrate`.
 - Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history` and `tm check --drift`.
 - Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolves at all (a usage error with no pointer set). Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
 - Lock: `<name>.mmd.lock`. Every mutating command takes the lock, writes a temp file, lints the result, then renames over the graph. Graders run in parallel, so this is required.
