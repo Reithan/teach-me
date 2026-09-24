@@ -479,7 +479,8 @@ func TestNilRunPlaceholder_Exit3(t *testing.T) {
 	errlogPath := tempErrlog(t)
 	t.Setenv("TM_ROLE", "")
 	t.Setenv("TM_FILE", "")
-	t.Chdir(t.TempDir()) // empty dir — no .tmconfig
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // fresh user config — no pointer
+	t.Chdir(t.TempDir())                     // empty dir — no .tmconfig
 
 	// grade is now implemented; with no graph file it exits 3.
 	_, errOut, code := run(t, "grade", "q1", "pass", "summary")
@@ -718,6 +719,7 @@ func TestLint_Violations_Exit2(t *testing.T) {
 func TestLint_NoFile_Exit3(t *testing.T) {
 	errlogPath := tempErrlog(t)
 	t.Setenv("TM_FILE", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // fresh user config — no pointer
 	// Change to an empty temp dir so there is no .tmconfig to pick up.
 	t.Chdir(t.TempDir())
 

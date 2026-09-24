@@ -153,7 +153,8 @@ func TestRehash(t *testing.T) {
 			name: "no graph file exit3",
 			setup: func(t *testing.T) string {
 				t.Setenv("TM_FILE", "")
-				t.Chdir(t.TempDir()) // empty dir — no .tmconfig
+				t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // no pointer
+				t.Chdir(t.TempDir())                     // no .tmconfig
 				return ""
 			},
 			wantCode: 3,

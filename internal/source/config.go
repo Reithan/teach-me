@@ -6,8 +6,9 @@ package source
 import (
 	"bufio"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/reithan/teach-me/internal/config"
 )
 
 // Config holds the source-resolution knobs parsed from the user config file
@@ -31,16 +32,9 @@ type Config struct {
 	ConfigPath string
 }
 
-// userConfigPath returns $XDG_CONFIG_HOME/tm/config or ~/.config/tm/config.
+// userConfigPath returns the user-level config path (see config.UserPath).
 func userConfigPath() string {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "tm", "config")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".config", "tm", "config")
-	}
-	return filepath.Join(home, ".config", "tm", "config")
+	return config.UserPath()
 }
 
 // LoadConfig builds a Config by parsing the user config file and then the

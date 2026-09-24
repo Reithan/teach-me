@@ -5,14 +5,16 @@ import (
 	"io"
 	"os"
 
+	"github.com/reithan/teach-me/internal/config"
 	"github.com/reithan/teach-me/internal/docver"
 	"github.com/reithan/teach-me/internal/version"
 )
 
 // baselineHelp writes the baseline help output to out (stdout) and returns
-// the docver mismatch err string (without the "err: " prefix) when $TM_DOC
-// carries a marker that is missing or differs from the CLI's own marker.
-// It returns "" when there is no mismatch or when $TM_DOC is unset.
+// the docver mismatch err string (without the "err: " prefix) when the
+// configured doc ($TM_DOC or the `doc` config key) carries a marker that is
+// missing or differs from the CLI's own marker. It returns "" when there is
+// no mismatch or when no doc is configured.
 //
 // The caller is responsible for logging the mismatch to ERRORS.jsonl with
 // the exit code that the surrounding call path returns (§10.1). Keeping the
@@ -29,7 +31,7 @@ import (
 //
 // Without $TM_DOC, prints one usage line per §6 command.
 func baselineHelp(out io.Writer) string {
-	docPath := os.Getenv("TM_DOC")
+	docPath := config.Doc()
 	ver := version.Version()
 
 	if docPath != "" {
@@ -58,11 +60,18 @@ func baselineHelp(out io.Writer) string {
 		return ""
 	}
 
-	// No TM_DOC: print one usage line per command.
+	// No doc configured: print one usage line per command.
+	commandList(out)
+	return ""
+}
+
+// commandList prints one usage line per §6 command. It backs baseline help
+// without a doc and `tm --help --all`, which the skill file uses to inline
+// the command reference regardless of the doc setting.
+func commandList(out io.Writer) {
 	for _, cmd := range Table {
 		_, _ = fmt.Fprintln(out, cmd.Usage())
 	}
-	return ""
 }
 
 // specificHelp writes the usage line for the named command to out. When

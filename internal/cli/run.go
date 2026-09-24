@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/reithan/teach-me/internal/errlog"
+	"github.com/reithan/teach-me/internal/state"
 	"github.com/reithan/teach-me/internal/version"
 )
 
@@ -56,6 +57,12 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 		if mismatch := baselineHelp(out); mismatch != "" {
 			appendErrLog(role, args, 0, mismatch, nil)
 		}
+		return 0
+	}
+
+	// ── --help --all: one usage line per command, whatever TM_DOC says ──────
+	if (first == "--help" || first == "-h") && len(args) == 2 && args[1] == "--all" {
+		commandList(out)
 		return 0
 	}
 
@@ -307,7 +314,13 @@ func writeUnknown(errOut io.Writer, name string, argv []string, role string) {
 // appendErrLog logs one error row to ERRORS.jsonl for dispatcher-level errors
 // (before a graph file is resolved). Violations is always nil at this point.
 func appendErrLog(role string, argv []string, exit int, errMsg string, fix *string) {
-	appendErrLogFull("", role, nil, argv, exit, errMsg, fix, nil)
+	// Best effort: when a graph is configured, log beside it rather than in
+	// the working directory (§3).
+	graphDir := ""
+	if file, err := state.ResolveFile(""); err == nil && file != "" {
+		graphDir = filepath.Dir(file)
+	}
+	appendErrLogFull(graphDir, role, nil, argv, exit, errMsg, fix, nil)
 }
 
 // appendErrLogFull appends one row to ERRORS.jsonl. Logging is best-effort:
