@@ -52,13 +52,17 @@ Three parties share the file:
 | Grader sub-agent | `tm check` output only | `tm grade` |
 | Human learner | the rendered graph, your questions | answers; hand-edits |
 
-Citations are `hash@locator:START-END`, resolved against `$TM_SRC_ROOT`
-(defaults to the graph's directory).
+Citations are `hash@locator:START-END`. Relative locators resolve against the
+source root recorded by `tm new --src-root` (defaults to the graph's directory).
 
 ## Rules
 
-Set `TM_DOC` to this file's path at session start, so `tm`'s baseline help points
-back here.
+`tm`'s baseline help must point back here: `tm --help` should print `see <path>`
+naming this file. If it prints the command list instead, the `doc` key is not
+set; advise the user on the line for `~/.config/tm/config` (see
+`skill/teach-me/reference/setup.md`) and confirm before writing it. Do not rely
+on environment variables for anything that must outlast one shell call; the
+harness runs each call fresh, and `tm` reads its config file instead.
 
 Delegate every verdict to a grader sub-agent; never grade an answer yourself. The
 grader's isolation is what keeps your pass-bias out of the score, so spawn one
@@ -83,10 +87,12 @@ move. The full state machine is spec §12; the phases:
 
 1. **Source.** On `tm new` (fresh session only):
    - Ask the learner for source materials — notes, textbook chapters, docs, a
-     repo, papers. Markdown or any line-addressable text. Set `TM_SRC_ROOT`.
-   - A repo: set `TM_SRC_ROOT` to the repo root, or cite absolute paths. When
-     the graph must be portable across machines, cite the remote URL at a commit
-     instead.
+     repo, papers. Markdown or any line-addressable text. Ask where the lesson
+     files should live; the graph goes there, and `tm` records the pointer in
+     the user config, so the launch directory does not matter.
+   - A repo: pass its root as `--src-root` to `tm new`, or cite absolute paths.
+     When the graph must be portable across machines, cite the remote URL at a
+     commit instead.
    - Web sources: prefer immutable or versioned URLs (versioned arXiv, tagged
      docs, permalinks at a commit, archive snapshots). arXiv HTML or e-print over
      PDF. For dynamic pages, save a static copy and cite it.
@@ -95,7 +101,9 @@ move. The full state machine is spec §12; the phases:
    - When a citation refuses for want of a converter: read
      `skill/teach-me/reference/setup.md`, advise the user on the config lines,
      run a test conversion, and confirm with the user before writing the config.
-   - Run `tm new`.
+   - Run `tm new <lesson-dir>/<name>.mmd --src-root <dir>`, both as absolute
+     paths. Never set `TM_SRC_ROOT` or `TM_FILE` for a session; they do not
+     survive to the next call.
    - **File-access rule (repeated).** Before the first `tm add`, tell the user
      to configure harness deny rules for `*.mmd`, `*.mmd.jsonl`, and
      `*.mmd.lock`, and point at `skill/teach-me/reference/setup.md`. Continue
@@ -169,7 +177,7 @@ cycle.
 
 Generated from the CLI; for one command or flag, run `tm <command> --help`:
 
-!`env -u TM_DOC tm --help`
+!`tm --help --all`
 
 ## Reference
 

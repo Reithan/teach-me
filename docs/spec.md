@@ -13,10 +13,10 @@ Every interaction with the CLI is built for an agent reader at the lowest token 
 - Errors and warnings. The CLI returns one only when it must, and appends every one to `ERRORS.jsonl` (10.1) without saying so. Each is an `err:` line saying what is wrong, plus a `fix:` line with the command or action that unblocks the agent when the error does not already make that obvious.
 
 - Help. All help text is written for an agent: terse lines generated from the argument parser, with no prose, examples, or color. What the CLI returns depends on what the call reveals:
-  - Bare `tm`, `tm --help`, or a subcommand that does not exist: the agent lacks baseline knowledge. With `TM_DOC` set, print only `see <path> (tm <version>)`. Without it, print one usage line per command.
+  - Bare `tm`, `tm --help`, or a subcommand that does not exist: the agent lacks baseline knowledge. With a doc configured (`TM_DOC` or the `doc` config key), print only `see <path> (tm <version>)`. Without one, print one usage line per command. `tm --help --all` prints the usage lines whatever the doc setting, so a skill file can inline them.
   - `tm --help <command>`, `tm <command> --help`, or `tm <command> --help <flag>`: a specific inquiry. Print that command's usage line, or one line on that flag.
   - A real command with bad arguments: a likely input slip. Print `err:` naming what is wrong and `fix:` with that command's usage line.
-- Doc version. The file named by `TM_DOC` carries `tm-version: "<major.minor>"` under `metadata` in its YAML frontmatter. Whenever the CLI points at the file it prints its own version, and if the marker is missing or differs it adds `err: <path> is for tm <x>, this is tm <y>`. The file ships in the CLI's repository and the two versions are bumped together; CI fails a PR where they differ. Drift inside one version is a review matter, not a runtime one.
+- Doc version. The file named by `TM_DOC` or the `doc` config key carries `tm-version: "<major.minor>"` under `metadata` in its YAML frontmatter. Whenever the CLI points at the file it prints its own version, and if the marker is missing or differs it adds `err: <path> is for tm <x>, this is tm <y>`. The file ships in the CLI's repository and the two versions are bumped together; CI fails a PR where they differ. Drift inside one version is a review matter, not a runtime one.
 - Chaining. When a command's result makes the caller's next `tm` call deterministic, the CLI runs that call itself and prints both results, saving a round trip through the model. A line `> tm <command>` separates them. Only reads are chained; the CLI never runs a mutation the caller did not ask for. If the chained command refuses, its `err:` follows the first result.
 
 The test for any output line: if the caller's next command would be the same without it, cut it.
@@ -49,7 +49,7 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 
 | Adapter | Supplies | Forms it can take |
 |---|---|---|
-| Teacher prompt | the procedure the CLI cannot enforce (section 12); sets `TM_DOC` to its own path | a skill file, an agent file, a section of the harness's instruction file |
+| Teacher prompt | the procedure the CLI cannot enforce (section 12); named by the `doc` config key, set when the adapter is installed | a skill file, an agent file, a section of the harness's instruction file |
 | Grader invocation | carries `check` output to a model and a verdict back to `grade` | a sub-agent the teacher spawns, on any harness with sub-agents and a shell. Automatic spawning is deferred (section 15) |
 | Planner invocation | reads sources and writes concepts with citations; called from Map and errata | `skill/teach-me/agents/teach-me-planner.md` |
 | Question UI | maps `ask --format json` onto the harness's question tool | a small script or skill |
@@ -60,11 +60,11 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 
 - Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; there is no cache or side state.
 - Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history` and `tm check --drift`.
-- Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolved. Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
+- Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolves at all (a usage error with no pointer set). Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
 - Lock: `<name>.mmd.lock`. Every mutating command takes the lock, writes a temp file, lints the result, then renames over the graph. Graders run in parallel, so this is required.
-- File resolution: `--file` > `$TM_FILE` > `.tmconfig` in the working directory. `tm new` and `tm load` write `.tmconfig`. Use the env var when two sessions share a directory.
+- File resolution: `--file` > `$TM_FILE` > `file` key in `.tmconfig` in the working directory > `file` key in the user config. `tm new` and `tm load` write the `file` key (and `src-root` when given) into the user config as absolute paths, so the pointer holds from any working directory; with `--local` they write `.tmconfig` in the working directory instead, for two lessons on one machine. Use the env var or `--file` when two concurrent sessions need different graphs.
 - Citations resolve against `$TM_SRC_ROOT`, defaulting to the graph's directory.
-- Converter and git configuration: user-level `$XDG_CONFIG_HOME/tm/config` (default `~/.config/tm/config`), key=value format (section 13). `.tmconfig` keys override the user config per project. Converters are machine-specific, so they live in the user config by default.
+- Configuration: user-level `$XDG_CONFIG_HOME/tm/config` (default `~/.config/tm/config`), key=value format (section 13). `.tmconfig` keys override the user config per project. Converters, the active graph, the source root, and the doc path are all machine-specific, so they live in the user config by default. Environment variables are set per call in an agent harness and rarely survive to the next call, which is why every session-scoped setting has a config key.
 
 ## 4. Graph format
 
@@ -222,8 +222,8 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 
 | Command | Effect | Prints |
 |---|---|---|
-| `tm new <file> [--title "<t>"]` | create the skeleton, make it active | `ok` |
-| `tm load <file>` | make an existing graph active | chained `status` |
+| `tm new <file> [--title "<t>"] [--src-root <dir>] [--local]` | create the skeleton, make it active by writing the `file` (and `src-root`) pointer to the user config, or to `.tmconfig` with `--local` | `ok` |
+| `tm load <file> [--src-root <dir>] [--local]` | make an existing graph active; same pointer write as `new` | chained `status` |
 | `tm status [--passed]` | counts, one line per open or blocked concept, frontier IDs | see sample |
 | `tm status --concept <id>` | that concept's batches, verdicts, failed count, and open teaching targets | see sample; chains per section 1 |
 | `tm find "<text>" [--kind concept\|q\|a]` | search scopes and summaries | one line per hit: ID, state, truncated scope |
@@ -247,7 +247,8 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
 | `tm check --drift <concept>` | grader: for a passed concept, read its `grade` events, resolve each question citation against the current source, and emit per-question pairs for judging whether the pass survives | the recheck payload |
 | `tm grade --drift <concept> keep\|reopen "<summary>"` | grader: record the recheck verdict; `keep` re-hashes the concept citation; `reopen` runs `reopen` with the summary as the GAP | `ok` |
-| Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when `TM_DOC` is set; otherwise one usage line per command |
+| Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when a doc is configured; otherwise one usage line per command |
+| `tm --help --all` | one usage line per command, whatever the doc setting | usage lines |
 | `tm --help <command>`, `tm <command> --help [<flag>]` | specific inquiry | that command's usage line, or one line on the flag |
 
 Reads that resolve source text (`tm ask --src-text`, `tm show`, `tm report`) recompute the citation hash on every call. On mismatch the text is still printed; a `DRIFT <cite>` line sits between the citation line and the text.
@@ -521,7 +522,7 @@ Four behaviors the CLI cannot enforce belong in the teacher's prompt:
 3. The no-memory rule: model knowledge may draft questions and explain during teaching, but it never becomes source. When no real source can be obtained, the teacher says so and stops. Nothing model-authored is stored as source.
 4. The file-access rule: the model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on those file patterns; the CLI cannot.
 
-The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and sets `TM_SRC_ROOT`. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and points at the setup reference.
+The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and records their root with `tm new --src-root <dir>`. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and points at the setup reference.
 
 The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach-me-planner.md`). The teacher's spawn prompt carries the learning goal, the source locations, and the request scope: initial map, extension around a named concept, or errata against named concepts. For extension or errata the teacher passes `tm report <concept>` output so the planner sees the existing foundations. The planner returns one paragraph; the teacher reads the result through `tm status` and `tm show`, never through the planner's prose.
 
@@ -536,21 +537,24 @@ The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `TM_FILE` | none | active graph |
-| `TM_SRC_ROOT` | graph's directory | root for citations |
+| `TM_FILE` | none | active graph; overrides the `file` config key for one call |
+| `TM_SRC_ROOT` | graph's directory | root for citations; overrides the `src-root` config key for one call |
 | `TM_ROLE` | unset | `teacher` or `grader`; soft guard |
 | `TM_ERRORS` | `ERRORS.jsonl` beside the graph | error log path |
-| `TM_DOC` | unset | path to the skill or agent file that documents `tm` for this harness; baseline help defers to it, and its `metadata.tm-version` is checked. Also settable as `doc` in `.tmconfig` |
+| `TM_DOC` | unset | path to the skill or agent file that documents `tm` for this harness; baseline help defers to it, and its `metadata.tm-version` is checked. Overrides the `doc` config key for one call |
 | `TM_PROBE_MIN` / `TM_PROBE_MAX` | 2 / 5 | probe batch size |
 | `TM_TEACH_MIN` / `TM_TEACH_MAX` | 1 / 3 | teach batch size |
 | `TM_MAX_FAILS` | 2 | failed probe batches before the gate |
 | `TM_MAX_TEACH` | 8 | in-scope teach questions per teaching round before teaching ends and the locked probes are asked |
 | `TM_MAX_STALL` | 4 | in-scope teach questions in a row, across zero-pass batches, before the gate |
 
-Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per project):
+Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per project). Precedence for the pointer keys is flag, then environment variable, then `.tmconfig`, then the user config:
 
 | Key | Format | Meaning |
 |---|---|---|
+| `file` | `= <path>` | active graph; written by `tm new` and `tm load` |
+| `src-root` | `= <dir>` | root for relative citations; written by `tm new --src-root` and `tm load --src-root` |
+| `doc` | `= <path>` | the harness file that documents `tm`; set when the adapter is installed |
 | `convert <mime>` | `= <command...>` | shell command that reads the source bytes on stdin and writes text on stdout; keyed by MIME type |
 | `ext <ext>` | `= <mime>` | map a file extension to a MIME type for converter lookup |
 | `version <program>` | `= <string>` | required version pin; the CLI checks that the pin is a substring of the first output line before the first use |
@@ -671,6 +675,7 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 | 55 | Concept citations may be updated on drift through `recite` (hash-preserving), `reopen --src`, and a grader recheck; each logged with before and after | no verdict is graded against a concept citation, so updating it rewrites nothing a pass was earned against; the graph is already not add-only | errata nodes with edge transfer and a superseded marker; teacher override with a reason | agreed |
 | 56 | Whether a pass survives a source change is a grader's verdict from the logged answers and the current text, never the teacher's | same isolation argument as grading; the teacher's bias runs toward always or never re-testing | teacher `recite --override`; automatic reopen on any drift | agreed |
 | 57 | The model reaches the graph, log, and lock only through the CLI; adapters ask for harness deny rules on `tm new`, tell the model never to touch the files, and require it to report any accidental access as a misconfiguration | every CLI invariant assumes the CLI is the only writer and the grader's isolation assumes the model cannot read verdict history except through `show --history`; a model that opens the files bypasses all of it silently | CLI-side enforcement (impossible: it cannot see who opened a file); trust the model; encrypted or obfuscated graph | agreed |
+| 58 | The active graph, source root, and doc path are config keys in the user config, written by `tm new` and `tm load`; `.tmconfig` in the working directory is the opt-in per-directory mode | an agent harness runs each shell call fresh, so an env var set at session start is gone by the next call, and a pointer file in the launch directory lands wherever the harness happened to start; sub-agents that receive only a question ID need the pointer to hold from any directory | `.tmconfig` in the working directory as the default (v0.1 to v0.2); env vars set once per session; `--file` on every call | agreed, 2026-09-24 |
 
 ## 15. Deferred
 
@@ -727,6 +732,7 @@ internal/state/           derived state (section 5): frontier, batch states, tar
 internal/ops/             one file per mutating command: invariants (section 7), transitions (section 8)
 internal/lint/            section 11
 internal/cite/            citation parsing and hash computation
+internal/config/          config file lookup and targeted key writes: file, src-root, doc
 internal/source/          source resolution: resolve, fetch, convert, git HEAD blob
 internal/report/          tm report: walk, format, inline text
 internal/eventlog/        section 10
