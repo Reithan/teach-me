@@ -33,13 +33,15 @@ func migrateRule1(mctx *migrateContext, ref citationRef, _ *graph.Graph) (newLoc
 	}
 
 	// Look up the commit from the most-recent add/q event for this id.
+	// No event or no commit field means the citation is not ours: pass to the
+	// next rule (e.g. M15d's URL rule) with an empty reason.
 	ev := mctx.eventForID(ref.id)
 	if ev == nil {
-		return "", "no event found for id", false
+		return "", "", false
 	}
 	commit, _ := ev["commit"].(string)
 	if commit == "" {
-		return "", "no commit in event log", false
+		return "", "", false
 	}
 
 	// Compute the absolute path the same way readPath does: via cite.Resolve.
@@ -51,8 +53,15 @@ func migrateRule1(mctx *migrateContext, ref citationRef, _ *graph.Graph) (newLoc
 			return "", fmt.Sprintf("cannot resolve path: %v", absErr), false
 		}
 	}
+	// Resolve symlinks so alias prefix matching works when the alias was
+	// registered through a symlinked path.
+	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
+		absPath = resolved
+	}
 
-	// Find the registered alias whose repo path is the longest prefix of absPath.
+	// Find the registered alias whose resolved repo path is the longest prefix
+	// of absPath. EvalSymlinks is applied to each repo path so symlinked
+	// registrations match; entries whose resolution fails are skipped.
 	repos := mctx.resolver.Cfg.Repos
 	aliases := make([]string, 0, len(repos))
 	for a := range repos {
@@ -62,6 +71,7 @@ func migrateRule1(mctx *migrateContext, ref citationRef, _ *graph.Graph) (newLoc
 
 	bestAlias := ""
 	bestPrefix := ""
+	bestResolved := ""
 	for _, alias := range aliases {
 		repoPath := repos[alias]
 		if !filepath.IsAbs(repoPath) {
@@ -69,14 +79,19 @@ func migrateRule1(mctx *migrateContext, ref citationRef, _ *graph.Graph) (newLoc
 				repoPath = abs2
 			}
 		}
+		resolved, err := filepath.EvalSymlinks(repoPath)
+		if err != nil {
+			continue // skip entries whose symlink resolution fails
+		}
 		// Add trailing separator so /foo/bar does not match /foo/barbaz.
-		normalized := repoPath
+		normalized := resolved
 		if !strings.HasSuffix(normalized, string(filepath.Separator)) {
 			normalized += string(filepath.Separator)
 		}
 		if strings.HasPrefix(absPath, normalized) && len(normalized) > len(bestPrefix) {
 			bestAlias = alias
 			bestPrefix = normalized
+			bestResolved = resolved
 		}
 	}
 
@@ -89,14 +104,8 @@ func migrateRule1(mctx *migrateContext, ref citationRef, _ *graph.Graph) (newLoc
 		return "", fmt.Sprintf("needs: tm repo add <alias> %s", repoDir), false
 	}
 
-	// Build the repo-relative path.
-	repoAbsPath := repos[bestAlias]
-	if !filepath.IsAbs(repoAbsPath) {
-		if abs2, abs2Err := filepath.Abs(repoAbsPath); abs2Err == nil {
-			repoAbsPath = abs2
-		}
-	}
-	relPath, relErr := filepath.Rel(repoAbsPath, absPath)
+	// Build the repo-relative path using the resolved (symlink-free) paths.
+	relPath, relErr := filepath.Rel(bestResolved, absPath)
 	if relErr != nil {
 		return "", fmt.Sprintf("cannot compute relative path: %v", relErr), false
 	}

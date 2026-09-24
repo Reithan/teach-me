@@ -13,9 +13,9 @@ import (
 )
 
 // buildRule1Graph creates a format-1 graph string with one concept (id=c1) and
-// citation hash@relFile:1-2 where relFile is the relative path to the source.
-func buildRule1Graph(hash, relFile string) string {
-	cite := hash + "@" + relFile + ":1-2"
+// citation hash@file.txt:1-2.
+func buildRule1Graph(hash string) string {
+	cite := hash + "@file.txt:1-2"
 	return fmt.Sprintf(`flowchart TB
     subgraph passed["Concepts User understands"]
     end
@@ -83,7 +83,7 @@ func TestMigrateRule1_Rewrite(t *testing.T) {
 	relFile := "file.txt"
 	citeStr := contentHash + "@" + relFile + ":1-2"
 
-	if err := os.WriteFile(graphFile, []byte(buildRule1Graph(contentHash, relFile)), 0o644); err != nil {
+	if err := os.WriteFile(graphFile, []byte(buildRule1Graph(contentHash)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	writeEventLog(t, graphFile+".jsonl", "c1", citeStr, fullSHA)
@@ -135,6 +135,165 @@ func TestMigrateRule1_Rewrite(t *testing.T) {
 	}
 }
 
+// TestMigrateRule1_Table covers three edge-case paths through migrateRule1
+// using the same git repo fixture as TestMigrateRule1_Rewrite.
+func TestMigrateRule1_Table(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+
+	gitBin, _ := exec.LookPath("git")
+	repoDir := t.TempDir()
+	fullSHA := repoInitGit(t, repoDir)
+	contentHash := icite.Hash("line1\nline2")
+	wrongHash := icite.Hash("content that does not match line1 or line2")
+
+	tests := []struct {
+		name       string
+		citeHash   string // hash embedded in the citation
+		makeLog    func(t *testing.T, logPath, id, citeStr string)
+		wantLeft   bool
+		wantReason string // substring expected in the left reason line
+	}{
+		{
+			// The citation hash does not match the file content at the logged
+			// commit; the rule must stop the pipeline with a mismatch reason.
+			name:     "hash differs: left with mismatch reason",
+			citeHash: wrongHash,
+			makeLog: func(t *testing.T, logPath, id, citeStr string) {
+				writeEventLog(t, logPath, id, citeStr, fullSHA)
+			},
+			wantLeft:   true,
+			wantReason: "hash mismatch",
+		},
+		{
+			// The add event exists but carries no "commit" field; the rule
+			// must return ok=false with an empty reason so the pipeline falls
+			// through to the default "plain path".
+			name:     "event without commit: falls through to plain path",
+			citeHash: contentHash,
+			makeLog: func(t *testing.T, logPath, id, citeStr string) {
+				t.Helper()
+				ev := map[string]any{
+					"ev":   "add",
+					"id":   id,
+					"cite": citeStr,
+					"t":    "2026-01-01T00:00:00Z",
+					// no "commit" field
+				}
+				data, err := json.Marshal(ev)
+				if err != nil {
+					t.Fatalf("marshal event: %v", err)
+				}
+				if err := os.WriteFile(logPath, append(data, '\n'), 0o644); err != nil {
+					t.Fatalf("write event log: %v", err)
+				}
+			},
+			wantLeft:   true,
+			wantReason: "plain path",
+		},
+		{
+			// The event logs a commit SHA that does not exist in the repo;
+			// git fails inside HashCitation and the rule stops the pipeline
+			// with a git error reason.
+			name:     "logged commit absent from repo: left with git error",
+			citeHash: contentHash,
+			makeLog: func(t *testing.T, logPath, id, citeStr string) {
+				writeEventLog(t, logPath, id, citeStr, "deadbeef0000")
+			},
+			wantLeft:   true,
+			wantReason: "cannot hash git: form",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			freshConfig(t)
+			tempErrlog(t)
+			repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
+			t.Setenv("TM_SRC_ROOT", repoDir)
+
+			relFile := "file.txt"
+			citeStr := tc.citeHash + "@" + relFile + ":1-2"
+
+			graphDir := t.TempDir()
+			t.Chdir(graphDir)
+			graphFile := filepath.Join(graphDir, "g.mmd")
+			if err := os.WriteFile(graphFile, []byte(buildRule1Graph(tc.citeHash)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			tc.makeLog(t, graphFile+".jsonl", "c1", citeStr)
+
+			out, errOut, code := run(t, "migrate", graphFile)
+			if code != 0 {
+				t.Fatalf("tm migrate: exit %d; stderr: %s", code, errOut)
+			}
+
+			if tc.wantLeft {
+				if !strings.Contains(out, "left c1") {
+					t.Errorf("want 'left c1' in output; got:\n%s", out)
+				}
+				if tc.wantReason != "" && !strings.Contains(out, tc.wantReason) {
+					t.Errorf("want reason %q in output; got:\n%s", tc.wantReason, out)
+				}
+			} else if !strings.Contains(out, "ok c1") {
+				t.Errorf("want 'ok c1' in output; got:\n%s", out)
+			}
+		})
+	}
+}
+
+// TestMigrateRule1_SymlinkedRepoPath verifies that an alias registered through
+// a symlinked directory path still matches the citation after EvalSymlinks.
+func TestMigrateRule1_SymlinkedRepoPath(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	freshConfig(t)
+	tempErrlog(t)
+
+	gitBin, _ := exec.LookPath("git")
+	repoDir := t.TempDir()
+	fullSHA := repoInitGit(t, repoDir)
+	sha12 := fullSHA[:12]
+	contentHash := icite.Hash("line1\nline2")
+
+	// Register the alias using a symlinked path.
+	symlinkDir := filepath.Join(t.TempDir(), "linked-repo")
+	if err := os.Symlink(repoDir, symlinkDir); err != nil {
+		t.Skip("symlink not supported:", err)
+	}
+
+	repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, symlinkDir))
+	t.Setenv("TM_SRC_ROOT", repoDir) // source root uses the real path
+
+	relFile := "file.txt"
+	citeStr := contentHash + "@" + relFile + ":1-2"
+
+	graphDir := t.TempDir()
+	t.Chdir(graphDir)
+	graphFile := filepath.Join(graphDir, "g.mmd")
+	if err := os.WriteFile(graphFile, []byte(buildRule1Graph(contentHash)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeEventLog(t, graphFile+".jsonl", "c1", citeStr, fullSHA)
+
+	out, errOut, code := run(t, "migrate", graphFile)
+	if code != 0 {
+		t.Fatalf("tm migrate (symlinked path): exit %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(out, "ok c1") {
+		t.Errorf("migrate should rewrite c1 via symlinked alias; got:\n%s", out)
+	}
+
+	// The graph must contain the SHA-pinned git: locator.
+	graphData, _ := os.ReadFile(graphFile)
+	wantLocator := "git:r@" + sha12 + ":file.txt"
+	if !strings.Contains(string(graphData), wantLocator) {
+		t.Errorf("graph should contain %q; got:\n%s", wantLocator, string(graphData))
+	}
+}
+
 // TestMigrateRule1_NoAlias tests the case where no alias covers the path.
 // The rule should leave the citation with a "needs: tm repo add" reason.
 func TestMigrateRule1_NoAlias(t *testing.T) {
@@ -159,7 +318,7 @@ func TestMigrateRule1_NoAlias(t *testing.T) {
 	graphDir := t.TempDir()
 	t.Chdir(graphDir)
 	graphFile := filepath.Join(graphDir, "g.mmd")
-	if err := os.WriteFile(graphFile, []byte(buildRule1Graph(contentHash, relFile)), 0o644); err != nil {
+	if err := os.WriteFile(graphFile, []byte(buildRule1Graph(contentHash)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	writeEventLog(t, graphFile+".jsonl", "c1", citeStr, fullSHA)
