@@ -71,7 +71,7 @@ func findRun(ctx *Context) int {
 		return string(r[:maxRunes]) + "…"
 	}
 
-	// Search concepts (passed first, then untested, preserving declaration order).
+	// Search concepts (passed, then untested, then reserve, preserving declaration order).
 	if kind == "" || kind == "concept" {
 		for _, c := range g.PassedConcepts {
 			if strings.Contains(strings.ToLower(c.Scope), lower) {
@@ -85,6 +85,11 @@ func findRun(ctx *Context) int {
 					st = "open"
 				}
 				_, _ = fmt.Fprintf(ctx.Out, "%s  %s  %s\n", c.ID, st, truncate(c.Scope))
+			}
+		}
+		for _, c := range g.ReserveConcepts {
+			if strings.Contains(strings.ToLower(c.Scope), lower) {
+				_, _ = fmt.Fprintf(ctx.Out, "%s  reserve  %s\n", c.ID, truncate(c.Scope))
 			}
 		}
 	}

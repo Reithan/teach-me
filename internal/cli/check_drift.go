@@ -141,7 +141,7 @@ func checkDriftRun(ctx *Context) int {
 
 	srcRoot := s.Cfg().SrcRoot
 
-	// Verify the concept is known (passed or untested).
+	// Verify the concept is known (passed, untested, or reserve).
 	g := s.Graph()
 	conceptKnown := false
 	for _, c := range g.PassedConcepts {
@@ -152,6 +152,14 @@ func checkDriftRun(ctx *Context) int {
 	}
 	if !conceptKnown {
 		for _, c := range g.UntestedConcepts {
+			if c.ID == concept {
+				conceptKnown = true
+				break
+			}
+		}
+	}
+	if !conceptKnown {
+		for _, c := range g.ReserveConcepts {
 			if c.ID == concept {
 				conceptKnown = true
 				break
@@ -246,7 +254,7 @@ func gradeDriftRun(ctx *Context) int {
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		srcRoot := s.Cfg().SrcRoot
 
-		// Verify concept exists.
+		// Verify concept exists (passed, untested, or reserve).
 		var targetNode *graph.ConceptNode
 		for _, c := range g.PassedConcepts {
 			if c.ID == concept {
@@ -256,6 +264,14 @@ func gradeDriftRun(ctx *Context) int {
 		}
 		if targetNode == nil {
 			for _, c := range g.UntestedConcepts {
+				if c.ID == concept {
+					targetNode = c
+					break
+				}
+			}
+		}
+		if targetNode == nil {
+			for _, c := range g.ReserveConcepts {
 				if c.ID == concept {
 					targetNode = c
 					break
@@ -316,7 +332,8 @@ func gradeDriftRun(ctx *Context) int {
 
 			// Build updated graph.
 			ng := *g
-			if targetNode.Block == graph.BlockPassed {
+			switch targetNode.Block {
+			case graph.BlockPassed:
 				newPassed := make([]*graph.ConceptNode, len(g.PassedConcepts))
 				copy(newPassed, g.PassedConcepts)
 				for i, c := range newPassed {
@@ -326,7 +343,17 @@ func gradeDriftRun(ctx *Context) int {
 					}
 				}
 				ng.PassedConcepts = newPassed
-			} else {
+			case graph.BlockReserve:
+				newReserve := make([]*graph.ConceptNode, len(g.ReserveConcepts))
+				copy(newReserve, g.ReserveConcepts)
+				for i, c := range newReserve {
+					if c.ID == concept {
+						newReserve[i] = &newNode
+						break
+					}
+				}
+				ng.ReserveConcepts = newReserve
+			default:
 				newUntested := make([]*graph.ConceptNode, len(g.UntestedConcepts))
 				copy(newUntested, g.UntestedConcepts)
 				for i, c := range newUntested {
