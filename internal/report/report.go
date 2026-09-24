@@ -27,9 +27,10 @@ type ConceptInfo struct {
 
 // Options controls how Render formats the Markdown.
 type Options struct {
-	Fulltext   bool
-	PassedOnly bool
-	SrcRoot    string
+	Fulltext       bool
+	PassedOnly     bool
+	IncludeReserve bool // --reserve: include reserve concepts in output
+	SrcRoot        string
 }
 
 // TextReader reads source text and drift status for citeStr under srcRoot.
@@ -68,10 +69,9 @@ func reserveSet(g *graph.Graph) map[string]bool {
 }
 
 // conceptParentMap returns parentMap[childID] = []parentConceptIDs.
-// Only concept-to-concept edges between non-reserve concepts are included;
-// reserve parents are excluded from the walk so they never appear in reports
+// When includeReserve is false, edges involving reserve concepts are excluded
 // (spec §6: "reserve concepts are omitted unless --reserve").
-func conceptParentMap(g *graph.Graph, all map[string]*graph.ConceptNode) map[string][]string {
+func conceptParentMap(g *graph.Graph, all map[string]*graph.ConceptNode, includeReserve bool) map[string][]string {
 	reserve := reserveSet(g)
 	pm := make(map[string][]string, len(all))
 	for _, e := range g.Edges {
@@ -81,8 +81,8 @@ func conceptParentMap(g *graph.Graph, all map[string]*graph.ConceptNode) map[str
 		if _, ok := all[e.To]; !ok {
 			continue
 		}
-		// Skip edges involving reserve concepts (omitted from reports).
-		if reserve[e.From] || reserve[e.To] {
+		// Skip edges involving reserve concepts unless --reserve is set.
+		if !includeReserve && (reserve[e.From] || reserve[e.To]) {
 			continue
 		}
 		pm[e.To] = append(pm[e.To], e.From)
@@ -90,8 +90,8 @@ func conceptParentMap(g *graph.Graph, all map[string]*graph.ConceptNode) map[str
 	return pm
 }
 
-// buildDeclOrder returns concept IDs in declaration order (passed first, then
-// untested) limited to those whose ID is in included.
+// buildDeclOrder returns concept IDs in declaration order (passed, then
+// untested, then reserve) limited to those whose ID is in included.
 func buildDeclOrder(g *graph.Graph, included map[string]bool) []string {
 	out := make([]string, 0, len(included))
 	for _, c := range g.PassedConcepts {
@@ -100,6 +100,11 @@ func buildDeclOrder(g *graph.Graph, included map[string]bool) []string {
 		}
 	}
 	for _, c := range g.UntestedConcepts {
+		if included[c.ID] {
+			out = append(out, c.ID)
+		}
+	}
+	for _, c := range g.ReserveConcepts {
 		if included[c.ID] {
 			out = append(out, c.ID)
 		}
@@ -256,13 +261,21 @@ func deriveConceptInfos(topoOrder []string, all map[string]*graph.ConceptNode, g
 // hops > 0 limits the walk to that many hops from the start.
 //
 // Returns ErrUnknownConcept when startID is not a concept in g.
-func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptInfo, error) {
+// Walk traverses parent edges from startID, collecting concept foundations up
+// to hops depth (hops < 0 = unbounded). Pass Options{IncludeReserve: true} to
+// include reserve concepts; the zero-value Options excludes them by default.
+func Walk(g *graph.Graph, s *state.State, startID string, hops int, opts ...Options) ([]ConceptInfo, error) {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
 	all := buildConceptMap(g)
 	if _, ok := all[startID]; !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownConcept, startID)
 	}
 
-	parentMap := conceptParentMap(g, all)
+	parentMap := conceptParentMap(g, all, o.IncludeReserve)
 
 	// BFS from startID following parent edges, bounded by hops when hops >= 0.
 	type bfsItem struct {
@@ -295,20 +308,25 @@ func Walk(g *graph.Graph, s *state.State, startID string, hops int) ([]ConceptIn
 // default limit of 5. depth == 0 returns roots only.
 //
 // Output is in topological order with roots first, declaration-order
-// tie-breaking, matching the ordering Walk produces.
-func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
+// tie-breaking, matching the ordering Walk produces. Pass
+// Options{IncludeReserve: true} to include reserve concepts in the traversal.
+func WalkAll(g *graph.Graph, s *state.State, depth int, opts ...Options) []ConceptInfo {
 	const defaultDepth = 5
 	if depth < 0 {
 		depth = defaultDepth
 	}
 
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
 	all := buildConceptMap(g)
-	parentMap := conceptParentMap(g, all)
+	parentMap := conceptParentMap(g, all, o.IncludeReserve)
 	reserve := reserveSet(g)
 
 	// Build child map (concept-level): childMap[parentID] = []childIDs.
-	// Exclude reserve concepts so they are never traversed as BFS roots or
-	// children (they are omitted from report output by default until M14c).
+	// Exclude reserve concepts unless --reserve is set.
 	childMap := make(map[string][]string, len(all))
 	seenEdge := make(map[[2]string]bool)
 	for _, e := range g.Edges {
@@ -318,8 +336,8 @@ func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
 		if _, ok := all[e.To]; !ok {
 			continue
 		}
-		// Skip edges involving reserve concepts.
-		if reserve[e.From] || reserve[e.To] {
+		// Skip edges involving reserve concepts unless included.
+		if !o.IncludeReserve && (reserve[e.From] || reserve[e.To]) {
 			continue
 		}
 		key := [2]string{e.From, e.To}
@@ -330,7 +348,7 @@ func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
 		childMap[e.From] = append(childMap[e.From], e.To)
 	}
 
-	// BFS from roots (non-reserve concepts with no parents), following child edges.
+	// BFS from roots (concepts with no parents), following child edges.
 	type bfsItem struct {
 		id    string
 		depth int
@@ -338,8 +356,8 @@ func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
 	visited := make(map[string]bool, len(all))
 	var queue []bfsItem
 	for id := range all {
-		// Reserve concepts are excluded from report output.
-		if reserve[id] {
+		// Skip reserve concepts unless --reserve is set.
+		if !o.IncludeReserve && reserve[id] {
 			continue
 		}
 		if len(parentMap[id]) == 0 {
