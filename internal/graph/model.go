@@ -89,6 +89,17 @@ type GateMeta struct {
 	LeadingComments []string
 }
 
+// FormatMeta holds the data from a %% tm:format meta line (§4.6).
+// N is the graph format version; >= 1 when the line is present.
+type FormatMeta struct {
+	N               int
+	LeadingComments []string
+}
+
+// CurrentFormat is the graph format version this binary writes and expects.
+// Graphs without a %% tm:format line are treated as format 1 (written before v0.22).
+const CurrentFormat = 2
+
 // NextMeta holds the data from a %% tm:next meta line (§4.6).
 // Q is the next question/answer number to allocate; Batch is the next batch
 // number. Both are ≥ 1 when the line is present.
@@ -114,7 +125,9 @@ type Graph struct {
 	PassedConcepts []*ConceptNode
 
 	// Gate meta lines and concepts in the untested block, in order.
+	// Format holds the %% tm:format line when present; nil means format 1.
 	// NextMeta holds the %% tm:next counter line when present; nil otherwise.
+	Format           *FormatMeta
 	NextMeta         *NextMeta
 	UntestedMetas    []GateMeta
 	UntestedConcepts []*ConceptNode
@@ -130,6 +143,15 @@ type Graph struct {
 	// The writer applies the section 4.2 edge placement rule to determine
 	// which block emits each edge.
 	Edges []*Edge
+}
+
+// FormatN returns the graph format version: g.Format.N when the line is present,
+// or 1 when absent (format 1 is the implicit default for files before v0.22).
+func (g *Graph) FormatN() int {
+	if g.Format == nil {
+		return 1
+	}
+	return g.Format.N
 }
 
 // nodeBlocks builds a map from node ID to Block for all nodes in the graph.
