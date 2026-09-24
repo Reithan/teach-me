@@ -649,38 +649,45 @@ Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per pr
 
 ### 13.1 Source resolution
 
-Resolution order: parse the citation into hash, locator, and range; locate the source bytes (path or fetch); convert if a converter matches the MIME type or file extension; slice the line range; compare the computed hash.
+Resolution order: parse the citation into hash, locator, and range; locate the source text (plain path, `git:` locator, or fetch, possibly from the cache); convert if a converter matches the MIME type or file extension; slice the line range; compare the computed hash.
 
-**Paths.** When the locator is a relative or absolute path, the file is read raw unless a converter is configured for its extension, in which case it is piped through the converter.
-
-When the path does not exist locally and the path is inside a git repository: walk up from the longest existing ancestor until a `.git` directory or a `gitdir:` file is found (the latter for worktrees and submodules). Compute the repo-relative path. If `git` is configured (section 13), request the blob at `HEAD` through it. If git is not configured, or `HEAD` has no such blob:
+**Plain paths.** When the locator is a relative or absolute path, the file is read raw unless a converter is configured for its extension, in which case it is piped through the converter. A plain path carries no git semantics: the CLI does no `HEAD` fallback and records no `commit`. A path not in the working tree refuses:
 
 ```
-err: my-folder/file.txt is not in the working tree
-fix: check it out, or set git in <config> to read it from HEAD
+err: <path> is not in the working tree
+fix: cite it as git:<alias>@<ref>:<path> if it is committed
 ```
 
-The CLI never talks to a remote git server. A file that exists only on the remote requires the user to fetch, or the teacher cites the remote URL at a commit instead.
+**`git:` locators.** A `git:` locator (section 4.4) names committed content in the repo registered under `<alias>` (`tm repo add`, section 13). The `git` key is required; `HEAD` is not special, and the CLI never contacts a remote. On `add`, `q`, and `recite` the CLI resolves each `<ref>`, `<a>`, `<b>` with `git rev-parse` and stores the short SHA, so the citation is pinned to a commit. Every git run uses `-C <repo path>` and a fixed config that disables color, the pager, and user-specific diff drivers (`-c core.pager=cat -c color.ui=false`), so output is byte-identical across machines:
 
-**Commit recording.** On `add` and `q`, when the locator is inside a git repo, the CLI reads `HEAD` by reading `.git/HEAD`, then the ref under `refs/heads/` or in `packed-refs`, following `commondir` for worktrees and submodules. This is a direct file read; no git process is exec'd. The resolved commit SHA is written to the `commit` log field.
+| Locator form | Git command |
+|---|---|
+| `git:<alias>@<ref>:<path>` | `git cat-file -p <sha>:<path>` |
+| `git:<alias>@<sha>` | `git show <sha>` |
+| `git:<alias>@<a>..<b>` | `git diff <a> <b>` |
+| `git:<alias>@<a>..<b>:<path>` | `git diff <a> <b> -- <path>` |
 
-**URIs.** Fetched with the standard library: follow redirects and record the final URL; apply a timeout and a size cap; assume UTF-8; no script execution. The `Content-Type` header gives the MIME type; a converter is matched by MIME type first, then by the extension of the URL path. `text/plain` and `text/markdown` are read raw. Any other type with no configured converter refuses:
+A converter applies only to a file at a ref, through the extension rule; commit and diff output is already text. An unknown alias, an unresolvable ref, or a `git:` locator with no `git` configured refuses (section 7). Forge-only objects (pull requests, issues) are not git; the teacher cites the forge's plain-text `.diff` or `.patch` URL as a fetched URI instead.
+
+**URIs and the cache.** A URI locator is fetched with the standard library: follow redirects and record the final URL; apply a timeout and a size cap; assume UTF-8; no script execution. The `Content-Type` header gives the MIME type; a converter is matched by MIME type first, then by the extension of the URL path. `text/plain` and `text/markdown` are read raw. Any other type with no configured converter refuses:
 
 ```
 err: fetch https://... failed: no converter for <mime>
 fix: add a convert <mime> line to <config>
 ```
 
+Fetch and conversion pass through the cache (section 3), keyed by SHA-256 over the final locator string, the converter command, and the converter version. A hit within the TTL skips the fetch and the conversion, and the hash check runs against the cached text; a miss or an expired entry fetches, converts, stores the text and `fetched_at`, then checks. The TTL is `TM_CACHE_TTL` or the `cache-ttl` key (Go duration, default `24h`; `0` disables the cache). Drift on a live URL is therefore detected at most one TTL late; that is the accepted trade for not re-fetching on every read.
+
 A failed fetch (no egress, timeout, non-2xx) refuses:
 
 ```
 err: fetch https://... failed: <reason>
-fix: save a static copy under TM_SRC_ROOT and cite it
+fix: retry when egress is available, or ask the learner for a copy and cite the copy as a plain path
 ```
 
-Dynamic pages are a stated limitation; the correct move is a static copy cited locally.
+A copy the learner supplies is a legitimate plain-path source; a copy the teacher makes is an aid (section 3) and is never cited. Dynamic pages remain a stated limitation.
 
-**One conversion rule.** A converter applies whenever one is configured for the MIME type or for the extension of a local file, regardless of whether the source is local or remote. A local `.html` file is therefore cited by converted line numbers once a converter for it exists. Conversion is deterministic given the same input bytes and the same converter version, so converted output is regenerable and never stored durably.
+**One conversion rule.** A converter applies whenever one is configured for the MIME type or for the extension of a local file or a file at a ref, regardless of whether the source is local, committed, or remote. A local `.html` file is therefore cited by converted line numbers once a converter for it exists. Conversion is deterministic given the same input bytes and the same converter version, so converted output is regenerable, cached (section 3), and never stored in the graph.
 
 **PDF.** Handled through the same mechanism, with `pdftotext` as the configured converter. For arXiv, prefer the versioned HTML rendering or the e-print source; PDF is the fallback.
 
@@ -693,7 +700,7 @@ err: pandoc is 3.2.0, config pins 3.1.11
 fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may drift
 ```
 
-**`git`.** The `git` key enables `HEAD` blob resolution (above) and nothing else.
+**`git`.** The `git` key names the git executable and is required for any `git:` locator. The CLI runs only `rev-parse`, `cat-file`, `show`, and `diff`, each with `-C <repo path>`, and never contacts a remote.
 
 **No config.** With no config file and no relevant keys, the CLI execs no external command and fetches nothing. The narrowing of §2.1 is additive: the default behavior is unchanged.
 
