@@ -306,64 +306,18 @@ func (r *Resolver) readPath(c cite.Citation) (string, Meta, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	mime := r.Cfg.ExtToMIME(ext)
 
-	// Commit recording: read HEAD by file reads (no exec).
-	commit := CommitForPath(path)
-
 	raw, readErr := os.ReadFile(path)
 	if readErr != nil {
-		// File missing — try git HEAD blob; on any failure return a structured refusal.
 		if os.IsNotExist(readErr) {
-			text, meta, gitErr := r.tryGitBlob(c, path, commit)
-			if gitErr == nil {
-				return text, meta, nil
+			return "", Meta{}, &RefusalError{
+				Err: fmt.Sprintf("%s is not in the working tree", c.File),
+				Fix: "cite it as git:<alias>@<ref>:<path> if it is committed",
 			}
-			// Return the structured refusal (RefusalError) rather than the raw
-			// "no such file" error so the caller gets actionable guidance.
-			return "", Meta{Commit: commit}, gitErr
 		}
-		return "", Meta{Commit: commit}, fmt.Errorf("citation %q: %w", c.File, readErr)
+		return "", Meta{}, fmt.Errorf("citation %q: %w", c.File, readErr)
 	}
 
-	return r.convertAndSlice(c, raw, mime, commit)
-}
-
-// tryGitBlob attempts to retrieve a missing file from git HEAD.
-// If git is not configured or the blob doesn't exist, it returns an error
-// with the §13.1 refusal text.
-func (r *Resolver) tryGitBlob(c cite.Citation, absPath, commit string) (string, Meta, error) {
-	// FindGitRepo walks up from absPath (handling nonexistent paths via Stat).
-	repoDir, _ := FindGitRepo(absPath)
-
-	configPath := r.Cfg.ConfigPath
-
-	notInTree := &RefusalError{
-		Err: fmt.Sprintf("%s is not in the working tree", c.File),
-		Fix: fmt.Sprintf("check it out, or set git in %s to read it from HEAD", configPath),
-	}
-
-	if repoDir == "" || r.Cfg.Git == "" {
-		// Not in a repo, or git not configured.
-		return "", Meta{}, notInTree
-	}
-
-	// Compute repo-relative path.
-	relpath, relErr := filepath.Rel(repoDir, absPath)
-	if relErr != nil {
-		relpath = absPath
-	}
-	// Use forward slashes for git.
-	relpath = filepath.ToSlash(relpath)
-
-	raw, blobErr := HeadBlob(r.Cfg.Git, repoDir, relpath)
-	if blobErr != nil {
-		return "", Meta{}, notInTree
-	}
-
-	ext := strings.ToLower(filepath.Ext(absPath))
-	mime := r.Cfg.ExtToMIME(ext)
-
-	text, meta, err := r.convertAndSlice(c, raw, mime, commit)
-	return text, meta, err
+	return r.convertAndSlice(c, raw, mime, "")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
