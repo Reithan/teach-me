@@ -279,6 +279,18 @@ var Table = []Command{
 		ForbidGrader: true,
 		Run:          reciteRun,
 	},
+	{
+		// migrate upgrades a graph from an older format to the current one (§13.2).
+		Name: "migrate",
+		PosArgs: []PosArg{
+			{Name: "[<file>]", Optional: true},
+		},
+		Flags: []FlagSpec{
+			{Name: "dry-run"},
+		},
+		ForbidGrader: true,
+		Run:          migrateRun,
+	},
 }
 
 // tableIndex is a name → Command lookup map built from Table at init time.
