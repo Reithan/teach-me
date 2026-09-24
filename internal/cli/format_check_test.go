@@ -109,28 +109,29 @@ func TestFormatCheck_CentralRefusal(t *testing.T) {
 }
 
 // TestFormatCheck_Load verifies that load refuses format-1 and format-3 graph
-// files passed as a positional argument.
+// files passed as a positional argument, and that the fix line names the exact
+// positional file path so it cannot be confused with the central check's fix.
 func TestFormatCheck_Load(t *testing.T) {
 	tests := []struct {
-		name     string
-		graph    string
-		wantExit int
-		wantErr  string
-		wantFix  string
+		name        string
+		graph       string
+		wantExit    int
+		wantErr     string
+		wantUpgrade bool // true → fix should say "upgrade tm"; false → fix should name the file
 	}{
 		{
-			name:     "load refuses format-1 with migrate fix",
-			graph:    minimalFormat1Graph,
-			wantExit: 1,
-			wantErr:  "g.mmd is format 1, this is tm format 2",
-			wantFix:  "tm migrate",
+			name:        "load refuses format-1 with migrate fix naming the file",
+			graph:       minimalFormat1Graph,
+			wantExit:    1,
+			wantErr:     "g.mmd is format 1, this is tm format 2",
+			wantUpgrade: false,
 		},
 		{
-			name:     "load refuses format-3 with upgrade fix",
-			graph:    format3Graph,
-			wantExit: 1,
-			wantErr:  "g.mmd is format 3, this is tm format 2",
-			wantFix:  "upgrade tm",
+			name:        "load refuses format-3 with upgrade fix",
+			graph:       format3Graph,
+			wantExit:    1,
+			wantErr:     "g.mmd is format 3, this is tm format 2",
+			wantUpgrade: true,
 		},
 	}
 
@@ -152,14 +153,52 @@ func TestFormatCheck_Load(t *testing.T) {
 			if !strings.Contains(errOut, tc.wantErr) {
 				t.Errorf("err: want %q; got:\n%s", tc.wantErr, errOut)
 			}
-			if !strings.Contains(errOut, tc.wantFix) {
-				t.Errorf("fix: want %q; got:\n%s", tc.wantFix, errOut)
+			// Assert the fix line names the positional file path specifically,
+			// so the test distinguishes loadRun's check from the central check.
+			if tc.wantUpgrade {
+				if !strings.Contains(errOut, "upgrade tm") {
+					t.Errorf("fix: want 'upgrade tm'; got:\n%s", errOut)
+				}
+			} else {
+				wantFix := "tm migrate " + gPath
+				if !strings.Contains(errOut, wantFix) {
+					t.Errorf("fix: want %q; got:\n%s", wantFix, errOut)
+				}
 			}
 			rows := readErrlog(t, errlogPath)
 			if len(rows) == 0 {
 				t.Errorf("expected errlog row; got none")
 			}
 		})
+	}
+}
+
+// TestFormatCheck_LoadSkipsCentralCheck is the regression test for the
+// SkipFormatCheck: true fix on the load command: when TM_FILE points to a
+// format-1 graph, `tm load <format-2 file>` must succeed and write the pointer.
+func TestFormatCheck_LoadSkipsCentralCheck(t *testing.T) {
+	dir := t.TempDir()
+	tempErrlog(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Chdir(dir)
+
+	// TM_FILE points to a format-1 graph (the central check's target).
+	f1Path := writeFormatGraph(t, dir, minimalFormat1Graph)
+	t.Setenv("TM_FILE", f1Path)
+
+	// The file to load is a fresh format-2 graph created by tm new.
+	f2Path := filepath.Join(dir, "target.mmd")
+	if _, _, code := run(t, "new", f2Path); code != 0 {
+		t.Fatalf("new: want exit 0, got %d", code)
+	}
+
+	// load <format-2 file> must succeed even though TM_FILE is format-1.
+	_, errOut, code := run(t, "load", f2Path)
+	if code != 0 {
+		t.Fatalf("load: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	if strings.Contains(errOut, "is format") {
+		t.Errorf("load emitted a format error: %s", errOut)
 	}
 }
 

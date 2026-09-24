@@ -28,23 +28,6 @@ const minimalFormat1Graph = `flowchart TB
     classDef pending stroke-dasharray:4 3
 `
 
-// format3Graph is a minimal graph claiming format 3, above CurrentFormat.
-const format3Graph = `flowchart TB
-    subgraph passed["Concepts User understands"]
-    end
-    subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 3
-    end
-    subgraph reserve["Concepts held in reserve"]
-    end
-    subgraph testing["Open tests validating and teaching User understanding"]
-    end
-    classDef pass stroke:#3fb950
-    classDef fail stroke:#f85149
-    classDef unclear stroke:#d29922
-    classDef pending stroke-dasharray:4 3
-`
-
 // minimalFormat2Graph is the same graph but already migrated (format 2).
 const minimalFormat2Graph = `flowchart TB
     subgraph passed["Concepts User understands"]

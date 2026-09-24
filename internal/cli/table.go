@@ -31,8 +31,9 @@ var Table = []Command{
 			{Name: "src-root", TakesValue: true, ValueName: "<dir>"},
 			{Name: "local"},
 		},
-		ForbidGrader: true,
-		Run:          loadRun,
+		ForbidGrader:    true,
+		SkipFormatCheck: true, // load checks its positional file in loadRun; central check would wrongly test the currently configured file
+		Run:             loadRun,
 	},
 	{
 		Name:    "status",
