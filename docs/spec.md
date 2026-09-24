@@ -846,8 +846,8 @@ internal/state/           derived state (section 5): frontier, batch states, tar
 internal/ops/             one file per mutating command: invariants (section 7), transitions (section 8)
 internal/lint/            section 11
 internal/cite/            citation parsing and hash computation
-internal/config/          config file lookup and targeted key writes: file, src-root, doc
-internal/source/          source resolution: resolve, fetch, convert, git HEAD blob
+internal/config/          config file lookup and targeted key writes: file, src-root, doc, repo aliases
+internal/source/          source resolution: resolve, fetch, convert, git locators, cache, migrate
 internal/report/          tm report: walk, format, inline text
 internal/eventlog/        section 10
 internal/errlog/          section 10.1
