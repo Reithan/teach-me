@@ -92,7 +92,8 @@ type State struct {
 	// Concept membership.
 	passedSet   map[string]bool
 	untestedSet map[string]bool
-	allConcepts map[string]bool // passedSet ∪ untestedSet
+	reserveSet  map[string]bool
+	allConcepts map[string]bool // passedSet ∪ untestedSet ∪ reserveSet
 
 	// Gate base per concept (from %% tm:gate meta lines; 0 when absent).
 	gateBase map[string]int
@@ -145,6 +146,7 @@ func buildState(g *graph.Graph, cfg Config) *State {
 		inEdges:        make(map[string][]*graph.Edge),
 		passedSet:      make(map[string]bool),
 		untestedSet:    make(map[string]bool),
+		reserveSet:     make(map[string]bool),
 		allConcepts:    make(map[string]bool),
 		gateBase:       make(map[string]int),
 		batchQs:        make(map[string][]*graph.QuestionNode),
@@ -161,6 +163,10 @@ func buildState(g *graph.Graph, cfg Config) *State {
 	}
 	for _, c := range g.UntestedConcepts {
 		s.untestedSet[c.ID] = true
+		s.allConcepts[c.ID] = true
+	}
+	for _, c := range g.ReserveConcepts {
+		s.reserveSet[c.ID] = true
 		s.allConcepts[c.ID] = true
 	}
 
@@ -278,6 +284,52 @@ func (s *State) Blocked() []string {
 	return result
 }
 
+// Reserve returns the IDs of concepts in the reserve block, sorted ascending.
+func (s *State) Reserve() []string {
+	result := make([]string, 0, len(s.g.ReserveConcepts))
+	for _, c := range s.g.ReserveConcepts {
+		result = append(result, c.ID)
+	}
+	sort.Strings(result)
+	return result
+}
+
+// ReserveParents returns the IDs of a concept's parents that are in reserve,
+// sorted ascending. These are prerequisites the graph records but the current
+// session does not enforce (spec §5 "Reserve parents").
+func (s *State) ReserveParents(conceptID string) []string {
+	var result []string
+	for _, e := range s.inEdges[conceptID] {
+		if s.reserveSet[e.From] {
+			result = append(result, e.From)
+		}
+	}
+	sort.Strings(result)
+	return result
+}
+
+// AncestorClosure returns the set of concepts reachable from goal by walking
+// parent edges (incoming concept→concept edges) through every block. The map
+// value is the BFS hop distance from goal (goal itself = 0).
+func (s *State) AncestorClosure(goal string) map[string]int {
+	dist := map[string]int{goal: 0}
+	queue := []string{goal}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, e := range s.inEdges[cur] {
+			if !s.allConcepts[e.From] {
+				continue
+			}
+			if _, seen := dist[e.From]; !seen {
+				dist[e.From] = dist[cur] + 1
+				queue = append(queue, e.From)
+			}
+		}
+	}
+	return dist
+}
+
 // Open returns the IDs of untested concepts that have at least one question,
 // sorted ascending.
 func (s *State) Open() []string {
@@ -292,10 +344,11 @@ func (s *State) Open() []string {
 }
 
 // isOnFrontier reports whether the untested concept conceptID is on the
-// frontier (all concept-parents are in passed).
+// frontier (all concept-parents are in passed or reserve, per spec §5).
+// A reserve parent does not block the frontier.
 func (s *State) isOnFrontier(conceptID string) bool {
 	for _, e := range s.inEdges[conceptID] {
-		if s.allConcepts[e.From] && !s.passedSet[e.From] {
+		if s.allConcepts[e.From] && !s.passedSet[e.From] && !s.reserveSet[e.From] {
 			return false
 		}
 	}
