@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.20
+# tm: teaching-map CLI, draft spec v0.21
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.19: monotonic question and batch IDs via the `%% tm:next` meta line; §4.3, §4.6, §11, §14 updated.
+Changes from v0.20: `tm answer --concede` records a learner-declared fail without a grader; §6, §8, §9, §10, §12, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -254,7 +254,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe | `qN` |
 | `tm q <concept> <cite> "<narrow scope>" --teach --re <qid>` | add a teach question hung off that question's answer. `--re` is required: it names the failed answer being taught, directly or through an earlier teach question | `qN` |
 | `tm ask <concept> [--format lines\|json] [--src-text]` | read-only: emit the batch to ask next (section 8) | batch ID, then one line per unanswered question |
-| `tm answer <qid> "<raw>" [--asked "<wording>"]` | record the human's answer as `pending` | `ok` |
+| `tm answer <qid> "<raw>" [--asked "<wording>"] [--concede]` | record the human's answer as `pending`; with `--concede`, also writes a `fail` verdict with summary `conceded` and runs the section 8 transitions; no grader is involved | `ok` |
 | `tm check <qid>` | grader: emit the grading payload (section 9) | the payload |
 | `tm grade <qid> pass\|fail\|unclear "<summary>" [--guided] [--oos]` | grader: write the verdict, run the transitions in section 8 | `ok` |
 | `tm lint [<file>]` | check the graph (section 11) | `ok`, or every violation |
@@ -352,6 +352,8 @@ The teacher leaves a teaching round by getting the latest teach batch to resolve
 
 `tm grade <qid> <verdict> "<summary>"`:
 
+A conceded answer (`--concede` on `answer`) is a graded `fail` in every rule below.
+
 1. Replace the answer's raw label with the summary and set the class. Log the raw answer, summary, verdict, and `--guided`.
 2. If the question has `--re` lineage to an `unclear` probe and the verdict is `unclear`, record `fail`. The log keeps the original verdict.
 3. If the batch has unanswered or ungraded questions, stop.
@@ -371,7 +373,7 @@ A question dropped for drift (section 6) stays in the graph and receives an `unc
 
 ## 9. Grader protocol
 
-The teacher spawns one grader per answer, probe or teach. The spawn prompt holds the question ID and the instruction to run `tm check <qid>` and then `tm grade`. The raw answer reaches the grader through the CLI, not through the prompt.
+The teacher spawns one grader per answer, probe or teach. The spawn prompt holds the question ID and the instruction to run `tm check <qid>` and then `tm grade`. The raw answer reaches the grader through the CLI, not through the prompt. The grader is not invoked for a conceded answer; the verdict was declared by the learner, not judged.
 
 ```
 $ tm check q2
@@ -439,8 +441,8 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and `answer: <pending answer text>` if a pending answer existed |
 | `gap` | `concept`, `before`, `after` |
 | `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
-| `answer` | `q`, `raw`, `asked` |
-| `grade` | `q`, `verdict`, `recorded` (differs from `verdict` under 8.2), `summary`, `raw`, `src_text`, `guided`, `oos` |
+| `answer` | `q`, `raw`, `asked`; optional: `concede: true` (when `--concede`) |
+| `grade` | `q`, `verdict`, `recorded` (differs from `verdict` under 8.2), `summary`, `raw`, `src_text`, `guided`, `oos`; optional: `via: concede` (on the `--concede` path) |
 | `pass` | `concept`, `batches`, `unblocked` |
 | `gc` | `concept`, `reason`, `nodes` (ID, label, class), `edges`, `meta` |
 | `reopen` | `concept`, `gap`; optional: `src_before`, `src_after` (when `--src` is given) |
@@ -569,6 +571,7 @@ The **Prune phase** follows every Map. The planner's prompt primes inclusion, an
 - A learner who disputes a verdict: not errata. Re-probe with `--re`; the grader decides.
 - A gate: take the exits in the `fix:` line's order. Activate a reserve parent when one fits the GAP; otherwise spawn the planner to add one, or reopen a passed parent. `--override` only when the learner asks for it, with the learner's reason; the teacher's own read of the verdicts is the bias the grader isolation exists to block.
 - A learner who asks to skip or set aside a concept: `tm reserve` it if it has no questions. It stops blocking its children and can be activated later.
+- **Answering**: the question UI offers an explicit "I don't know" choice for every question. Picking it is the only trigger for `--concede`; record it with `tm answer <qid> "I don't know" --concede` and no grader is spawned. Any typed answer, however weak or short, is recorded without the flag and graded by a grader; the teacher never decides on its own that an answer amounts to a concession.
 
 ## 13. Configuration
 
@@ -717,6 +720,7 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 | 60 | `tm prune` is mechanical (ancestor closure and nearest-N by hop distance); a pruner sub-agent makes the required-versus-related call, with tools that cannot grow the graph | edges do not distinguish a foundation the goal needs from one that is merely related, so the closure is a floor, not the answer; the planner's prompt primes inclusion and it defends its own map, so the judgment goes to a separate prompt whose default is to park; the tool split keeps the pruner from becoming a second planner | planner prunes its own map; CLI-only prune; a hard-versus-soft edge kind chosen at link time (the same judgment the planner already gets wrong, made without the goal in view) | agreed, 2026-09-24 |
 | 61 | `activate` on a parent of a gated concept clears the gate with `via: activate`, and the gate's `fix:` line names reserve parents first | activating a parked prerequisite is the same upstream move as `add --child`, made cheaper by the planner's earlier work; the refusal is where the teacher learns the cheap exit exists | activate as a plain move with a separate gate step; listing exits without the concept's reserve parents | agreed, 2026-09-24 |
 | 62 | Monotonic question and batch IDs via a `%% tm:next` counter written into the graph file; on first allocation for a file without the line, seeded from max(max in file, max in log)+1 | the graph file is the single source of truth (no cache or side state): once the line is written the log is never consulted again; IDs already in the log cannot be reused even after the pass procedure removes their nodes, so `tm show <id> --history` never interleaves two different questions | log-derived allocation on every call (log is append-only history, not state); keeping tests of passed concepts in the file (reuse only harmed history lookups; the gate base is computed over the concept's own batches so it was never affected) | agreed, 2026-09-24 |
+| 63 | `tm answer --concede` writes the fail itself when the learner explicitly concedes | grader isolation guards against the teacher's pass-bias, and a learner-declared fail has nothing to judge; a grader spawn costs the spawn prompt and the return, far more than one CLI call; the trigger is mechanical (the learner's choice), so the teacher never interprets an answer | routing concessions to a cheaper grader model (still a spawn); letting the teacher classify weak answers as concessions (the interpretation step isolation exists to block) | agreed, 2026-09-24 |
 
 ## 15. Deferred
 
@@ -820,7 +824,7 @@ docs/spec.md              this document
 | Property | a seeded generator builds random valid graphs with adversarial labels (every escaped character, keyword near-misses, non-ASCII); writer output always passes `lint`; parse of write equals the model |
 | Fuzz | `FuzzEscape` (escape then unescape is identity) and `FuzzParse` (no panics; anything accepted re-serializes to something accepted). CI runs each for 30 s |
 | Invariants | one case per refusal in section 7, asserting exit code, `err:` line, `fix:` line, and the `ERRORS.jsonl` row |
-| Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes, prune then pass through a reserve parent, gate cleared by `activate`. Monotonic ID lifecycle: grade a concept's probes to pass; allocate a new question for a second concept; assert the new ID (e.g. `q3`) exceeds every `qN`/`aN` ID recorded in the event log before the allocation (verifies §4.3 non-reuse after the pass procedure clears the testing block). |
+| Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes, prune then pass through a reserve parent, gate cleared by `activate`, conceded probe opens a teaching round, two conceded probe batches trip the gate. Monotonic ID lifecycle: grade a concept's probes to pass; allocate a new question for a second concept; assert the new ID (e.g. `q3`) exceeds every `qN`/`aN` ID recorded in the event log before the allocation (verifies §4.3 non-reuse after the pass procedure clears the testing block). |
 | Concurrency | 20 parallel `grade` calls on one graph all land, the file lints, and the event log has 20 `grade` rows |
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
 
