@@ -42,10 +42,13 @@ under `skill/teach-me/`:
 | Teacher | `skill/teach-me/SKILL.md` | `.claude/skills/teach-me/` |
 | Grader | `skill/teach-me/agents/teach-me-grader.md` | `.claude/agents/` |
 | Planner | `skill/teach-me/agents/teach-me-planner.md` | `.claude/agents/` |
+| Pruner | `skill/teach-me/agents/teach-me-pruner.md` | `.claude/agents/` |
 
 The teacher drives the session: it spawns one `teach-me-planner` sub-agent to
-decompose source into a concept graph, and one `teach-me-grader` sub-agent per
-answer. The planner writes concepts and edges; the grader scores each answer in
+decompose source into a concept graph, one `teach-me-pruner` sub-agent after every
+planner run to cut the active graph down to what the goal requires, and one
+`teach-me-grader` sub-agent per answer. The planner writes concepts and edges; the
+pruner parks unneeded concepts in reserve; the grader scores each answer in
 isolation through `tm check` and `tm grade`.
 
 ## Architecture
