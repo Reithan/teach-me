@@ -320,3 +320,100 @@ func TestCacheList_SkipsMalformedEntries(t *testing.T) {
 		t.Errorf("want 1 output line (malformed skipped), got %d:\n%s", len(lines), out)
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// TestCacheDrift_CLI
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestCacheDrift_CLI verifies the accepted cache-drift trade: content changes
+// on a live URL are not detected by tm check --drift while a cache entry is
+// fresh (§13.1 TTL-late rule), and are detected after tm cache clear forces a
+// re-fetch.
+func TestCacheDrift_CLI(t *testing.T) {
+	tempErrlog(t)
+
+	var served int32 // 0 = original content, 1 = modified content
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if atomic.LoadInt32(&served) == 0 {
+			_, _ = fmt.Fprintln(w, "line 1")
+			_, _ = fmt.Fprintln(w, "line 2")
+			_, _ = fmt.Fprintln(w, "line 3")
+			_, _ = fmt.Fprintln(w, "line 4")
+			_, _ = fmt.Fprintln(w, "line 5")
+		} else {
+			_, _ = fmt.Fprintln(w, "line 1 MODIFIED")
+			_, _ = fmt.Fprintln(w, "line 2")
+			_, _ = fmt.Fprintln(w, "line 3")
+			_, _ = fmt.Fprintln(w, "line 4")
+			_, _ = fmt.Fprintln(w, "line 5")
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	// Isolate cache to a per-test dir so TTL does not expire mid-test.
+	cacheDir := t.TempDir()
+	t.Setenv("TM_CACHE_DIR", cacheDir)
+	t.Setenv("TM_PROBE_MIN", "1")
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+	gfile := filepath.Join(dir, "g.mmd")
+
+	if _, _, code := run(t, "new", gfile); code != 0 {
+		t.Fatalf("new: exit %d", code)
+	}
+	t.Setenv("TM_FILE", gfile)
+
+	// Add concept and question with URL citations (caches the URL content).
+	addCite := srv.URL + ":1-5"
+	if _, _, code := run(t, "add", "c1", addCite, "Scope of c1"); code != 0 {
+		t.Fatalf("add: exit %d", code)
+	}
+	qCite := srv.URL + ":1-3"
+	if _, _, code := run(t, "q", "c1", qCite, "What is on line 1?"); code != 0 {
+		t.Fatalf("q: exit %d", code)
+	}
+
+	// Advance to passed state so grade events exist for tm check --drift.
+	out, _, code := run(t, "ask", "c1")
+	if code != 0 {
+		t.Fatalf("ask: exit %d", code)
+	}
+	askLines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(askLines) < 2 {
+		t.Fatalf("ask: want >=2 lines; got %q", out)
+	}
+	qid := strings.Fields(askLines[1])[0]
+	if _, _, code = run(t, "answer", qid, "line 1"); code != 0 {
+		t.Fatalf("answer: exit %d", code)
+	}
+	if _, _, code = run(t, "grade", qid, "pass", "Correct"); code != 0 {
+		t.Fatalf("grade: exit %d", code)
+	}
+
+	// Flip server to return modified content; cache still holds original.
+	atomic.StoreInt32(&served, 1)
+
+	// tm check --drift c1: cache hit → original content matches stored hash → no DRIFT.
+	out, errOut, code := run(t, "check", "--drift", "c1")
+	if code != 0 {
+		t.Fatalf("check --drift (cached): exit %d; stderr=%s", code, errOut)
+	}
+	if strings.Contains(out, "DRIFT ") {
+		t.Errorf("want no DRIFT within TTL (cached); output:\n%s", out)
+	}
+
+	// tm cache clear removes all entries.
+	if _, _, code = run(t, "cache", "clear"); code != 0 {
+		t.Fatalf("cache clear: exit %d", code)
+	}
+
+	// tm check --drift c1: fresh fetch → modified content → hash differs → DRIFT.
+	out, errOut, code = run(t, "check", "--drift", "c1")
+	if code != 0 {
+		t.Fatalf("check --drift (post-clear): exit %d; stderr=%s", code, errOut)
+	}
+	if !strings.Contains(out, "DRIFT ") {
+		t.Errorf("want DRIFT after cache clear; output:\n%s", out)
+	}
+}
