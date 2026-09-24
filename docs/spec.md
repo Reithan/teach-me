@@ -180,7 +180,7 @@ The model never types the hash. `tm add` and `tm q` accept the hashless form `<l
 
 Normalization before hashing: CRLF to LF; trailing whitespace stripped per line; lines joined with LF; no trailing newline; hash over the UTF-8 bytes. Internal whitespace is preserved because indentation is meaningful in code.
 
-A `"` in a locator must be percent-encoded; lint rejects a raw one.
+A `"` in a locator must be percent-encoded; lint rejects a raw one. A `:` inside a `<path>` in a `git:` locator must be percent-encoded as `%3A`, so the `<sha>:<path>` split and the range split stay unambiguous; lint rejects a raw one.
 
 **Plain paths.** A plain path is a file read raw, or through a converter for its extension (section 13.1). It carries no git semantics: no `HEAD` fallback, no `commit` field. A path not in the working tree refuses:
 
@@ -541,7 +541,7 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 11. Every citation names an existing file and an in-bounds line range.
 12. Passed concepts have no tests, no GAP, and no gate line. Reserve concepts have no tests and no gate line.
 13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
-14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`.
+14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`. No unencoded `:` appears inside a `git:` locator's `<path>`; lint refuses it with `fix: percent-encode : as %3A`.
 15. When `%% tm:next` is present, its `q` value must be strictly greater than every `qN` and `aN` suffix in the file, and its `batch` value must be strictly greater than every `probe_N` and `teach_N` suffix. Lint refuses a stale counter with `fix: raise the counters in %% tm:next`.
 16. No citation's locator lies under aids-dir (section 3). Lint refuses one with `fix: cite the primary source; link the aid with tm aid <id> <path>`. This is path arithmetic on the locator, not a file read.
 17. The `%% tm:format` marker, when present, is at most the binary's format. Lint refuses a higher format with a `fix:` to upgrade tm. A lower format is a `migrate` matter, not a lint failure; `lint` accepts it so `migrate` can lint its own result.
