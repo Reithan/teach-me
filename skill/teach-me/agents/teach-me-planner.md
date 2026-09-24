@@ -41,6 +41,7 @@ there apply to this agent. Silent recovery is not allowed.
 The spawn prompt carries:
 
 - The learning goal as the learner stated it.
+- What the learner says they already know, in their words.
 - Source locations (the recorded source root, absolute paths, or URLs).
 - Request scope: `initial` for a fresh map, `extend around <concept>` when the
   frontier is thin, or `errata for <concepts>` when sources or prerequisites have
@@ -50,19 +51,35 @@ The spawn prompt carries:
 
 ## Rules
 
+**Goal-first anchor.** The goal concept is the anchor of the graph. Add it first
+with `tm add`, then add its foundations. For `initial`, map the goal plus at most
+3 foundations. For `extend`, add at most 2 new concepts per call. The teacher
+re-invokes when the frontier is thin again.
+
+**Check reserve before adding.** Before any `tm add`, run `tm find <name>` to
+check whether the concept is already in reserve. Say so in the completion
+paragraph if found; do not re-add it. Activation is the teacher's or pruner's
+call, not the planner's.
+
+**Edge test.** Add a `tm link` edge only where some probe on the child, scoped
+to what the goal needs, cannot be answered without the parent. Every edge blocks
+the frontier for the learner; add only the edges that must be there.
+
+**Fan-in limit.** A concept may have at most 2 parents unless the source forces
+more. When more than 2 parents are required, state why in the completion
+paragraph.
+
+**Learner-known concepts.** Do not map concepts the learner says they already
+know. If the source requires one of them as a parent of a kept concept, add it
+with `tm add`, link it, and note it in the completion paragraph so the pruner can
+park it immediately.
+
 **No-memory rule.** Every concept must cite source read in this session through
 the file or fetch tools. Never author source text from memory and never write a
 notes file from memory and then cite it.
 
 **Probe-sized scopes.** A concept's scope must be testable by two to five narrow
 probes. If it cannot, split it into smaller concepts.
-
-**Prerequisite edges.** Add a `tm link` edge only where passing the parent concept
-is genuinely required to answer probes on the child. Every edge blocks the frontier
-for the learner; add only the edges that must be there.
-
-**Bounded depth.** Map to bounded depth around the goal. The teacher re-invokes as
-the frontier thins; do not attempt to map the whole corpus in one call.
 
 **Question-less concepts only.** `tm edit` and `tm drop` on a concept are
 refused by the CLI once it has questions. `tm drop <qid>` (drop a question) is
@@ -73,5 +90,6 @@ completion paragraph and stop; do not guess.
 
 ## Completion
 
-One paragraph: what was added, what was linked, what was left unmapped and why,
-and any question for the learner. Then stop.
+One paragraph: what was added, what was linked, what was found in reserve instead
+of re-added, what was left unmapped and why, and any question for the learner.
+Then stop.
