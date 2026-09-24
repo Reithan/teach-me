@@ -102,6 +102,37 @@ func TestMigrateRule2_Match(t *testing.T) {
 	if !strings.Contains(string(after), "tm:format 2") {
 		t.Errorf("migrated graph should contain format marker; graph:\n%s", after)
 	}
+
+	// Read the event log and assert exactly one migrate event with rewritten=1.
+	logData, logErr := os.ReadFile(graphFile + ".jsonl")
+	if logErr != nil {
+		t.Fatalf("read .jsonl: %v", logErr)
+	}
+	var migrateCount int
+	for _, line := range strings.Split(strings.TrimSpace(string(logData)), "\n") {
+		if line == "" {
+			continue
+		}
+		var ev map[string]any
+		if jsonErr := json.Unmarshal([]byte(line), &ev); jsonErr != nil {
+			continue
+		}
+		if ev["ev"] == "migrate" {
+			migrateCount++
+			if got, _ := ev["rewritten"].(float64); int(got) != 1 {
+				t.Errorf("migrate event rewritten = %v, want 1", ev["rewritten"])
+			}
+		}
+	}
+	if migrateCount != 1 {
+		t.Errorf("want 1 migrate event in .jsonl, got %d", migrateCount)
+	}
+
+	// tm lint must pass on the rewritten graph.
+	_, lintErr, lintCode := run(t, "lint", graphFile)
+	if lintCode != 0 {
+		t.Errorf("tm lint after migrate: exit %d; stderr: %s", lintCode, lintErr)
+	}
 }
 
 // TestMigrateRule2_HashDiffers verifies that when the URL serves different
