@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.18
+# tm: teaching-map CLI, draft spec v0.19
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.17: sources and citations folded in; §2.1, §3, §4.4, §6–16 updated.
+Changes from v0.18: the `reserve` block, `tm reserve`, `tm activate`, `tm prune`, the pruner role, and `activate` as a gate exit; §2, §4, §5, §6, §7, §10, §11, §12, §14, §15, §16 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -39,6 +39,8 @@ What follows from the rule:
 | Human | rendered graph, questions from the teacher | answers; hand edits to the graph, followed by `tm lint` |
 | Teacher agent | `tm` output, source files | every command except `check` and `grade` |
 | Grader sub-agent | `tm check` output only | `tm grade` |
+| Planner sub-agent | source files, `tm status`, `tm show`, `tm find` | `tm add`, `tm link`, `tm edit`, `tm drop` |
+| Pruner sub-agent | `tm status`, `tm show`, `tm find`, `tm report` | `tm prune`, `tm reserve`, `tm activate`, `tm edit` |
 | CLI | graph file, cited source files | graph file, event log |
 
 ### 2.1 Harness boundary
@@ -52,6 +54,7 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 | Teacher prompt | the procedure the CLI cannot enforce (section 12); named by the `doc` config key, set when the adapter is installed | a skill file, an agent file, a section of the harness's instruction file |
 | Grader invocation | carries `check` output to a model and a verdict back to `grade` | a sub-agent the teacher spawns, on any harness with sub-agents and a shell. Automatic spawning is deferred (section 15) |
 | Planner invocation | reads sources and writes concepts with citations; called from Map and errata | `skill/teach-me/agents/teach-me-planner.md` |
+| Pruner invocation | decides which mapped concepts the goal requires and parks the rest in `reserve`; called after every Map | `skill/teach-me/agents/teach-me-pruner.md` |
 | Question UI | maps `ask --format json` onto the harness's question tool | a small script or skill |
 | Role guard | replaces the `TM_ROLE` soft check | a pre-tool hook |
 | Setup reference | converter and git configuration the teacher reads when advising the user | `skill/teach-me/reference/setup.md` |
@@ -92,6 +95,10 @@ flowchart TB
         leader_election --"enables"--> commit_rules
         log_matching --"required by"--> commit_rules
     end
+    subgraph reserve["Concepts held in reserve"]
+        log_compaction["Log compaction: snapshots and the last included index<br/>raft.txt:301-340"]
+        log_compaction --"bounds"--> log_matching
+    end
     subgraph testing["Open tests validating and teaching User understanding"]
         q1["Same index and term implies same entry<br/>raft.txt:192-201"]:::probe_1
         q2["Same index and term implies identical prefix<br/>raft.txt:202-215"]:::probe_1
@@ -120,13 +127,13 @@ flowchart TB
     classDef pending stroke-dasharray:4 3
 ```
 
-Read as state: `probe_1` resolved with one fail; `probe_2` is the fallback, locked because `teach_3` exists; `teach_3` is open with `q6` unanswered.
+Read as state: `probe_1` resolved with one fail; `probe_2` is the fallback, locked because `teach_3` exists; `teach_3` is open with `q6` unanswered. `log_compaction` is a parent of `log_matching` that the pruner set aside, so it does not block `log_matching`.
 
 ### 4.1 Layout
 
 1. Frontmatter. Human-owned; the CLI preserves it verbatim. `tm new` writes the block above.
 2. `flowchart TB`.
-3. Three blocks in fixed order: `passed`, `untested`, `testing`.
+3. Four blocks in fixed order: `passed`, `untested`, `reserve`, `testing`. `reserve` holds concepts that were mapped but are not required for the current goal (section 5); a file written before v0.3 may lack it, and the parser reads a missing `reserve` as empty. The writer always emits all four.
 4. `classDef` lines. CLI-owned; regenerated on every write so each live batch class is named.
 
 Inside a block the order is: meta lines, node declarations, edges. Newly passed concepts go to the top of `passed`. The writer emits one edge per line and never uses `&` fan-out. `%%` comments are preserved and stay attached to the line that follows them.
@@ -135,7 +142,7 @@ Inside a block the order is: meta lines, node declarations, edges. Newly passed 
 
 An edge lives in the home block of whichever endpoint's home block comes later in file order. With declarations before edges inside each block, every node is declared before anything mentions it.
 
-Mermaid assigns a node to the first subgraph that mentions it. I checked this against 11.17.2: an edge in `passed` that mentions a node declared later in `untested` pulls that node into `passed`. A naive `reopen` produces exactly that, so `reopen` and `pass` relocate edges under this rule as well as the declaration.
+Mermaid assigns a node to the first subgraph that mentions it. I checked this against 11.17.2: an edge in `passed` that mentions a node declared later in `untested` pulls that node into `passed`. A naive `reopen` produces exactly that, so `reopen`, `pass`, `reserve`, `activate`, and `prune` relocate edges under this rule as well as the declaration.
 
 ### 4.3 IDs
 
@@ -181,7 +188,7 @@ A `"` in a locator must be percent-encoded; lint rejects a raw one.
 | Answer | `pending` | raw answer awaiting a grade |
 | Answer | `pass` / `fail` / `unclear` | grader's verdict; label holds the grader's summary |
 
-Concepts carry no class. Their state is their block plus what hangs off them.
+Concepts carry no class. Their state is their block plus what hangs off them; a concept set aside for the current goal is in `reserve`, not marked.
 
 ### 4.6 Meta lines
 
@@ -193,8 +200,10 @@ Nothing here is stored; the CLI computes it on each call. A question's concept i
 
 | Term | Definition |
 |---|---|
-| Frontier | concepts in `untested` whose parents are all in `passed` |
-| Blocked | in `untested` with at least one parent outside `passed` |
+| Frontier | concepts in `untested` whose parents are all in `passed` or `reserve` |
+| Blocked | in `untested` with at least one parent in `untested` |
+| Reserve parents | a concept's parents in `reserve`: prerequisites the graph records but the session does not enforce. Named in the gate's `fix:` line |
+| Ancestor closure | the concepts reachable from a goal by walking parent edges through every block. `prune` keeps the untested members and parks the rest |
 | Open | in `untested` with at least one question |
 | Batch: draft | accepts more questions: no answers, and for a probe batch, no teach batch with a higher number under the same concept |
 | Batch: locked | closed to additions: a probe batch with no answers and a higher-numbered teach batch under the same concept |
@@ -234,6 +243,9 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm drop <id>` | remove an untested leaf concept that has no questions; or, for a drifted ungraded question, add an `unclear` tombstone answer to the graph so `--re` can target it. Logged | `ok` |
 | `tm gap <concept> "<gap>"` | set or replace the GAP field | `ok` |
 | `tm reopen <concept> "<gap>" [--src <cite>]` | move a passed concept to `untested` with a GAP; `--src` re-points the concept citation in the same operation. Descendants stay passed | `ok` |
+| `tm reserve <concept>` | move an untested concept with no questions to `reserve`. Its edges stay; its children stop being blocked by it. Logged | `ok` |
+| `tm activate <concept>` | move a reserve concept to `untested`. Its own reserve parents stay parked. When it is a parent of a gated concept, the gate clears with `via: activate` (section 7). Logged | `ok` |
+| `tm prune <goal> [--keep N]` | park every untested concept with no questions that is outside the goal's ancestor closure; with `--keep N`, also park closure members beyond the N nearest untested concepts by hop distance, the goal counted first and ties broken by ID. Concepts with questions are never moved. Logged with the moved IDs | `reserved <n>` |
 | `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe | `qN` |
 | `tm q <concept> <cite> "<narrow scope>" --teach --re <qid>` | add a teach question hung off that question's answer. `--re` is required: it names the failed answer being taught, directly or through an earlier teach question | `qN` |
 | `tm ask <concept> [--format lines\|json] [--src-text]` | read-only: emit the batch to ask next (section 8) | batch ID, then one line per unanswered question |
@@ -242,7 +254,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm grade <qid> pass\|fail\|unclear "<summary>" [--guided] [--oos]` | grader: write the verdict, run the transitions in section 8 | `ok` |
 | `tm lint [<file>]` | check the graph (section 11) | `ok`, or every violation |
 | `tm lint --drift` | resolve local citations; list mismatches one per line; exit 1 if any. Does not block mutations | mismatches or `ok` |
-| `tm report [<concept>] [--hops N] [--fulltext] [--passed-only]` | read-only: with concept, walk parent edges up to `N` hops, emit foundations as Markdown; without concept, emit whole graph from roots (depth ≤ 5 by default, `--hops` overrides); `--fulltext` inlines cited text (default 2 hops with concept); `--passed-only` drops open and blocked concepts | Markdown on stdout |
+| `tm report [<concept>] [--hops N] [--fulltext] [--passed-only] [--reserve]` | read-only: with concept, walk parent edges up to `N` hops, emit foundations as Markdown; without concept, emit whole graph from roots (depth ≤ 5 by default, `--hops` overrides); `--fulltext` inlines cited text (default 2 hops with concept); `--passed-only` drops open and blocked concepts; reserve concepts are omitted unless `--reserve` | Markdown on stdout |
 | `tm rehash [<file>]` | for every citation without a hash: resolve the text, write the hash, log a `rehash` event | `ok`, or one line per updated citation |
 | `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
 | `tm check --drift <concept>` | grader: for a passed concept, read its `grade` events, resolve each question citation against the current source, and emit per-question pairs for judging whether the pass survives | the recheck payload |
@@ -257,7 +269,7 @@ Samples:
 
 ```
 $ tm status
-passed 2  open 1  blocked 1
+passed 2  open 1  blocked 1  reserve 1
 log_matching  failed 1/2  teach_3 open
 commit_rules  blocked by log_matching
 
@@ -278,7 +290,12 @@ fix: finish teach_3, then answer probe_2
 $ tm ask commit_rules
 err: parent log_matching is not passed
 fix: pass log_matching first
+
+$ tm prune commit_rules --keep 2
+reserved 0
 ```
+
+The `reserve` count is printed only when it is nonzero.
 
 ## 7. Invariants
 
@@ -291,6 +308,9 @@ fix: pass log_matching first
 | `drop` (concept) | the concept is passed, has children, or has any question |
 | `drop` (question) | the question is already graded; or the citation has not drifted |
 | `reopen` | the concept is not in `passed` |
+| `reserve` | the concept is not in `untested`, or has any question |
+| `activate` | the concept is not in `reserve` |
+| `prune` | the goal is not in `untested` (`fix: tm activate <goal>` when it is in `reserve`), or `--keep` is below 1 |
 | `add`, `q` | the cited file cannot be fetched (URI locator, fetch failed) |
 | `add`, `q` | a converter is required for the MIME type or extension and none is configured |
 | `add`, `q`, `recite` | the configured converter's version does not match its pinned value |
@@ -299,7 +319,7 @@ fix: pass log_matching first
 | `check --drift` | the event log is missing or unreadable (`fix: tm reopen`) |
 | `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |
 | `q` | the concept is passed or gated; the draft batch is at max; a probe question while a probe batch under the concept is locked or open; a teach question while a teach batch under the concept is open; `--teach` without `--re`; `--teach` once teaching is spent; `--teach` while the concept has no GAP; `--teach` with no failed probe batch above `base`; `--teach` without a fallback probe batch at min size that has no answers yet; `--re` on a probe whose target is not an `unclear` probe; `--re` on a teach question whose target is not a `fail` or `unclear` answer, or is flagged `OOS` |
-| `ask`, `answer` | the batch is under min; any parent of the concept is outside `passed`; the concept is gated; the batch is the fallback probes and any teach batch under the concept is unresolved; or the latest one is not all `pass` and teaching is not spent |
+| `ask`, `answer` | the batch is under min; any parent of the concept is in `untested`; the concept is gated; the batch is the fallback probes and any teach batch under the concept is unresolved; or the latest one is not all `pass` and teaching is not spent |
 | `answer` | the question already has an answer |
 | `check`, `grade` | the question has no `pending` answer |
 | `grade` | `TM_ROLE=teacher`; `--oos` on a probe |
@@ -313,9 +333,11 @@ The role check is a soft guard against accidents. A harness hook can replace it 
 
 The gate. It trips two ways: failed probe batches reach `TM_MAX_FAILS`, or teaching stalls (`TM_MAX_STALL` teach questions in a row, across whole batches, with zero `pass`). The count is in questions because that is what the user sits through: with the default of 4 and batches of 1 to 3, the gate trips after 4 to 6 missed questions.
 
-Teaching has a second limit with a different exit. Mixed batches reset the stall streak, so a round of partial progress could otherwise run forever. When the teach count reaches `TM_MAX_TEACH` (default 8, so 8 to 10 questions), teaching is spent: `q --teach` refuses and the fallback probes become answerable whatever the teach verdicts were. Partial progress is not an upstream signal, so this does not gate. It sends the user to the locked probes, and if those fail, the failed-probe count reaches the gate on its own. One concept therefore costs the user a bounded number of questions before the teacher must look upstream. A teach batch with some passes and some fails is slow progress and never counts toward a stall; continued teaching is the right path there. Once gated, `q`, `ask`, and `answer` on the concept refuse until one of three things happens: `tm add <new> <cite> "<scope>" --child <concept>`, `tm reopen <parent of concept>`, or `--override "<reason>"` on the refused command. Each writes `%% tm:gate <concept> base=<current max batch>` and is logged. After the first two, the frontier rule keeps the concept refused until the new or reopened parent passes. Batches at or below `base` no longer count. Probes left unanswered from before the gate stop being fallback probes and are asked as written; if there are none, the concept starts a fresh probe batch. Neither path needs a teaching round.
+Teaching has a second limit with a different exit. Mixed batches reset the stall streak, so a round of partial progress could otherwise run forever. When the teach count reaches `TM_MAX_TEACH` (default 8, so 8 to 10 questions), teaching is spent: `q --teach` refuses and the fallback probes become answerable whatever the teach verdicts were. Partial progress is not an upstream signal, so this does not gate. It sends the user to the locked probes, and if those fail, the failed-probe count reaches the gate on its own. One concept therefore costs the user a bounded number of questions before the teacher must look upstream. A teach batch with some passes and some fails is slow progress and never counts toward a stall; continued teaching is the right path there. Once gated, `q`, `ask`, and `answer` on the concept refuse until one of four things happens: `tm activate <reserve parent of concept>`, `tm add <new> <cite> "<scope>" --child <concept>`, `tm reopen <parent of concept>`, or `--override "<reason>"` on the refused command. Each writes `%% tm:gate <concept> base=<current max batch>` and is logged. After the first three, the frontier rule keeps the concept refused until the activated, new, or reopened parent passes. Batches at or below `base` no longer count. Probes left unanswered from before the gate stop being fallback probes and are asked as written; if there are none, the concept starts a fresh probe batch. None of the paths needs a teaching round.
 
-The frontier rule has no bypass in this version. If it blocks useful diagnosis in practice, add one flag on `ask` and `answer`.
+The gate refusal's `fix:` line names the exits in that order, and lists the concept's reserve parents by ID when it has any: `fix: tm activate <p1>|<p2>, tm add --child <concept>, tm reopen <parent>, or --override "<reason>"`. Activation is the cheapest exit because the planner already cited the foundation; `--override` is for a gate the learner says tripped on contested verdicts, and the teacher never applies it on its own read.
+
+The frontier rule has no bypass flag. Goal-first diagnosis comes from `reserve` instead: the pruner keeps the goal and its nearest foundations active, and a failed gate wakes one parked parent at a time.
 
 ## 8. Transitions
 
@@ -417,7 +439,10 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `pass` | `concept`, `batches`, `unblocked` |
 | `gc` | `concept`, `reason`, `nodes` (ID, label, class), `edges`, `meta` |
 | `reopen` | `concept`, `gap`; optional: `src_before`, `src_after` (when `--src` is given) |
-| `gate` | `concept`, `trip` (`probes`, `stall`), `base`, `via` (`add`, `reopen`, `override`), `reason` |
+| `reserve` | `concept` |
+| `activate` | `concept`, `unblocked` (gated children whose gate cleared) |
+| `prune` | `goal`, `keep` (null without `--keep`), `moved` (IDs parked, in file order) |
+| `gate` | `concept`, `trip` (`probes`, `stall`), `base`, `via` (`add`, `activate`, `reopen`, `override`), `reason` |
 | `rehash` | `id`, `before` (old citation), `after` (new citation with hash) |
 | `recite` | `id`, `before` (old citation), `after` (new citation at new range) |
 | `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; per question: `q`, `src_text_before`, `src_text_after` |
@@ -449,8 +474,8 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 
 1. The file is UTF-8 and its frontmatter block is closed.
 2. Every non-comment line matches the subset in section 4.
-3. The three blocks exist, in order.
-4. Each node is declared once: concepts in `passed` or `untested`, questions and answers in `testing`.
+3. `passed`, `untested`, and `testing` exist, in order, with `reserve` between `untested` and `testing` when present.
+4. Each node is declared once: concepts in `passed`, `untested`, or `reserve`, questions and answers in `testing`.
 5. Declarations precede edges in each block, and every edge sits in the block 4.2 requires.
 6. IDs are valid and unreserved.
 7. Questions carry one batch class, answers one answer class, concepts none.
@@ -458,7 +483,7 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 9. Every question in a batch resolves to the same concept. Batches respect max, and a batch with any answer respects min (replacement batches per 8.5 excepted).
 10. Concept edges carry a relation label and form a DAG.
 11. Every citation names an existing file and an in-bounds line range.
-12. Passed concepts have no tests, no GAP, and no gate line.
+12. Passed concepts have no tests, no GAP, and no gate line. Reserve concepts have no tests and no gate line.
 13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
 14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`.
 15. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
@@ -476,7 +501,8 @@ stateDiagram-v2
     [*] --> Orient : tm load
     Orient --> Orient : tm status, tm find, tm show, tm report
     Orient --> Map : frontier thin, or a prerequisite is missing
-    Map --> Orient : planner writes tm add, tm link; teacher reviews via tm status
+    Map --> Prune : planner writes tm add, tm link
+    Prune --> Orient : pruner runs tm prune, tm reserve, tm activate, tm edit; teacher reviews via tm status
     Orient --> Untested : choose a concept
     Orient --> [*] : untested is empty
 
@@ -509,8 +535,9 @@ stateDiagram-v2
         Teaching --> Answering : every in-scope teach question passes. tm ask emits the locked probes
         Teaching --> Answering : teaching spent. Teach question cap reached, tm ask emits the locked probes
 
-        Gated --> Answering : upstream parent passes. Unanswered probes are asked as written
+        Gated --> Answering : activated, added, or reopened parent passes. Unanswered probes are asked as written
         Gated --> DraftProbes : upstream parent passes, no unanswered probes. tm q
+        Gated --> Answering : learner asks for --override. Unanswered probes are asked as written
         Passed --> Untested : tm reopen
     }
 ```
@@ -524,7 +551,9 @@ Four behaviors the CLI cannot enforce belong in the teacher's prompt:
 
 The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and records their root with `tm new --src-root <dir>`. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and points at the setup reference.
 
-The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach-me-planner.md`). The teacher's spawn prompt carries the learning goal, the source locations, and the request scope: initial map, extension around a named concept, or errata against named concepts. For extension or errata the teacher passes `tm report <concept>` output so the planner sees the existing foundations. The planner returns one paragraph; the teacher reads the result through `tm status` and `tm show`, never through the planner's prose.
+The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach-me-planner.md`). The teacher's spawn prompt carries the learning goal, the source locations, what the learner says they already know, and the request scope: initial map, extension around a named concept, or errata against named concepts. For extension or errata the teacher passes `tm report <concept>` output so the planner sees the existing foundations. The planner maps to a bounded depth around the goal and checks `reserve` before adding, since the foundation it needs may already be parked. It returns one paragraph; the teacher reads the result through `tm status` and `tm show`, never through the planner's prose.
+
+The **Prune phase** follows every Map. The planner's prompt primes inclusion, and concept edges do not distinguish a foundation the goal requires from one that is merely related, so a second agent with the opposite default makes that call: the pruner adapter (`skill/teach-me/agents/teach-me-pruner.md`). Its spawn prompt carries the goal in the learner's words, what the learner says they already know, and `tm report <goal>` output. It runs `tm prune <goal> --keep N` for the mechanical sweep, then defends every remaining active concept: a concept stays only if some probe on an on-path child, scoped to what the goal needs, cannot be answered without it; a concept the learner claims to know is parked, since activation on a later fail is cheap; a kept concept whose scope is wider than the goal needs is narrowed with `tm edit`. The pruner's tools cannot grow the graph. The teacher confirms the result through `tm status`, where the `reserve` count and the frontier show whether the pass did its job.
 
 **Errata** handling:
 
@@ -532,6 +561,8 @@ The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach
 - `DRIFT` on a passed concept: if the new range hashes the same, `tm recite`. Otherwise spawn a grader with the concept ID and the instruction to run `tm check --drift`; the grader decides `keep` or `reopen`. The teacher never decides whether a pass survives a source change.
 - A source replaced or a learner correction revealing a missing prerequisite: spawn the planner in errata mode for the affected concepts.
 - A learner who disputes a verdict: not errata. Re-probe with `--re`; the grader decides.
+- A gate: take the exits in the `fix:` line's order. Activate a reserve parent when one fits the GAP; otherwise spawn the planner to add one, or reopen a passed parent. `--override` only when the learner asks for it, with the learner's reason; the teacher's own read of the verdicts is the bias the grader isolation exists to block.
+- A learner who asks to skip or set aside a concept: `tm reserve` it if it has no questions. It stops blocking its children and can be activated later.
 
 ## 13. Configuration
 
@@ -625,8 +656,8 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 | 5 | Teach answers graded like probes; verdicts gate the exit from teaching and never count toward the pass | removes the teacher's own judgment of "satisfied"; one answer path; drops `--summary` and the `noted` class | teacher-summarized, ungraded teach answers | agreed, v0.2 |
 | 6 | `ask` is read-only and picks the batch | locking is derived, so asking has nothing to write | `ask` that locks and marks batches | agreed, v0.2 |
 | 7 | Unclear-only rounds take exactly one `--re` replacement per unclear probe | keeps the replacement narrow; a second `unclear` becomes `fail` | full fresh batch | agreed |
-| 8 | Frontier rule with no bypass | sharp and binary; makes the upstream move stick | bypass flag now | agreed; revisit if it blocks diagnosis |
-| 9 | Gate cleared by `add --child`, `reopen`, or `--override` | gives the upstream rule a violation condition | advisory hint only | agreed |
+| 8 | Frontier rule with no bypass | sharp and binary; makes the upstream move stick | bypass flag now | agreed; goal-first diagnosis provided by `reserve` (59) instead of a flag, v0.19 |
+| 9 | Gate cleared by `add --child`, `reopen`, or `--override`; `activate` added in v0.19 | gives the upstream rule a violation condition | advisory hint only | agreed |
 | 10 | `--asked "<wording>"` on `answer`, shown by `check` | the node stores a scope, not the question | grade against scope alone | agreed |
 | 11 | Added `link`, `gap`, and concept-only `edit` and `drop` | a DAG needs edges between existing concepts; a concept with no questions carries no commitment | hand edits only | agreed; narrowed in v0.3 |
 | 12 | `-` reads stdin for free text | shell quoting of raw user text | temp files | agreed |
@@ -676,11 +707,17 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 | 56 | Whether a pass survives a source change is a grader's verdict from the logged answers and the current text, never the teacher's | same isolation argument as grading; the teacher's bias runs toward always or never re-testing | teacher `recite --override`; automatic reopen on any drift | agreed |
 | 57 | The model reaches the graph, log, and lock only through the CLI; adapters ask for harness deny rules on `tm new`, tell the model never to touch the files, and require it to report any accidental access as a misconfiguration | every CLI invariant assumes the CLI is the only writer and the grader's isolation assumes the model cannot read verdict history except through `show --history`; a model that opens the files bypasses all of it silently | CLI-side enforcement (impossible: it cannot see who opened a file); trust the model; encrypted or obfuscated graph | agreed |
 | 58 | The active graph, source root, and doc path are config keys in the user config, written by `tm new` and `tm load`; `.tmconfig` in the working directory is the opt-in per-directory mode | an agent harness runs each shell call fresh, so an env var set at session start is gone by the next call, and a pointer file in the launch directory lands wherever the harness happened to start; sub-agents that receive only a question ID need the pointer to hold from any directory | `.tmconfig` in the working directory as the default (v0.1 to v0.2); env vars set once per session; `--file` on every call | agreed, 2026-09-24 |
+| 59 | A fourth block, `reserve`, holds concepts that are mapped but not required for the current goal; a reserve parent does not block the frontier; only question-less untested concepts can enter it | a live lesson showed a dense map turning a targeted lesson into a survey, because every mapped edge became mandatory; a concept's state is its block, so a parked concept is a block, not a marker; the edges and citations survive, so a later gap wakes a foundation instead of authoring one; the entry rule means no verdict was earned against a parked prerequisite | `:::inactive` class on concepts (breaks 4.5 and makes every count filter); dotted `-.->` edges (edges as state, and new grammar); deleting the extra concepts | agreed, 2026-09-24 |
+| 60 | `tm prune` is mechanical (ancestor closure and nearest-N by hop distance); a pruner sub-agent makes the required-versus-related call, with tools that cannot grow the graph | edges do not distinguish a foundation the goal needs from one that is merely related, so the closure is a floor, not the answer; the planner's prompt primes inclusion and it defends its own map, so the judgment goes to a separate prompt whose default is to park; the tool split keeps the pruner from becoming a second planner | planner prunes its own map; CLI-only prune; a hard-versus-soft edge kind chosen at link time (the same judgment the planner already gets wrong, made without the goal in view) | agreed, 2026-09-24 |
+| 61 | `activate` on a parent of a gated concept clears the gate with `via: activate`, and the gate's `fix:` line names reserve parents first | activating a parked prerequisite is the same upstream move as `add --child`, made cheaper by the planner's earlier work; the refusal is where the teacher learns the cheap exit exists | activate as a plain move with a separate gate step; listing exits without the concept's reserve parents | agreed, 2026-09-24 |
 
 ## 15. Deferred
 
 - `maxTextSize` and `maxEdges`. Revisit when testing at realistic graph sizes.
-- Bypass flag for the frontier rule.
+- Bypass flag for the frontier rule. Superseded by `reserve` (14.59) unless a lesson shows a need that parking cannot meet.
+- Dotted rendering for edges that touch a reserve concept, derived by the writer from the block. Cosmetic; needs the parser to accept `-.->`.
+- A stored goal marker (`%% tm:goal <id>`) so `tm status` can print distance to goal and lint can enforce an active-ancestor budget. `prune` takes the goal as an argument for now.
+- Config file keys for the batch and gate limits (`TM_PROBE_MIN` through `TM_MAX_STALL`), so one lesson can loosen the gate without environment variables.
 - Condition coverage. Go has no native branch coverage and nothing filters gobco's output to a diff, so it needs an in-repo filter. gobco v1.3.4 writes per-condition true and false counts with `-stats`; untested under Go 1.27.
 - `--oos` on probes. Probes have no scope check yet.
 - Automatic grader spawning: a filter command the CLI runs, or a harness skill that injects `tm check` output into the grader's prompt. Both close the teacher's channel to the grader and both sit on `check` and `grade` unchanged.
@@ -742,6 +779,8 @@ internal/docver/          TM_DOC frontmatter read, tm-version check
 internal/version/         VERSION file, embedded with go:embed
 internal/tools/corpus/    corpus generator for the conformance suite
 skill/teach-me/SKILL.md         teacher skill adapter; frontmatter carries metadata.tm-version
+skill/teach-me/agents/          grader, planner, and pruner sub-agent adapters
+skill/teach-me/reference/       setup reference the teacher loads on demand
 conformance/              package.json, package-lock.json, parse.mjs, corpus/ (generated, gitignored)
 testdata/                 golden graphs, logs, and CLI transcripts
 docs/spec.md              this document
@@ -751,7 +790,7 @@ docs/spec.md              this document
 .golangci.yml  .goreleaser.yaml  .gitattributes  Makefile  AGENTS.md  README.md
 ```
 
-`AGENTS.md` holds the `make` targets, a pointer to `docs/spec.md`, and the adapter table (teacher, grader, planner). The body of `skill/teach-me/SKILL.md` is the owner's to write; the implementing agent creates the frontmatter and a body that restates section 12's four unenforceable behaviors.
+`AGENTS.md` holds the `make` targets, a pointer to `docs/spec.md`, and the adapter table (teacher, grader, planner, pruner). The body of `skill/teach-me/SKILL.md` is the owner's to write; the implementing agent creates the frontmatter and a body that restates section 12's four unenforceable behaviors.
 
 ### 16.4 Fixed implementation choices
 
@@ -774,7 +813,7 @@ docs/spec.md              this document
 | Property | a seeded generator builds random valid graphs with adversarial labels (every escaped character, keyword near-misses, non-ASCII); writer output always passes `lint`; parse of write equals the model |
 | Fuzz | `FuzzEscape` (escape then unescape is identity) and `FuzzParse` (no panics; anything accepted re-serializes to something accepted). CI runs each for 30 s |
 | Invariants | one case per refusal in section 7, asserting exit code, `err:` line, `fix:` line, and the `ERRORS.jsonl` row |
-| Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes |
+| Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes, prune then pass through a reserve parent, gate cleared by `activate` |
 | Concurrency | 20 parallel `grade` calls on one graph all land, the file lints, and the event log has 20 `grade` rows |
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
 
