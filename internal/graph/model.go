@@ -89,6 +89,15 @@ type GateMeta struct {
 	LeadingComments []string
 }
 
+// NextMeta holds the data from a %% tm:next meta line (§4.6).
+// Q is the next question/answer number to allocate; Batch is the next batch
+// number. Both are ≥ 1 when the line is present.
+type NextMeta struct {
+	Q               int
+	Batch           int
+	LeadingComments []string
+}
+
 // Graph is the parsed, structured representation of a .mmd file.
 type Graph struct {
 	// Frontmatter is the verbatim YAML front-matter block (including --- fences),
@@ -105,6 +114,8 @@ type Graph struct {
 	PassedConcepts []*ConceptNode
 
 	// Gate meta lines and concepts in the untested block, in order.
+	// NextMeta holds the %% tm:next counter line when present; nil otherwise.
+	NextMeta         *NextMeta
 	UntestedMetas    []GateMeta
 	UntestedConcepts []*ConceptNode
 

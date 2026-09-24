@@ -83,6 +83,7 @@ func qRun(ctx *Context) int {
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		cfg := s.Cfg()
+		logPath := eventlog.Path(file)
 
 		// Build concept membership sets.
 		passedSet := make(map[string]bool, len(g.PassedConcepts))
@@ -218,11 +219,11 @@ func qRun(ctx *Context) int {
 			}
 
 			// Allocate new question N and batch class.
-			qN := graph.NextQuestionN(g)
+			qN := graph.NextQuestionN(g, logPath)
 			qid := fmt.Sprintf("q%d", qN)
 			batchClass := draftBatch
 			if !hasDraft {
-				bN := graph.NextBatchN(g)
+				bN := graph.NextBatchN(g, logPath)
 				batchClass = fmt.Sprintf("probe_%d", bN)
 			}
 
@@ -388,11 +389,11 @@ func qRun(ctx *Context) int {
 		}
 
 		// Allocate new question N and batch class.
-		qN := graph.NextQuestionN(g)
+		qN := graph.NextQuestionN(g, logPath)
 		qid := fmt.Sprintf("q%d", qN)
 		batchClass := draftBatch
 		if !hasDraft {
-			bN := graph.NextBatchN(g)
+			bN := graph.NextBatchN(g, logPath)
 			batchClass = fmt.Sprintf("teach_%d", bN)
 		}
 
