@@ -94,13 +94,16 @@ func Check(data []byte, cfg Config) []Violation {
 	return viols
 }
 
-// buildConceptSet returns the set of all concept IDs (passed and untested).
+// buildConceptSet returns the set of all concept IDs (passed, untested, and reserve).
 func buildConceptSet(g *graph.Graph) map[string]bool {
-	m := make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts))
+	m := make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts)+len(g.ReserveConcepts))
 	for _, c := range g.PassedConcepts {
 		m[c.ID] = true
 	}
 	for _, c := range g.UntestedConcepts {
+		m[c.ID] = true
+	}
+	for _, c := range g.ReserveConcepts {
 		m[c.ID] = true
 	}
 	return m
@@ -138,6 +141,9 @@ func buildBlockMap(g *graph.Graph) map[string]graph.Block {
 	}
 	for _, c := range g.UntestedConcepts {
 		m[c.ID] = graph.BlockUntested
+	}
+	for _, c := range g.ReserveConcepts {
+		m[c.ID] = graph.BlockReserve
 	}
 	for _, item := range g.TestingItems {
 		if item.Q != nil {
@@ -179,6 +185,8 @@ func blockName(b graph.Block) string {
 		return "passed"
 	case graph.BlockUntested:
 		return "untested"
+	case graph.BlockReserve:
+		return "reserve"
 	case graph.BlockTesting:
 		return "testing"
 	default:
@@ -186,7 +194,7 @@ func blockName(b graph.Block) string {
 	}
 }
 
-// check4 detects duplicate node declarations across all three blocks.
+// check4 detects duplicate node declarations across all four blocks.
 func check4(g *graph.Graph) []Violation {
 	seen := make(map[string]bool)
 	var viols []Violation
@@ -202,6 +210,9 @@ func check4(g *graph.Graph) []Violation {
 		declare(c.ID)
 	}
 	for _, c := range g.UntestedConcepts {
+		declare(c.ID)
+	}
+	for _, c := range g.ReserveConcepts {
 		declare(c.ID)
 	}
 	for _, item := range g.TestingItems {
@@ -326,6 +337,8 @@ func blockFromID(id string) int {
 		return int(graph.BlockPassed)
 	case "untested":
 		return int(graph.BlockUntested)
+	case "reserve":
+		return int(graph.BlockReserve)
 	case "testing":
 		return int(graph.BlockTesting)
 	default:
@@ -367,6 +380,9 @@ func check6(g *graph.Graph) []Violation {
 	for _, c := range g.UntestedConcepts {
 		check(c)
 	}
+	for _, c := range g.ReserveConcepts {
+		check(c)
+	}
 	return viols
 }
 
@@ -382,6 +398,11 @@ func check7(g *graph.Graph) []Violation {
 		}
 	}
 	for _, c := range g.UntestedConcepts {
+		if c.Class != "" {
+			viols = append(viols, Violation{Msg: fmt.Sprintf("concept %q must not carry a class (got %q)", c.ID, c.Class)})
+		}
+	}
+	for _, c := range g.ReserveConcepts {
 		if c.Class != "" {
 			viols = append(viols, Violation{Msg: fmt.Sprintf("concept %q must not carry a class (got %q)", c.ID, c.Class)})
 		}
@@ -799,6 +820,12 @@ func check11(g *graph.Graph, _ Config) []Violation {
 			checkCite(pfx, citeStr)
 		}
 	}
+	for _, c := range g.ReserveConcepts {
+		pfx := fmt.Sprintf("concept %q", c.ID)
+		for _, citeStr := range c.Cites {
+			checkCite(pfx, citeStr)
+		}
+	}
 	for _, item := range g.TestingItems {
 		if item.Q != nil {
 			q := item.Q
@@ -812,6 +839,7 @@ func check11(g *graph.Graph, _ Config) []Violation {
 
 // check12 verifies that every passed concept has no GAP, no gate meta line
 // targeting it, and no questions that resolve to it.
+// Also verifies that every reserve concept has no questions and no gate line.
 func check12(
 	g *graph.Graph,
 	concepts map[string]bool,
@@ -819,7 +847,7 @@ func check12(
 	qByID map[string]*graph.QuestionNode,
 	aByID map[string]*graph.AnswerNode,
 ) []Violation {
-	if len(g.PassedConcepts) == 0 {
+	if len(g.PassedConcepts) == 0 && len(g.ReserveConcepts) == 0 {
 		return nil
 	}
 
@@ -851,6 +879,15 @@ func check12(
 		}
 		if conceptHasQ[c.ID] {
 			viols = append(viols, Violation{Msg: fmt.Sprintf("passed concept %q has open questions", c.ID)})
+		}
+	}
+	// Reserve concepts must have no questions and no gate line. GAP is allowed.
+	for _, c := range g.ReserveConcepts {
+		if gateMetas[c.ID] {
+			viols = append(viols, Violation{Msg: fmt.Sprintf("reserve concept %q has a gate line", c.ID)})
+		}
+		if conceptHasQ[c.ID] {
+			viols = append(viols, Violation{Msg: fmt.Sprintf("reserve concept %q has questions", c.ID)})
 		}
 	}
 	return viols
