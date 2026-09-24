@@ -199,7 +199,7 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 // differs from CurrentFormat. Returns 0 when the command may run or when the
 // active graph file cannot be resolved (fall-through; let the command report
 // its own error). Returns 1 on invariant refusal.
-func checkFormat(cmd *Command, fileFlag string, argv []string, role string, errOut io.Writer) int {
+func checkFormat(_ *Command, fileFlag string, argv []string, role string, errOut io.Writer) int {
 	file, err := state.ResolveFile(fileFlag)
 	if err != nil || file == "" {
 		// No configured file; fall through and let the command report its error.
