@@ -10,8 +10,8 @@ import (
 // the updated graph and the gate event row. Returns (nil, zero-value, false)
 // when conceptID is not currently Gated in s.
 //
-// via must be "add", "reopen", or "override". reason is the --override reason
-// text; pass "" for add/reopen via.
+// via must be "add", "reopen", "activate", or "override". reason is the --override reason
+// text; pass "" for add/reopen/activate via.
 //
 // base = max(BatchN) over all of the concept's batch class IDs, 0 when the
 // concept has no batches.

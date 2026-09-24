@@ -109,7 +109,7 @@ func askRun(ctx *Context) int {
 	if cs.Gated {
 		if overrideReason == "" {
 			ctx.ErrMsg = fmt.Sprintf("%s is gated", conceptID)
-			ctx.FixMsg = fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID)
+			ctx.FixMsg = buildGateFixMsg(conceptID, s)
 			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
 			return 1
 		}
@@ -437,7 +437,7 @@ func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code in
 	cs := s.ConceptStatus(conceptID)
 	if cs.Gated {
 		return 1, fmt.Sprintf("%s is gated", conceptID),
-			fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID)
+			buildGateFixMsg(conceptID, s)
 	}
 	batches := askConceptBatches(g, s, conceptID)
 	selectedBatch := ""

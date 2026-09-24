@@ -37,6 +37,7 @@ func reportRun(ctx *Context) int {
 
 	fulltext := len(ctx.Flags["fulltext"]) > 0
 	passedOnly := len(ctx.Flags["passed-only"]) > 0
+	includeReserve := len(ctx.Flags["reserve"]) > 0
 
 	// hops/depth: sentinel -1 means "use default for the chosen mode".
 	// With concept: default -1 (unbounded) for outline, 2 for --fulltext.
@@ -74,9 +75,13 @@ func reportRun(ctx *Context) int {
 	g := s.Graph()
 	srcRoot := cite.SrcRoot(filepath.Dir(file))
 
+	walkOpts := report.Options{
+		IncludeReserve: includeReserve,
+	}
+
 	var concepts []report.ConceptInfo
 	if hasConcept {
-		concepts, err = report.Walk(g, s, conceptID, hops)
+		concepts, err = report.Walk(g, s, conceptID, hops, walkOpts)
 		if err != nil {
 			ctx.ErrMsg = err.Error()
 			writeErrFix(ctx.ErrOut, ctx.ErrMsg,
@@ -84,13 +89,14 @@ func reportRun(ctx *Context) int {
 			return 3
 		}
 	} else {
-		concepts = report.WalkAll(g, s, hops)
+		concepts = report.WalkAll(g, s, hops, walkOpts)
 	}
 
 	opts := report.Options{
-		Fulltext:   fulltext,
-		PassedOnly: passedOnly,
-		SrcRoot:    srcRoot,
+		Fulltext:       fulltext,
+		PassedOnly:     passedOnly,
+		IncludeReserve: includeReserve,
+		SrcRoot:        srcRoot,
 	}
 
 	// reader wraps readCiteText and cite.CheckDrift so the report package

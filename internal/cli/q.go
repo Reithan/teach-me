@@ -138,7 +138,7 @@ func qRun(ctx *Context) int {
 		if cs.Gated && overrideReason == "" {
 			return nil, nil, &ops.Refusal{
 				Err:  conceptID + " is gated",
-				Fix:  fmt.Sprintf("add a prerequisite concept or reopen a parent of %s", conceptID),
+				Fix:  buildGateFixMsg(conceptID, s),
 				Exit: 1,
 			}
 		}
