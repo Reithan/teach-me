@@ -161,7 +161,7 @@ func TestMigrateRule2_FetchFails(t *testing.T) {
 	t.Setenv("TM_CACHE_TTL", "0")
 
 	// Use a server that we immediately close so all requests fail.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 	deadURL := srv.URL
 	srv.Close()
 
@@ -195,6 +195,52 @@ func TestMigrateRule2_FetchFails(t *testing.T) {
 	// Should not claim hash differs since the fetch itself failed.
 	if strings.Contains(out, "hash differs") {
 		t.Errorf("unexpected 'hash differs' for a dead server; got:\n%s", out)
+	}
+}
+
+// TestMigrateRule2_SkipsURICitation verifies that a URI citation already in the
+// graph is not claimed by rule 2 (falls through to "plain path" reason).  This
+// covers the IsURI early-return path in migrateRule2.
+func TestMigrateRule2_SkipsURICitation(t *testing.T) {
+	freshConfig(t)
+	tempErrlog(t)
+	t.Setenv("TM_CACHE_DIR", t.TempDir())
+
+	graphDir := t.TempDir()
+	t.Chdir(graphDir)
+	graphFile := filepath.Join(graphDir, "g.mmd")
+
+	// Build a format-1 graph with a URI citation (no hash prefix).
+	uriCite := "http://example.com/doc.txt:1-2"
+	graphContent := fmt.Sprintf(`flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        c1["Concept one<br/>%s"]
+    end
+    subgraph reserve["Concepts held in reserve"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`, uriCite)
+	if err := os.WriteFile(graphFile, []byte(graphContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("TM_FILE", graphFile)
+	t.Setenv("TM_SRC_ROOT", graphDir)
+
+	out, _, code := run(t, "migrate", graphFile, "--dry-run")
+	if code != 0 {
+		t.Fatalf("tm migrate --dry-run: exit %d", code)
+	}
+	// The URI citation is left: no rule claims it.
+	if !strings.Contains(out, "left c1") {
+		t.Errorf("want 'left c1' in output; got:\n%s", out)
 	}
 }
 
