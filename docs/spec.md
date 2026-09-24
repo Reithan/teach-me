@@ -791,7 +791,6 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 - Automatic grader spawning: a filter command the CLI runs, or a harness skill that injects `tm check` output into the grader's prompt. Both close the teacher's channel to the grader and both sit on `check` and `grade` unchanged.
 - Harness hook that authenticates the grader role.
 - Quote and position selectors, and fragment anchoring, for web citations.
-- Conversion cache (OS temp directory, keyed by input hash, converter, and version).
 - Learner-facing study guide from `tm report` (same walk over the passed block, question text omitted).
 - Remote git fetch.
 - `tm lint --remote` (resolve fetched citations).
@@ -882,6 +881,10 @@ docs/spec.md              this document
 | Fuzz | `FuzzEscape` (escape then unescape is identity) and `FuzzParse` (no panics; anything accepted re-serializes to something accepted). CI runs each for 30 s |
 | Invariants | one case per refusal in section 7, asserting exit code, `err:` line, `fix:` line, and the `ERRORS.jsonl` row |
 | Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes, prune then pass through a reserve parent, gate cleared by `activate`, conceded probe opens a teaching round, two conceded probe batches trip the gate. Monotonic ID lifecycle: grade a concept's probes to pass; allocate a new question for a second concept; assert the new ID (e.g. `q3`) exceeds every `qN`/`aN` ID recorded in the event log before the allocation (verifies §4.3 non-reuse after the pass procedure clears the testing block). |
+| Format and migrate | a format-1 graph refuses on every command but `migrate`, `lint`, and help; `tm migrate` rewrites a repo-path citation to `git:`, leaves an unresolvable one with a reason, writes `%% tm:format 2`, exits 0, and the result lints; a format above the binary refuses everywhere |
+| Git resolution | a fixture repo built in a temp dir by the test; each `git:` form (file at a ref, a commit, a diff, a diff for one path) resolves to the expected text and hash; `<ref>` is rewritten to a short SHA on write; an unknown alias, an unresolvable ref, and no `git` configured each refuse |
+| Cache | a fetch is served from the cache within the TTL and re-fetched after expiry; `cache-ttl=0` disables it; `tm cache clear` empties it |
+| Aids | `tm add`, `tm q`, and `tm recite` refuse a citation resolving under aids-dir and lint refuses one; `tm aid` and `tm aid rm` write and remove the meta line; a qid's aid is removed with its question and logged in the `gc` event |
 | Concurrency | 20 parallel `grade` calls on one graph all land, the file lints, and the event log has 20 `grade` rows |
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
 
