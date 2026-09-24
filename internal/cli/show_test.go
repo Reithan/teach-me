@@ -325,6 +325,34 @@ func TestShow_GraderRoleAllowed(t *testing.T) {
 	}
 }
 
+func TestShow_Concept_Reserve(t *testing.T) {
+	// tm show log_compaction: reserve concept reports state "reserve".
+	// raft.mmd has log_compaction in the reserve block.
+	tempErrlog(t)
+	raftFixtureWithSrc(t)
+
+	out, errOut, code := run(t, "show", "log_compaction")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+
+	wantLines := []string{
+		"id: log_compaction",
+		"kind: concept",
+		"state: reserve",
+		"scope: Log compaction: snapshots and the last included index",
+	}
+	for _, want := range wantLines {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing line %q; got:\n%s", want, out)
+		}
+	}
+	// Reserve concepts have no batches; no "probe_" or "teach_" lines expected.
+	if strings.Contains(out, "probe_") || strings.Contains(out, "teach_") {
+		t.Errorf("reserve concept should have no batch output; got:\n%s", out)
+	}
+}
+
 // ── Shared fixture helpers for status tests ──────────────────────────────────
 
 // raftFixtureWithSrc duplicated here to confirm it is available cross-file.

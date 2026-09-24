@@ -1328,3 +1328,104 @@ func TestEnvInt_Zero(t *testing.T) {
 		t.Errorf("TM_MAX_FAILS=0 should give 0, got %d", cfg.MaxFails)
 	}
 }
+
+// --- Reserve block ---
+
+// reserveGraph is a minimal graph with one concept in each block.
+// alpha (passed) → beta (untested), gamma (reserve) → beta.
+const reserveGraph = `flowchart TB
+    subgraph passed["Passed"]
+        alpha["Alpha concept<br/>src.txt:1-5"]
+    end
+    subgraph untested["Untested"]
+        beta["Beta concept<br/>src.txt:6-10"]
+        alpha --"requires"--> beta
+    end
+    subgraph reserve["Concepts held in reserve"]
+        gamma["Gamma concept<br/>src.txt:11-15"]
+        gamma --"enables"--> beta
+    end
+    subgraph testing["Testing"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+func TestReserve_ReturnsReserveIDs(t *testing.T) {
+	s := mustLoad(t, reserveGraph, defaultCfg())
+	got := s.Reserve()
+	if len(got) != 1 || got[0] != "gamma" {
+		t.Errorf("Reserve() = %v, want [gamma]", got)
+	}
+}
+
+func TestReserve_EmptyWhenNoReserveConcepts(t *testing.T) {
+	s := mustLoad(t, raftGraph, defaultCfg())
+	got := s.Reserve()
+	if len(got) != 0 {
+		t.Errorf("Reserve() = %v, want []", got)
+	}
+}
+
+func TestReserveParents_ReturnReserveParents(t *testing.T) {
+	s := mustLoad(t, reserveGraph, defaultCfg())
+	got := s.ReserveParents("beta")
+	if len(got) != 1 || got[0] != "gamma" {
+		t.Errorf("ReserveParents(beta) = %v, want [gamma]", got)
+	}
+}
+
+func TestReserveParents_EmptyForConceptWithNoReserveParent(t *testing.T) {
+	s := mustLoad(t, reserveGraph, defaultCfg())
+	// alpha has no parents at all; its ReserveParents should be empty.
+	got := s.ReserveParents("alpha")
+	if len(got) != 0 {
+		t.Errorf("ReserveParents(alpha) = %v, want []", got)
+	}
+}
+
+func TestAncestorClosure_IncludesDirectAndTransitiveParents(t *testing.T) {
+	// reserveGraph: alpha → beta (untested), gamma (reserve) → beta.
+	// AncestorClosure("beta"): beta=0, alpha=1, gamma=1.
+	s := mustLoad(t, reserveGraph, defaultCfg())
+	dist := s.AncestorClosure("beta")
+	if dist["beta"] != 0 {
+		t.Errorf("want beta=0, got %d", dist["beta"])
+	}
+	if dist["alpha"] != 1 {
+		t.Errorf("want alpha=1, got %d", dist["alpha"])
+	}
+	if dist["gamma"] != 1 {
+		t.Errorf("want gamma=1, got %d", dist["gamma"])
+	}
+	if len(dist) != 3 {
+		t.Errorf("AncestorClosure(beta) has %d entries, want 3: %v", len(dist), dist)
+	}
+}
+
+func TestAncestorClosure_GoalAloneWhenNoParents(t *testing.T) {
+	s := mustLoad(t, reserveGraph, defaultCfg())
+	dist := s.AncestorClosure("alpha")
+	if len(dist) != 1 || dist["alpha"] != 0 {
+		t.Errorf("AncestorClosure(alpha) = %v, want {alpha:0}", dist)
+	}
+}
+
+func TestFrontier_ReserveParentDoesNotBlock(t *testing.T) {
+	// beta has parents: alpha (passed) and gamma (reserve).
+	// Both are in passed-or-reserve, so beta IS on the frontier.
+	s := mustLoad(t, reserveGraph, defaultCfg())
+	frontier := s.Frontier()
+	found := false
+	for _, id := range frontier {
+		if id == "beta" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("beta should be on frontier (all parents passed or reserve); Frontier()=%v", frontier)
+	}
+}

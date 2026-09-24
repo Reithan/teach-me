@@ -832,3 +832,57 @@ func TestAnswerNodeAskedRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// TestParse_ReserveBlockPaths exercises optional-reserve parsing edge cases
+// that are not hit by the golden round-trip tests.
+func TestParse_ReserveBlockPaths(t *testing.T) {
+	// Blank line between the untested end and the reserve header exercises the
+	// blank-line skip in peekNextSubgraphID (lines 127-128 of parse.go).
+	withBlankLine := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n    end\n" +
+		"    subgraph untested[\"U\"]\n    end\n" +
+		"\n" + // blank line → exercises peekNextSubgraphID continue branch
+		"    subgraph reserve[\"R\"]\n    end\n" +
+		"    subgraph testing[\"T\"]\n    end\n"
+	if _, err := Parse([]byte(withBlankLine)); err != nil {
+		t.Errorf("blank-line-before-reserve: unexpected error: %v", err)
+	}
+
+	// File ends after untested block (no testing block at all) → error.
+	// This causes peekNextSubgraphID to exhaust all remaining lines (all blank)
+	// and return "" (line 138 of parse.go).
+	missingTesting := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n    end\n" +
+		"    subgraph untested[\"U\"]\n    end\n" +
+		"\n" // trailing blank line, no testing subgraph
+	if _, err := Parse([]byte(missingTesting)); err == nil {
+		t.Error("missing-testing-block: expected error, got nil")
+	}
+
+	// Reserve header without title bracket: "subgraph reserve" (no ["..."]).
+	// peekNextSubgraphID calls parseSubgraphID which takes the idx<0 path
+	// (lines 122-123 of parse.go), returning "reserve".
+	// Then parseBlock(g, BlockReserve) calls parseSubgraphHeader which errors.
+	// parse() returns that error at lines 81-82 of parse.go.
+	noBracket := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n    end\n" +
+		"    subgraph untested[\"U\"]\n    end\n" +
+		"    subgraph reserve\n    end\n" + // no title bracket
+		"    subgraph testing[\"T\"]\n    end\n"
+	if _, err := Parse([]byte(noBracket)); err == nil {
+		t.Error("reserve-no-bracket: expected error, got nil")
+	}
+
+	// Unrecognized line inside the reserve block forces the parser to call
+	// blockIDStr(BlockReserve) in its error message (lines 143-145 of parse.go).
+	unrecognizedLine := "flowchart TB\n" +
+		"    subgraph passed[\"P\"]\n    end\n" +
+		"    subgraph untested[\"U\"]\n    end\n" +
+		"    subgraph reserve[\"Held\"]\n" +
+		"        NOT_A_VALID_LINE\n" +
+		"    end\n" +
+		"    subgraph testing[\"T\"]\n    end\n"
+	if _, err := Parse([]byte(unrecognizedLine)); err == nil {
+		t.Error("reserve-unrecognized-line: expected error, got nil")
+	}
+}

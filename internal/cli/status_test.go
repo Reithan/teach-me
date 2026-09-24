@@ -21,7 +21,7 @@ func raftFixtureWithSrc(t *testing.T) {
 // ── tm status (summary) ───────────────────────────────────────────────────────
 
 func TestStatus_Summary_Raft(t *testing.T) {
-	// Reproduces §6 sample lines 229-232 EXACTLY.
+	// Reproduces §6 sample lines 229-232; raft.mmd has one reserve concept.
 	tempErrlog(t)
 	raftFixtureWithSrc(t)
 
@@ -36,7 +36,7 @@ func TestStatus_Summary_Raft(t *testing.T) {
 	}
 
 	want := []string{
-		"passed 2  open 1  blocked 1",
+		"passed 2  open 1  blocked 1  reserve 1",
 		"log_matching  failed 1/2  teach_3 open",
 		"commit_rules  blocked by log_matching",
 	}
@@ -57,8 +57,8 @@ func TestStatus_Summary_WithPassed(t *testing.T) {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
 
-	// Counts line must still be present.
-	if !strings.Contains(out, "passed 2  open 1  blocked 1") {
+	// Counts line must still be present (reserve 1 appended since raft.mmd has one).
+	if !strings.Contains(out, "passed 2  open 1  blocked 1  reserve 1") {
 		t.Errorf("want counts line; got:\n%s", out)
 	}
 	// Both passed concepts must appear.
@@ -67,6 +67,27 @@ func TestStatus_Summary_WithPassed(t *testing.T) {
 	}
 	if !strings.Contains(out, "replicated_log  passed") {
 		t.Errorf("want replicated_log  passed in output; got:\n%s", out)
+	}
+}
+
+func TestStatus_Concept_Reserve(t *testing.T) {
+	// Reserve concept prints a single-line "<id>  reserve" summary.
+	// raft.mmd has log_compaction in the reserve block.
+	tempErrlog(t)
+	raftFixtureWithSrc(t)
+
+	out, errOut, code := run(t, "status", "--concept", "log_compaction")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("want exactly 1 output line for reserve concept, got %d:\n%s", len(lines), out)
+	}
+	want := "log_compaction  reserve"
+	if lines[0] != want {
+		t.Errorf("want %q, got %q", want, lines[0])
 	}
 }
 

@@ -222,3 +222,18 @@ func TestFind_PassedConceptState(t *testing.T) {
 		t.Errorf("want 'leader_election  passed  ...' ; got:\n%s", out)
 	}
 }
+
+func TestFind_ReserveConceptState(t *testing.T) {
+	// Reserve concepts appear with state "reserve".
+	// raft.mmd has log_compaction in the reserve block.
+	tempErrlog(t)
+	raftFixtureWithSrc(t)
+
+	out, errOut, code := run(t, "find", "compaction", "--kind", "concept")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(out, "log_compaction  reserve  ") {
+		t.Errorf("want 'log_compaction  reserve  ...' ; got:\n%s", out)
+	}
+}
