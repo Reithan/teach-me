@@ -136,6 +136,14 @@ move. The full state machine is spec §12; the phases:
    concepts beyond the goal). Read the pruner's result through `tm status`; the
    `reserve` count and the frontier show whether the prune did its job.
 
+   Expect the pruner to park more than you would. That is its job: a parked
+   concept costs nothing until a probe fails, and `tm activate` restores it in
+   one command, while an unneeded active concept costs the learner a full probe
+   batch. Do not activate concepts after a prune on your own read of the map.
+   Activate only from a gate's `fix:` line, or when the learner asks. If the
+   frontier is empty after a prune, the goal is blocked by a kept foundation;
+   probe that foundation, do not un-park others.
+
 4. **Pick** a frontier concept.
 
 5. **Probe.** Draft between `TM_PROBE_MIN` and `TM_PROBE_MAX` narrow probe
