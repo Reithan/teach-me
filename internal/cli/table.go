@@ -195,6 +195,7 @@ var Table = []Command{
 		Flags: []FlagSpec{
 			{Name: "asked", TakesValue: true, ValueName: `"<wording>"`},
 			{Name: "override", TakesValue: true, ValueName: `"<reason>"`}, // gate-clearing wired in m6e
+			{Name: "concede"}, // learner-declared fail; writes fail verdict in the same mutation
 		},
 		ForbidGrader: true,
 		Run:          answerRun,
