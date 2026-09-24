@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/reithan/teach-me/internal/cli"
+	"github.com/reithan/teach-me/internal/config"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/lint"
 )
@@ -16,8 +17,8 @@ import (
 // ── tm new tests ──────────────────────────────────────────────────────────────
 
 // TestNew_Creates verifies the full happy path for tm new: the created file
-// round-trips parse/write unchanged, passes lint, .tmconfig is written with
-// file=, exactly one "new" event lands in the event log, and stdout is "ok".
+// round-trips parse/write unchanged, passes lint, the user config is written
+// with file=, exactly one "new" event lands in the event log, and stdout is "ok".
 func TestNew_Creates(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -57,13 +58,16 @@ func TestNew_Creates(t *testing.T) {
 		t.Errorf("skeleton fails lint: %v", viols)
 	}
 
-	// (c) .tmconfig written with file= key.
-	cfgData, cfgErr := os.ReadFile(filepath.Join(dir, ".tmconfig"))
+	// (c) user config written with file= key; no .tmconfig in the cwd.
+	cfgData, cfgErr := os.ReadFile(config.UserPath())
 	if cfgErr != nil {
-		t.Fatalf("cannot read .tmconfig: %v", cfgErr)
+		t.Fatalf("cannot read user config: %v", cfgErr)
 	}
-	if !strings.Contains(string(cfgData), "file="+file) {
-		t.Errorf(".tmconfig does not contain expected file= key; got:\n%s", cfgData)
+	if !strings.Contains(string(cfgData), "file = "+file) {
+		t.Errorf("user config does not contain expected file= key; got:\n%s", cfgData)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".tmconfig")); !os.IsNotExist(statErr) {
+		t.Errorf(".tmconfig must not be written without --local")
 	}
 
 	// (d) exactly one "new" event in the event log.
@@ -193,7 +197,7 @@ func TestNew_WithTitle_RequiresQuoting(t *testing.T) {
 // ── tm load tests ─────────────────────────────────────────────────────────────
 
 // TestLoad_ValidGraph verifies that `tm load <file>`:
-//   - writes .tmconfig with file= key,
+//   - writes the user config with file= key,
 //   - appends one "load" event to the event log,
 //   - stdout byte-equals `tm status --file <file>`.
 func TestLoad_ValidGraph(t *testing.T) {
@@ -227,13 +231,13 @@ func TestLoad_ValidGraph(t *testing.T) {
 		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
 	}
 
-	// .tmconfig must be written with file= key.
-	cfgData, cfgErr := os.ReadFile(filepath.Join(dir, ".tmconfig"))
+	// The user config must be written with file= key.
+	cfgData, cfgErr := os.ReadFile(config.UserPath())
 	if cfgErr != nil {
-		t.Fatalf("cannot read .tmconfig: %v", cfgErr)
+		t.Fatalf("cannot read user config: %v", cfgErr)
 	}
-	if !strings.Contains(string(cfgData), "file="+raftCopy) {
-		t.Errorf(".tmconfig missing expected file= key; got:\n%s", cfgData)
+	if !strings.Contains(string(cfgData), "file = "+raftCopy) {
+		t.Errorf("user config missing expected file= key; got:\n%s", cfgData)
 	}
 
 	// Exactly one "load" event must appear in the event log.

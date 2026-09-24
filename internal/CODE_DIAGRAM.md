@@ -25,6 +25,7 @@ graph LR
     subgraph __3a52ce78["internal"]
         cite_f7064cd7["cite"]:::has_deps
         cli_2bd8e9c9["cli"]:::has_deps
+        config_1c2d3e4f["config"]:::no_deps
         docver_6eba3a90["docver"]:::has_deps
         errlog_a6fd2db4["errlog"]:::has_deps
         eventlog_f5caa859["eventlog"]:::has_deps
@@ -43,7 +44,9 @@ graph LR
     end
 
     %% Import dependencies
+    cite_f7064cd7 -.-> config_1c2d3e4f
     cli_2bd8e9c9 -.-> cite_f7064cd7
+    cli_2bd8e9c9 -.-> config_1c2d3e4f
     cli_2bd8e9c9 -.-> docver_6eba3a90
     cli_2bd8e9c9 -.-> errlog_a6fd2db4
     cli_2bd8e9c9 -.-> eventlog_f5caa859
@@ -71,7 +74,9 @@ graph LR
     report_a27297bd -.-> graph_29a184b6
     report_a27297bd -.-> state_aa4a5f81
     source_828d338a -.-> cite_f7064cd7
+    source_828d338a -.-> config_1c2d3e4f
     state_aa4a5f81 -.-> cite_f7064cd7
+    state_aa4a5f81 -.-> config_1c2d3e4f
     state_aa4a5f81 -.-> graph_29a184b6
     tools_corpus_0198e50f -.-> graph_29a184b6
     tools_corpus_0198e50f -.-> tools_gen_568ea8cb

@@ -206,6 +206,7 @@ func TestResolveFile_NoSources(t *testing.T) {
 	_ = os.Chdir(dir)
 	t.Cleanup(func() { _ = os.Chdir(orig) })
 	t.Setenv("TM_FILE", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	_, err := ResolveFile("")
 	if err == nil {
@@ -223,10 +224,56 @@ func TestResolveFile_TmConfigNoFileKey(t *testing.T) {
 	_ = os.Chdir(dir)
 	t.Cleanup(func() { _ = os.Chdir(orig) })
 	t.Setenv("TM_FILE", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	_, err := ResolveFile("")
 	if err == nil {
 		t.Fatal("expected error: .tmconfig has no file= key")
+	}
+}
+
+func TestResolveFile_UserConfigFallback(t *testing.T) {
+	orig, _ := os.Getwd()
+	_ = os.Chdir(t.TempDir())
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	t.Setenv("TM_FILE", "")
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	cfgPath := filepath.Join(xdg, "tm", "config")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfgPath, []byte("git = git\nfile = /lessons/g.mmd\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolveFile("")
+	if err != nil {
+		t.Fatalf("ResolveFile: %v", err)
+	}
+	if got != "/lessons/g.mmd" {
+		t.Errorf("ResolveFile = %q, want /lessons/g.mmd", got)
+	}
+}
+
+// TestResolveFile_UnreadableTmConfig: a .tmconfig that exists but cannot be
+// read is an error, not a silent fall-through to the user config.
+func TestResolveFile_UnreadableTmConfig(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file modes")
+	}
+	orig, _ := os.Getwd()
+	dir := t.TempDir()
+	_ = os.Chdir(dir)
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+	t.Setenv("TM_FILE", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := os.WriteFile(filepath.Join(dir, ".tmconfig"), []byte("file = /g.mmd\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ResolveFile(""); err == nil || !strings.Contains(err.Error(), ".tmconfig") {
+		t.Errorf("ResolveFile err = %v, want error naming .tmconfig", err)
 	}
 }
 

@@ -41,7 +41,7 @@ there apply to this agent. Silent recovery is not allowed.
 The spawn prompt carries:
 
 - The learning goal as the learner stated it.
-- Source locations (`TM_SRC_ROOT`, absolute paths, or URLs).
+- Source locations (the recorded source root, absolute paths, or URLs).
 - Request scope: `initial` for a fresh map, `extend around <concept>` when the
   frontier is thin, or `errata for <concepts>` when sources or prerequisites have
   changed.

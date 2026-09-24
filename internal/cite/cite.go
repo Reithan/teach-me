@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/reithan/teach-me/internal/config"
 )
 
 // Citation is a parsed source citation consisting of a locator and an
@@ -174,14 +176,11 @@ func Parse(s string) (Citation, error) {
 	return Citation{Hash: hash, File: locator, Start: start, End: end}, nil
 }
 
-// SrcRoot returns the source root directory for resolving citations. It
-// returns $TM_SRC_ROOT if the environment variable is set and non-empty,
-// otherwise it returns graphDir.
+// SrcRoot returns the source root directory for resolving citations:
+// $TM_SRC_ROOT when set, else the `src-root` config key, else graphDir.
+// See config.SrcRoot.
 func SrcRoot(graphDir string) string {
-	if root := os.Getenv("TM_SRC_ROOT"); root != "" {
-		return root
-	}
-	return graphDir
+	return config.SrcRoot(graphDir)
 }
 
 // Resolve returns the on-disk path for citation c under srcRoot.

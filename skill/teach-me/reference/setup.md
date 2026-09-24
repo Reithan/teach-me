@@ -4,11 +4,33 @@
 
 User-level config: `$XDG_CONFIG_HOME/tm/config` (default `~/.config/tm/config`).
 
-Per-project override: `.tmconfig` in the project directory. Keys set in `.tmconfig`
-override the corresponding user-config keys for that project.
+Per-directory override: `.tmconfig` in the working directory. Keys set in
+`.tmconfig` override the corresponding user-config keys.
 
 Format is key=value, one key per line. Blank lines and lines starting with `#`
 are ignored.
+
+## Pointer keys
+
+| Key | Meaning | Who writes it |
+|---|---|---|
+| `file` | the active graph | `tm new` and `tm load` |
+| `src-root` | root for relative citations | `tm new --src-root`, `tm load --src-root` |
+| `doc` | the file that documents `tm` for this harness; `tm --help` defers to it | the user, once, at install |
+
+`tm new` and `tm load` write absolute paths into the user config, so the pointer
+holds from any working directory and for sub-agents that receive only a question
+ID. Pass `--local` to write `.tmconfig` in the working directory instead, for two
+lessons on one machine. `TM_FILE`, `TM_SRC_ROOT`, and `TM_DOC` override the
+matching key for a single call; they do not persist across calls in an agent
+harness, so never rely on them for a session.
+
+**Install line** (`~/.config/tm/config`), pointing at wherever the skill was
+installed:
+
+```
+doc = /home/<user>/.claude/skills/teach-me/SKILL.md
+```
 
 ## Converter keys
 
@@ -77,7 +99,7 @@ three graph files so the model cannot bypass the CLI's invariants:
 
 Scope the deny rules to the lesson directory.
 
-**Claude Code example** (`.claude/settings.json` or the project's settings file):
+**Claude Code example** (`~/.claude/settings.json` or the project's settings file):
 
 ```json
 {
@@ -85,18 +107,28 @@ Scope the deny rules to the lesson directory.
     "deny": [
       "Read(**/*.mmd)",
       "Edit(**/*.mmd)",
-      "Write(**/*.mmd)",
       "Read(**/*.mmd.jsonl)",
       "Edit(**/*.mmd.jsonl)",
-      "Write(**/*.mmd.jsonl)",
       "Read(**/*.mmd.lock)",
-      "Edit(**/*.mmd.lock)",
-      "Write(**/*.mmd.lock)"
+      "Edit(**/*.mmd.lock)"
     ]
+  },
+  "sandbox": {
+    "excludedCommands": ["tm"]
   }
 }
 ```
 
-These rules cover the harness's file tools (Read, Edit, Write). They do not cover
-shell reads, which is why the file-access rule in the skill also binds the model's
-own behavior directly.
+`Edit` rules cover file creation as well; Claude Code accepts `Write(...)` path
+rules but never consults them, so do not add them.
+
+With the bash sandbox enabled, `Read` and `Edit` deny rules are also enforced on
+file operations inside shell commands, which would block `tm` itself from its own
+files. The `excludedCommands` entry runs `tm` outside the sandbox so it can read
+and write the graph while the model's tools and other shell commands still
+cannot. Sub-agents inherit both the deny rules and the sandbox, so the grader and
+planner are covered by the same settings.
+
+Without the sandbox, the deny rules cover only the harness's file tools, not
+shell reads, which is why the file-access rule in the skill also binds the
+model's own behavior directly.

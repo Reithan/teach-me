@@ -266,10 +266,10 @@ func TestCLIResolverConfigError(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 
 	dir := t.TempDir()
-	t.Chdir(dir) // ensure tm new writes .tmconfig to temp dir, not package dir
+	t.Chdir(dir) // --local: write .tmconfig here, not the unreadable user config
 	mmdFile := filepath.Join(dir, "g.mmd")
 	// Create the graph without the bad config in effect (new doesn't use resolver).
-	if _, errOut, code := run(t, "new", mmdFile); code != 0 {
+	if _, errOut, code := run(t, "new", mmdFile, "--local"); code != 0 {
 		t.Fatalf("tm new: exit %d; %s", code, errOut)
 	}
 	t.Setenv("TM_FILE", mmdFile)

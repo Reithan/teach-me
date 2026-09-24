@@ -15,6 +15,8 @@ var Table = []Command{
 		},
 		Flags: []FlagSpec{
 			{Name: "title", TakesValue: true, ValueName: `"<t>"`},
+			{Name: "src-root", TakesValue: true, ValueName: "<dir>"},
+			{Name: "local"},
 		},
 		ForbidGrader: true,
 		Run:          newRun,
@@ -23,6 +25,10 @@ var Table = []Command{
 		Name: "load",
 		PosArgs: []PosArg{
 			{Name: "<file>"},
+		},
+		Flags: []FlagSpec{
+			{Name: "src-root", TakesValue: true, ValueName: "<dir>"},
+			{Name: "local"},
 		},
 		ForbidGrader: true,
 		Run:          loadRun,
