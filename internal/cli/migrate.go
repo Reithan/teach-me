@@ -1,26 +1,97 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
+
+// migrateContext carries per-run dependencies that migration rules need to
+// convert citations. It is built once in migrateRun and passed to every rule.
+type migrateContext struct {
+	// file is the absolute path of the graph file being migrated.
+	file string
+	// dir is filepath.Dir(file).
+	dir string
+	// resolver is built the same way add.go builds it: source.NewResolver(dir).
+	resolver *source.Resolver
+	// eventForID returns the most-recent "add" or "q" event recorded for the
+	// given concept/question ID in the graph's event log (<file>.jsonl). Rules
+	// use it to reconstruct the original source info for a citation.
+	// Returns nil when no matching event exists.
+	eventForID func(id string) map[string]any
+}
 
 // migrateRule is a function that tries to convert a citation string to the
 // format-2 locator form. It returns the new locator and a short reason when
 // ok is true, or a reason string explaining why no conversion was done when
 // ok is false. Later PRs append rules to the global migrateRules slice.
-type migrateRule func(cite string, g *graph.Graph) (newLocator, reason string, ok bool)
+type migrateRule func(mctx *migrateContext, cite string, g *graph.Graph) (newLocator, reason string, ok bool)
 
 // migrateRules is the ordered pipeline applied to each citation. PR 1 ships
 // no rules; later PRs append entries here so only the new file needs to change.
 var migrateRules []migrateRule
+
+// buildMigrateContext initialises a migrateContext for the given graph file.
+// Returns an error only when the source resolver cannot be constructed.
+func buildMigrateContext(file string) (*migrateContext, error) {
+	dir := filepath.Dir(file)
+	resolver, err := source.NewResolver(dir)
+	if err != nil {
+		return nil, err
+	}
+	return &migrateContext{
+		file:       file,
+		dir:        dir,
+		resolver:   resolver,
+		eventForID: buildEventForID(file + ".jsonl"),
+	}, nil
+}
+
+// buildEventForID reads the event log at logPath and returns a lookup function
+// that maps a concept/question ID to its most-recent "add" or "q" event.
+// A missing log file is silently ignored; the lookup function returns nil.
+func buildEventForID(logPath string) func(id string) map[string]any {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return func(string) map[string]any { return nil }
+	}
+	index := make(map[string]map[string]any)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var ev map[string]any
+		if jsonErr := json.Unmarshal([]byte(line), &ev); jsonErr != nil {
+			continue
+		}
+		evType, _ := ev["ev"].(string)
+		if evType != "add" && evType != "q" {
+			continue
+		}
+		var id string
+		if evType == "add" {
+			id, _ = ev["id"].(string)
+		} else {
+			id, _ = ev["q"].(string)
+		}
+		if id == "" {
+			continue
+		}
+		index[id] = ev // later events overwrite earlier ones; last wins
+	}
+	return func(id string) map[string]any { return index[id] }
+}
 
 // citationRef identifies one citation within the graph.
 type citationRef struct {
@@ -82,20 +153,35 @@ func migrateRun(ctx *Context) int {
 		return 3
 	}
 
-	// Refuse if the graph is already at the current format.
-	if g.FormatN() >= graph.CurrentFormat {
-		ctx.ErrMsg = fmt.Sprintf("%s is already format %d", filepath.Base(file), graph.CurrentFormat)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+	// Refuse if the graph is at or above the current format.
+	if n := g.FormatN(); n >= graph.CurrentFormat {
+		base := filepath.Base(file)
+		if n == graph.CurrentFormat {
+			ctx.ErrMsg = fmt.Sprintf("%s is already format %d", base, graph.CurrentFormat)
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		} else {
+			ctx.ErrMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
+			ctx.FixMsg = "upgrade tm"
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+		}
 		return 1
 	}
 
 	fromN := g.FormatN()
 
+	// Build the migration context (resolver + event lookup) for rules.
+	mctx, mctxErr := buildMigrateContext(file)
+	if mctxErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", mctxErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return 3
+	}
+
 	// Gather all citations (concepts in all blocks, questions in testing).
 	refs := gatherCitations(g)
 
 	// Run the rule pipeline over each citation.
-	results := runMigrateRules(refs, g)
+	results := runMigrateRules(mctx, refs, g)
 
 	// Separate rewrites from lefts.
 	var rewrites, lefts []migrateResult
@@ -206,12 +292,12 @@ func gatherCitations(g *graph.Graph) []citationRef {
 
 // runMigrateRules applies each rule in migrateRules to every citation.
 // When no rule converts a citation it is left with reason "plain path".
-func runMigrateRules(refs []citationRef, g *graph.Graph) []migrateResult {
+func runMigrateRules(mctx *migrateContext, refs []citationRef, g *graph.Graph) []migrateResult {
 	results := make([]migrateResult, 0, len(refs))
 	for _, ref := range refs {
 		converted := false
 		for _, rule := range migrateRules {
-			newLoc, reason, ok := rule(ref.cite, g)
+			newLoc, reason, ok := rule(mctx, ref.cite, g)
 			if ok {
 				results = append(results, migrateResult{
 					id:        ref.id,

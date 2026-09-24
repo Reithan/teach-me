@@ -27,6 +27,23 @@ const minimalFormat1Graph = `flowchart TB
     classDef pending stroke-dasharray:4 3
 `
 
+// format3Graph is a minimal graph claiming format 3, above CurrentFormat.
+const format3Graph = `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 3
+    end
+    subgraph reserve["Concepts held in reserve"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
 // minimalFormat2Graph is the same graph but already migrated (format 2).
 const minimalFormat2Graph = `flowchart TB
     subgraph passed["Concepts User understands"]
@@ -101,6 +118,7 @@ func TestMigrate(t *testing.T) {
 		wantExit    int
 		wantOut     string // substring expected in stdout
 		wantErr     string // substring expected in stderr (for refusals)
+		wantFix     string // substring expected in stderr fix line
 		wantFormat2 bool   // file should have FormatN()==2 after run
 		wantEvent   bool   // a migrate event should be appended
 		checkErrlog bool   // verify an errlog row was written
@@ -135,6 +153,15 @@ func TestMigrate(t *testing.T) {
 			wantEvent:   false,
 			checkErrlog: true,
 		},
+		{
+			// format-3 graph is above binary; migrate must refuse with upgrade fix.
+			name:      "format-3 graph refuses with upgrade fix",
+			graphCont: format3Graph,
+			args:      []string{},
+			wantExit:  1,
+			wantErr:   "is format 3, this is tm format 2",
+			wantFix:   "upgrade tm",
+		},
 	}
 
 	for _, tc := range tests {
@@ -164,6 +191,10 @@ func TestMigrate(t *testing.T) {
 
 			if tc.wantErr != "" && !strings.Contains(errOut, tc.wantErr) {
 				t.Errorf("stderr: want %q in output; got:\n%s", tc.wantErr, errOut)
+			}
+
+			if tc.wantFix != "" && !strings.Contains(errOut, tc.wantFix) {
+				t.Errorf("stderr fix: want %q in output; got:\n%s", tc.wantFix, errOut)
 			}
 
 			// Check file format after run.
@@ -284,6 +315,17 @@ func TestMigrate_CitationsBecomeLeft(t *testing.T) {
 	}
 	if ev["rewritten"] != float64(0) {
 		t.Errorf("event rewritten: want 0, got %v", ev["rewritten"])
+	}
+	// §10: unresolved must list the left IDs in the order they were gathered.
+	unresolved, ok := ev["unresolved"].([]any)
+	if !ok || len(unresolved) != 2 {
+		t.Errorf("event unresolved: want [c1 q1], got %v", ev["unresolved"])
+	} else {
+		for i, want := range []string{"c1", "q1"} {
+			if got, _ := unresolved[i].(string); got != want {
+				t.Errorf("event unresolved[%d]: want %q, got %q", i, want, got)
+			}
+		}
 	}
 
 	// File should now be format 2.
