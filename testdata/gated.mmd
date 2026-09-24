@@ -12,8 +12,6 @@ flowchart TB
         consensus --"requires"--> safety
         safety --"enables"--> liveness
     end
-    subgraph reserve["Concepts held in reserve"]
-    end
     subgraph testing["Open tests validating and teaching User understanding"]
         %% pending answer question
         q1["What makes a value committed<br/>5e7c3c262e6b@algo.txt:51-60"]:::probe_1
