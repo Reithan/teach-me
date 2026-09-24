@@ -18,21 +18,22 @@ func init() {
 // migrateRule1 rewrites plain-path citations that have a stored commit SHA in
 // the event log to the git: locator form (§13.2 rule 1).
 //
-// It returns ok=true when the citation was successfully rewritten and the
-// content hash still matches. It returns ok=false with a reason when the
-// rule does not apply or the hash check fails.
-func migrateRule1(mctx *migrateContext, id, citeStr string, _ *graph.Graph) (newLocator, reason string, ok bool) {
-	c, err := icite.Parse(citeStr)
+// Returns ok=true on a successful rewrite. Returns ok=false with a non-empty
+// reason to stop the pipeline (this rule owns the citation but cannot convert
+// it). Returns ok=false with an empty reason when the citation is not a plain
+// path (other rules may handle it).
+func migrateRule1(mctx *migrateContext, ref citationRef, _ *graph.Graph) (newLocator, reason string, ok bool) {
+	c, err := icite.Parse(ref.cite)
 	if err != nil {
 		return "", "", false
 	}
-	// Only plain paths; git: and URI locators are left for other rules.
+	// Only plain paths; git: and URI locators pass to other rules (empty reason).
 	if icite.IsGit(c.File) || icite.IsURI(c.File) {
 		return "", "", false
 	}
 
 	// Look up the commit from the most-recent add/q event for this id.
-	ev := mctx.eventForID(id)
+	ev := mctx.eventForID(ref.id)
 	if ev == nil {
 		return "", "no event found for id", false
 	}

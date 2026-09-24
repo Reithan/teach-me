@@ -31,12 +31,18 @@ type migrateContext struct {
 	eventForID func(id string) map[string]any
 }
 
-// migrateRule is a function that tries to convert a citation string to the
-// format-2 locator form. id is the concept or question ID that owns the cite.
-// It returns the new locator and a short reason when ok is true, or a reason
-// string explaining why no conversion was done when ok is false. Later PRs
-// append rules to the global migrateRules slice.
-type migrateRule func(mctx *migrateContext, id, cite string, g *graph.Graph) (newLocator, reason string, ok bool)
+// migrateRule is a function that tries to convert one citation to the
+// format-2 locator form. ref carries both the owning ID and the citation string.
+//
+// Return semantics:
+//   - ok=true: citation was converted; use newLocator, stop the pipeline.
+//   - ok=false, non-empty reason: this rule owns the citation but cannot
+//     convert it; stop the pipeline and report reason as the left-reason.
+//   - ok=false, empty reason: rule does not apply; try the next rule.
+//
+// When no rule claims the citation (all return ok=false with empty reason) the
+// left-reason is "plain path".
+type migrateRule func(mctx *migrateContext, ref citationRef, g *graph.Graph) (newLocator, reason string, ok bool)
 
 // migrateRules is the ordered pipeline applied to each citation. PR 1 ships
 // no rules; later PRs append entries here so only the new file needs to change.
@@ -292,15 +298,19 @@ func gatherCitations(g *graph.Graph) []citationRef {
 }
 
 // runMigrateRules applies each rule in migrateRules to every citation.
-// When no rule converts a citation, the last non-empty rule reason is used; if
-// no rule even attempted the citation the reason is "plain path".
+//
+// Pipeline semantics per citation:
+//   - rule returns ok=true  → rewrite; stop.
+//   - rule returns ok=false with non-empty reason → stop; left with that reason.
+//   - rule returns ok=false with empty reason → not this rule's case; try next.
+//   - no rule claimed the citation → left with reason "plain path".
 func runMigrateRules(mctx *migrateContext, refs []citationRef, g *graph.Graph) []migrateResult {
 	results := make([]migrateResult, 0, len(refs))
 	for _, ref := range refs {
+		leftReason := "plain path"
 		converted := false
-		lastReason := "plain path"
 		for _, rule := range migrateRules {
-			newLoc, reason, ok := rule(mctx, ref.id, ref.cite, g)
+			newLoc, reason, ok := rule(mctx, ref, g)
 			if ok {
 				results = append(results, migrateResult{
 					id:        ref.id,
@@ -313,14 +323,17 @@ func runMigrateRules(mctx *migrateContext, refs []citationRef, g *graph.Graph) [
 				break
 			}
 			if reason != "" {
-				lastReason = reason
+				// Rule owns the citation but cannot convert it: stop here.
+				leftReason = reason
+				break
 			}
+			// Empty reason: rule does not apply; continue to next rule.
 		}
 		if !converted {
 			results = append(results, migrateResult{
 				id:        ref.id,
 				oldCite:   ref.cite,
-				reason:    lastReason,
+				reason:    leftReason,
 				rewritten: false,
 			})
 		}
