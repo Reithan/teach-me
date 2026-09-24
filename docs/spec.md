@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.21
+# tm: teaching-map CLI, draft spec v0.22
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.20: `tm answer --concede` records a learner-declared fail without a grader; §6, §8, §9, §10, §12, §14 updated.
+Changes from v0.21: repo content has one citation form (`git:` locators with machine-local aliases) and plain paths lose git semantics; the conversion and fetch cache ships from §15 into §13; teacher aids get a home (`aids-dir`) and cannot be cited; a graph carries a `%% tm:format` marker and `tm migrate` upgrades a prior-version graph; §3, §4.4, §4.6, §6, §7, §10, §11, §12, §13, §14, §15, §16 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
