@@ -169,12 +169,26 @@ move. The full state machine is spec §12; the phases:
      questions build on the passed foundations, record the gap with `tm gap`,
      then teach with `tm q --teach --re <qid>`. Once the teach batch resolves
      all pass, the locked fallback probes become answerable.
-   - gated → follow the `fix:` line in order: (1) `tm activate <parent>` if a
-     reserve parent fits the GAP; (2) spawn the planner to add the missing
-     foundation with `--child`; (3) `tm reopen <parent>` if a passed parent must
-     be retested. `--override "<reason>"` only when the learner says the gate
-     tripped on contested verdicts; never use it on your own read of the verdicts,
-     since that is the bias grader isolation exists to block.
+   - gated → `q`, `ask`, and `answer` refuse on the concept until you take one
+     of four exits. Take one now, before moving to another concept: a gate left
+     standing is still there when you come back, and the exits are the same.
+     Two failed probe batches with a teaching round between them means the gap
+     is upstream, so the first three exits each name a parent:
+     1. `tm activate <parent>` when a reserve parent covers the GAP; the
+        `fix:` line lists them. Cheapest, since the foundation is already
+        mapped and cited.
+     2. Spawn the planner in `extend around <concept>` mode to add the missing
+        foundation with `--child <concept>`, when no mapped parent covers the
+        GAP.
+     3. `tm reopen <parent>` when a passed parent is the real gap: the learner
+        passed it earlier, but the GAP shows they did not keep it.
+     4. `--override "<reason>"` on the refused command when the learner says
+        the gate tripped on contested verdicts or on probes outside the
+        concept's scope. Ask the learner; never use it on your own read of the
+        verdicts, since that is the bias grader isolation exists to block.
+     After exits 1 to 3 the concept stays blocked until that parent passes,
+     then reopens with its old batches discounted. After exit 4 it reopens at
+     once.
    - learner asks to skip a concept → `tm reserve <concept>` if it has no
      questions. It stops blocking its children and can be activated later.
 
