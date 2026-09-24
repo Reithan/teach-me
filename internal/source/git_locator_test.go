@@ -376,3 +376,120 @@ func TestGitLocator_ConverterCases(t *testing.T) {
 		}
 	})
 }
+
+// TestGitLocator_ParseGitError covers the early-return path when the locator
+// starts with "git:" but fails cite.ParseGit (e.g. missing "@" separator).
+func TestGitLocator_ParseGitError(t *testing.T) {
+	gitBin := skipIfNoGit(t)
+	dir := t.TempDir()
+	initGitRepo(t, dir, "content\n")
+
+	cfgContent := "git=" + gitBin + "\nrepo r = " + dir + "\n"
+	cfg, err := source.LoadConfigPaths(writeConfigFile(t, cfgContent), "")
+	if err != nil {
+		t.Fatalf("LoadConfigPaths: %v", err)
+	}
+	r := source.NewResolverWithConfig(cfg, dir)
+
+	// "git:no-at-sign" has no "@", so ParseGit returns an error immediately.
+	c := cite.Citation{File: "git:no-at-sign", Start: 1, End: 1}
+	_, _, readErr := r.Read(c)
+	if readErr == nil {
+		t.Fatal("Read: want error for unparseable git: locator, got nil")
+	}
+	if !strings.Contains(readErr.Error(), "missing @") {
+		t.Errorf("Read error = %q; want to contain 'missing @'", readErr.Error())
+	}
+}
+
+// TestGitLocator_DiffSecondRefMissing covers the error path when a diff
+// locator's second ref does not resolve.
+func TestGitLocator_DiffSecondRefMissing(t *testing.T) {
+	gitBin := skipIfNoGit(t)
+	dir := t.TempDir()
+
+	const initial = "line1\nline2\n"
+	const updated = "line1 changed\nline2\n"
+	sha1, _ := initGitRepo2Commits(t, dir, initial, updated)
+	s1 := short12(sha1)
+
+	cfgContent := "git=" + gitBin + "\nrepo r = " + dir + "\n"
+	cfg, err := source.LoadConfigPaths(writeConfigFile(t, cfgContent), "")
+	if err != nil {
+		t.Fatalf("LoadConfigPaths: %v", err)
+	}
+	r := source.NewResolverWithConfig(cfg, dir)
+
+	// Valid first ref, nonexistent second ref.
+	c := cite.Citation{File: "git:r@" + s1 + "..nonexistent-branch-xyz", Start: 1, End: 1}
+	_, _, readErr := r.Read(c)
+	if readErr == nil {
+		t.Fatal("Read: want error for nonexistent second ref, got nil")
+	}
+	if !strings.Contains(readErr.Error(), "does not resolve") {
+		t.Errorf("Read error = %q; want to contain 'does not resolve'", readErr.Error())
+	}
+}
+
+// TestGitLocator_GitCommandFails covers the error path when the underlying git
+// command fails (e.g., file does not exist at the given ref).
+func TestGitLocator_GitCommandFails(t *testing.T) {
+	gitBin := skipIfNoGit(t)
+	dir := t.TempDir()
+	initGitRepo(t, dir, "content\n")
+
+	// Get the HEAD SHA.
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--short=12", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	sha := strings.TrimSpace(string(out))
+
+	cfgContent := "git=" + gitBin + "\nrepo r = " + dir + "\n"
+	cfg, cfgErr := source.LoadConfigPaths(writeConfigFile(t, cfgContent), "")
+	if cfgErr != nil {
+		t.Fatalf("LoadConfigPaths: %v", cfgErr)
+	}
+	r := source.NewResolverWithConfig(cfg, dir)
+
+	// Request a file that does not exist in the commit.
+	c := cite.Citation{File: "git:r@" + sha + ":does_not_exist.txt", Start: 1, End: 1}
+	_, _, readErr := r.Read(c)
+	if readErr == nil {
+		t.Fatal("Read: want error for missing file, got nil")
+	}
+	if !strings.Contains(readErr.Error(), "git command failed") {
+		t.Errorf("Read error = %q; want to contain 'git command failed'", readErr.Error())
+	}
+}
+
+// TestGitLocator_SliceOutOfBounds covers the error path when the requested
+// line range exceeds the output of a commit-show.
+func TestGitLocator_SliceOutOfBounds(t *testing.T) {
+	gitBin := skipIfNoGit(t)
+	dir := t.TempDir()
+	initGitRepo(t, dir, "line1\nline2\n")
+
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--short=12", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	sha := strings.TrimSpace(string(out))
+
+	cfgContent := "git=" + gitBin + "\nrepo r = " + dir + "\n"
+	cfg, cfgErr := source.LoadConfigPaths(writeConfigFile(t, cfgContent), "")
+	if cfgErr != nil {
+		t.Fatalf("LoadConfigPaths: %v", cfgErr)
+	}
+	r := source.NewResolverWithConfig(cfg, dir)
+
+	// Commit form (no path, no ref-b): request a line range far beyond output.
+	c := cite.Citation{File: "git:r@" + sha, Start: 1, End: 999999}
+	_, _, readErr := r.Read(c)
+	if readErr == nil {
+		t.Fatal("Read: want error for out-of-bounds slice, got nil")
+	}
+	if !strings.Contains(readErr.Error(), "out of bounds") {
+		t.Errorf("Read error = %q; want to contain 'out of bounds'", readErr.Error())
+	}
+}

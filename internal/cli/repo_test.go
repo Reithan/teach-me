@@ -347,3 +347,192 @@ func TestRepo_QGitLocator(t *testing.T) {
 		t.Errorf("graph does not contain SHA-pinned locator %q;\ngraph:\n%s", wantLocator, graphData)
 	}
 }
+
+// ── error-path coverage ────────────────────────────────────────────────────────
+
+// TestRepo_AddMissingArgs verifies that `tm repo add` with too few arguments
+// exits 3 and reports the usage error.
+func TestRepo_AddMissingArgs(t *testing.T) {
+	freshConfig(t)
+	errlogPath := tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	_, errOut, code := run(t, "repo", "add")
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(errOut, "repo add requires") {
+		t.Errorf("want 'repo add requires' in stderr; got %q", errOut)
+	}
+	rows := readErrlog(t, errlogPath)
+	if len(rows) == 0 {
+		t.Fatal("expected errlog row")
+	}
+	if !strings.Contains(rows[0].Err, "repo add requires") {
+		t.Errorf("errlog Err = %q; want 'repo add requires'", rows[0].Err)
+	}
+}
+
+// TestRepo_RmMissingArg verifies that `tm repo rm` with no alias exits 3.
+func TestRepo_RmMissingArg(t *testing.T) {
+	freshConfig(t)
+	errlogPath := tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	_, errOut, code := run(t, "repo", "rm")
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(errOut, "repo rm requires") {
+		t.Errorf("want 'repo rm requires' in stderr; got %q", errOut)
+	}
+	rows := readErrlog(t, errlogPath)
+	if len(rows) == 0 {
+		t.Fatal("expected errlog row")
+	}
+	if !strings.Contains(rows[0].Err, "repo rm requires") {
+		t.Errorf("errlog Err = %q; want 'repo rm requires'", rows[0].Err)
+	}
+}
+
+// TestRepo_RmInvalidAlias verifies that `tm repo rm` with a bad alias exits 3.
+func TestRepo_RmInvalidAlias(t *testing.T) {
+	freshConfig(t)
+	errlogPath := tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	_, errOut, code := run(t, "repo", "rm", "bad.alias")
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(errOut, "invalid alias") {
+		t.Errorf("want 'invalid alias' in stderr; got %q", errOut)
+	}
+	rows := readErrlog(t, errlogPath)
+	if len(rows) == 0 {
+		t.Fatal("expected errlog row")
+	}
+	if !strings.Contains(rows[0].Err, "invalid alias") {
+		t.Errorf("errlog Err = %q; want 'invalid alias'", rows[0].Err)
+	}
+}
+
+// TestRepo_AddLoadConfigFail verifies that `tm repo add` exits 3 when the
+// source config is unreadable (a .tmconfig with an invalid repo alias).
+func TestRepo_AddLoadConfigFail(t *testing.T) {
+	freshConfig(t)
+	tempErrlog(t)
+	dir := t.TempDir()
+	repoDir := t.TempDir()
+	t.Chdir(dir)
+
+	// Write a .tmconfig that has an invalid repo alias to trigger a parse error.
+	badCfg := filepath.Join(dir, ".tmconfig")
+	if err := os.WriteFile(badCfg, []byte("repo bad.alias = /some/path\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errOut, code := run(t, "repo", "add", "r", repoDir)
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(errOut, "source config") {
+		t.Errorf("want 'source config' in stderr; got %q", errOut)
+	}
+}
+
+// TestRepo_ListLoadConfigFail verifies that `tm repo list` exits 3 when the
+// source config is unreadable.
+func TestRepo_ListLoadConfigFail(t *testing.T) {
+	freshConfig(t)
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	// Write a .tmconfig with an invalid alias to force LoadConfig to error.
+	badCfg := filepath.Join(dir, ".tmconfig")
+	if err := os.WriteFile(badCfg, []byte("repo bad.alias = /some/path\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errOut, code := run(t, "repo", "list")
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(errOut, "source config") {
+		t.Errorf("want 'source config' in stderr; got %q", errOut)
+	}
+}
+
+// TestRepo_RmConfigSetFail verifies that `tm repo rm` exits 3 when config.Set
+// fails because the user config path is a directory, not a file.
+func TestRepo_RmConfigSetFail(t *testing.T) {
+	freshConfig(t)
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	// Build the user config path and create it as a directory so config.Set
+	// fails with EISDIR on ReadFile.
+	xdg := os.Getenv("XDG_CONFIG_HOME")
+	tmDir := filepath.Join(xdg, "tm")
+	userConfigPath := filepath.Join(tmDir, "config")
+	if err := os.MkdirAll(userConfigPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll user config dir: %v", err)
+	}
+	// os.Stat on the path (a directory) succeeds, so repoRM will call config.Set.
+
+	_, errOut, code := run(t, "repo", "rm", "myrepo")
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(errOut, "cannot write") {
+		t.Errorf("want 'cannot write' in stderr; got %q", errOut)
+	}
+}
+
+// TestRepo_AddNotGitRepo verifies that `tm repo add` exits 3 when the git
+// executable is configured but the target directory is not a git repo.
+func TestRepo_AddNotGitRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	freshConfig(t)
+	tempErrlog(t)
+
+	gitBin, _ := exec.LookPath("git")
+	notGitDir := t.TempDir() // plain directory, not a git repo
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	// Set up user config with git configured so the git-repo check runs.
+	repoSetupXDG(t, fmt.Sprintf("git=%s\n", gitBin))
+
+	_, errOut, code := run(t, "repo", "add", "r", notGitDir)
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(errOut, "not a git repo") {
+		t.Errorf("want 'not a git repo' in stderr; got %q", errOut)
+	}
+}
+
+// TestRepo_ListEmpty verifies that `tm repo list` with no repos outputs nothing.
+func TestRepo_ListEmpty(t *testing.T) {
+	freshConfig(t)
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	out, _, code := run(t, "repo", "list")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d", code)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("want empty output for empty repo list, got %q", out)
+	}
+}

@@ -1186,3 +1186,27 @@ func TestCheck17_FormatAbsentAccepts(t *testing.T) {
 		}
 	}
 }
+
+// check14 ─────────────────────────────────────────────────────────────────────
+
+// TestCheck14_GitLocatorRawColon verifies that a git: locator with a raw ":"
+// in the path (which should be percent-encoded as %3A) produces a lint
+// violation even though cite.Parse accepts the citation (it splits on the
+// last colon to extract the range, so the raw colon ends up in the locator).
+func TestCheck14_GitLocatorRawColon(t *testing.T) {
+	// Citation: hash@git:r@sha1234567890:file:raw:1-5
+	// cite.Parse splits on last ":" → locator = "git:r@sha1234567890:file:raw"
+	// cite.ParseGit("git:r@sha1234567890:file:raw") → rawPath="file:raw" → error.
+	data := makeConceptGraph(`Concept<br/>abcdef012345@git:r@sha1234567890:file:raw:1-5`)
+	viols := lint.Check(data, defaultCfg())
+	found := false
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "raw :") || strings.Contains(v.Msg, "percent-encode") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected git: structural error violation; got %v", viols)
+	}
+}
