@@ -89,6 +89,12 @@ type Command struct {
 	// Only grade sets this to true.
 	ForbidTeacher bool
 
+	// SkipFormatCheck is true when the command must not be refused for an
+	// old-format graph. Set for migrate (upgrades the graph), lint (diagnoses
+	// it), and new (creates the file). help/--version never reach the check.
+	// load is left false so the loadRun handler can check the positional file.
+	SkipFormatCheck bool
+
 	// Run is the command handler. A nil Run means the command is declared with
 	// full usage metadata but is not yet implemented in this build. The
 	// dispatcher emits "err: <name> is not implemented in this build" (exit 3)

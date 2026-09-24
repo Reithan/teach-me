@@ -2,9 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
+	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -29,10 +31,30 @@ func loadRun(ctx *Context) int {
 
 	// Validate: the file must exist and parse successfully.
 	cfg := state.ConfigFromEnv()
-	if _, loadErr := state.Load(file, cfg); loadErr != nil {
+	s, loadErr := state.Load(file, cfg)
+	if loadErr != nil {
 		ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)
 		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
 		return 3
+	}
+
+	// Format check (§4.6): refuse a graph whose format differs from CurrentFormat.
+	// Done here (on the positional file) rather than in the central dispatcher,
+	// since at load time there is no configured pointer yet to resolve.
+	if n := s.Graph().FormatN(); n != graph.CurrentFormat {
+		base := filepath.Base(file)
+		var errMsg, fixMsg string
+		if n < graph.CurrentFormat {
+			errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
+			fixMsg = fmt.Sprintf("tm migrate %s", file)
+		} else {
+			errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
+			fixMsg = "upgrade tm"
+		}
+		ctx.ErrMsg = errMsg
+		ctx.FixMsg = fixMsg
+		writeErrFix(ctx.ErrOut, errMsg, fixMsg)
+		return 1
 	}
 
 	// Write the pointer only on success, so a failed load changes nothing.
