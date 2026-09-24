@@ -295,6 +295,22 @@ var Table = []Command{
 		SkipFormatCheck: true, // migrate upgrades the format; must accept old format
 		Run:             migrateRun,
 	},
+	{
+		// repo manages machine-local repo aliases for git: locators (§13).
+		// Subcommands: add <alias> <path> [--local], rm <alias>, list.
+		Name: "repo",
+		PosArgs: []PosArg{
+			{Name: "add|rm|list", Values: []string{"add", "rm", "list"}},
+			{Name: "[<alias>]", Optional: true},
+			{Name: "[<path>]", Optional: true},
+		},
+		Flags: []FlagSpec{
+			{Name: "local"},
+		},
+		ForbidGrader:    true,
+		SkipFormatCheck: true, // repo commands do not touch a graph
+		Run:             repoRun,
+	},
 }
 
 // tableIndex is a name → Command lookup map built from Table at init time.
