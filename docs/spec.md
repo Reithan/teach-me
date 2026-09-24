@@ -174,7 +174,7 @@ The writer escapes `"` as `#quot;`, `'` as `#39;`, `#` as `#35;`, `<` and `>` as
 |---|---|
 | `hash` | first 12 hex characters of SHA-256 over the normalized cited text. Fixed width. Parsed first; the `@` after it is the delimiter, so `@` inside a locator is harmless |
 | `locator` | one of three kinds, distinguished by prefix with no per-kind syntax: a **plain path** relative to `TM_SRC_ROOT` or absolute (`/...`, or a drive letter on Windows), read from disk with no git semantics; a **`git:` URI** naming committed content in a machine-local repo (below); or a **fetched URI** with a scheme (`https://...`) |
-| `START-END` | 1-based inclusive line range into the resolved text, after conversion if any. Split on the last colon; the range never contains one, so scheme separators, ports, and drive letters are harmless |
+| `START-END` | 1-based inclusive line range into the resolved text, after conversion if any. Split on the last colon; the range never contains one, so scheme separators, ports, drive letters, the `git:` scheme colon, and the `<sha>:<path>` separator are harmless |
 
 The model never types the hash. `tm add` and `tm q` accept the hashless form `<locator>:START-END`, resolve the text, compute the hash, and write the full form. The hash is a content hash of the cited lines, not a commit hash; the position invites that reading, so the spec says so here.
 
