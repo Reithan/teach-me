@@ -132,6 +132,33 @@ var Table = []Command{
 		Run:          reopenRun,
 	},
 	{
+		Name: "reserve",
+		PosArgs: []PosArg{
+			{Name: "<concept>"},
+		},
+		ForbidGrader: true,
+		Run:          reserveRun,
+	},
+	{
+		Name: "activate",
+		PosArgs: []PosArg{
+			{Name: "<concept>"},
+		},
+		ForbidGrader: true,
+		Run:          activateRun,
+	},
+	{
+		Name: "prune",
+		PosArgs: []PosArg{
+			{Name: "<goal>"},
+		},
+		Flags: []FlagSpec{
+			{Name: "keep", TakesValue: true, ValueName: "N"},
+		},
+		ForbidGrader: true,
+		Run:          pruneRun,
+	},
+	{
 		Name: "q",
 		PosArgs: []PosArg{
 			{Name: "<concept>"},
@@ -227,6 +254,7 @@ var Table = []Command{
 			{Name: "hops", TakesValue: true, ValueName: "N"},
 			{Name: "fulltext"},
 			{Name: "passed-only"},
+			{Name: "reserve"},
 		},
 		ForbidGrader: true,
 		Run:          reportRun,
