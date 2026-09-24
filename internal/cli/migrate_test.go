@@ -99,12 +99,12 @@ func TestMigrate(t *testing.T) {
 		graphCont   string
 		args        []string
 		wantExit    int
-		wantOut     string   // substring expected in stdout
-		wantErr     string   // substring expected in stderr (for refusals)
-		wantFormat2 bool     // file should have FormatN()==2 after run
-		wantEvent   bool     // a migrate event should be appended
-		checkErrlog bool     // verify an errlog row was written
-		dryRun      bool     // --dry-run: file must remain unchanged
+		wantOut     string // substring expected in stdout
+		wantErr     string // substring expected in stderr (for refusals)
+		wantFormat2 bool   // file should have FormatN()==2 after run
+		wantEvent   bool   // a migrate event should be appended
+		checkErrlog bool   // verify an errlog row was written
+		dryRun      bool   // --dry-run: file must remain unchanged
 	}{
 		{
 			name:        "empty format-1 graph gets marker",
@@ -176,15 +176,20 @@ func TestMigrate(t *testing.T) {
 				t.Fatalf("parse graph after run: %v", err)
 			}
 
-			if tc.dryRun {
+			switch {
+			case tc.dryRun:
 				// File must be unchanged: same bytes as original.
 				if string(afterData) != tc.graphCont {
 					t.Errorf("dry-run: file was modified")
 				}
-			} else if tc.wantFormat2 && afterG.FormatN() != 2 {
-				t.Errorf("format: want 2, got %d", afterG.FormatN())
-			} else if !tc.wantFormat2 && afterG.FormatN() == 2 {
-				t.Errorf("format: should not be 2; got %d", afterG.FormatN())
+			case tc.wantFormat2:
+				if afterG.FormatN() != 2 {
+					t.Errorf("format: want 2, got %d", afterG.FormatN())
+				}
+			default:
+				if afterG.FormatN() == 2 {
+					t.Errorf("format: should not be 2; got %d", afterG.FormatN())
+				}
 			}
 
 			// Check event log.

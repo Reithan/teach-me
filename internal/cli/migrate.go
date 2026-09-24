@@ -282,4 +282,3 @@ func applyRewrites(g *graph.Graph, rewriteMap map[string]string) {
 		}
 	}
 }
-
