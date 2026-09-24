@@ -67,12 +67,19 @@ func (p *parser) parse() (*Graph, error) {
 		return nil, fmt.Errorf("graph: expected \"flowchart TB\", got %q", line)
 	}
 
-	// Parse three blocks in fixed order.
+	// Parse blocks in fixed order: passed, untested, reserve (optional), testing.
 	if err := p.parseBlock(g, BlockPassed); err != nil {
 		return nil, err
 	}
 	if err := p.parseBlock(g, BlockUntested); err != nil {
 		return nil, err
+	}
+	// The reserve block is optional: files written before v0.3 may lack it.
+	// Peek at the next non-blank line: if it begins "subgraph reserve", parse it.
+	if p.peekNextSubgraphID() == "reserve" {
+		if err := p.parseBlock(g, BlockReserve); err != nil {
+			return nil, err
+		}
 	}
 	if err := p.parseBlock(g, BlockTesting); err != nil {
 		return nil, err
@@ -108,6 +115,36 @@ func (p *parser) parseFrontmatter() (string, error) {
 	return "", fmt.Errorf("graph: unclosed frontmatter block")
 }
 
+// parseSubgraphID extracts the subgraph ID from a "subgraph ID[...]" line.
+// Returns the empty string when the line is not a subgraph header.
+func parseSubgraphID(t string) string {
+	if !strings.HasPrefix(t, "subgraph ") {
+		return ""
+	}
+	rest := strings.TrimPrefix(t, "subgraph ")
+	idx := strings.IndexByte(rest, '[')
+	if idx < 0 {
+		return rest
+	}
+	return rest[:idx]
+}
+
+// peekNextSubgraphID skips blank lines and returns the subgraph ID from the
+// next "subgraph ID[...]" line, or "" if the next non-blank line is not one.
+func (p *parser) peekNextSubgraphID() string {
+	for i := p.pos; i < len(p.lines); i++ {
+		t := strings.TrimSpace(p.lines[i])
+		if t == "" {
+			continue
+		}
+		if strings.HasPrefix(t, "subgraph ") {
+			return parseSubgraphID(t)
+		}
+		return ""
+	}
+	return ""
+}
+
 // blockIDStr returns the expected subgraph identifier string for b.
 func blockIDStr(b Block) string {
 	switch b {
@@ -115,6 +152,8 @@ func blockIDStr(b Block) string {
 		return "passed"
 	case BlockUntested:
 		return "untested"
+	case BlockReserve:
+		return "reserve"
 	case BlockTesting:
 		return "testing"
 	default:
@@ -150,6 +189,8 @@ func (p *parser) parseBlock(g *Graph, block Block) error {
 		g.PassedTitle = title
 	case BlockUntested:
 		g.UntestedTitle = title
+	case BlockReserve:
+		g.ReserveTitle = title
 	case BlockTesting:
 		g.TestingTitle = title
 	}
@@ -313,9 +354,12 @@ func parseNode(g *Graph, block Block, t string, comments []string) error {
 			return fmt.Errorf("graph: concept %q declared in testing block", id)
 		}
 		cn := parseConceptNode(id, block, label, class, comments)
-		if block == BlockPassed {
+		switch block {
+		case BlockPassed:
 			g.PassedConcepts = append(g.PassedConcepts, cn)
-		} else {
+		case BlockReserve:
+			g.ReserveConcepts = append(g.ReserveConcepts, cn)
+		default:
 			g.UntestedConcepts = append(g.UntestedConcepts, cn)
 		}
 	}

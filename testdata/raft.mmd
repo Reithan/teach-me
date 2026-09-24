@@ -21,6 +21,10 @@ flowchart TB
         leader_election --"enables"--> commit_rules
         log_matching --"required by"--> commit_rules
     end
+    subgraph reserve["Concepts held in reserve"]
+        log_compaction["Log compaction: snapshots and the last included index<br/>9f3a2b1c8e4d@raft.txt:301-340"]
+        log_compaction --"bounds"--> log_matching
+    end
     subgraph testing["Open tests validating and teaching User understanding"]
         q1["Same index and term implies same entry<br/>0503cfc52eb1@raft.txt:192-201"]:::probe_1
         q2["Same index and term implies identical prefix<br/>fbb0469c4812@raft.txt:202-215"]:::probe_1

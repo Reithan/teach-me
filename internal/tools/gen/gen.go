@@ -122,6 +122,7 @@ func GraphRand(r *rand.Rand) *graph.Graph {
 		Frontmatter:   defaultFrontmatter,
 		PassedTitle:   "Concepts User understands",
 		UntestedTitle: "Concepts User has not been tested on",
+		ReserveTitle:  "Concepts held in reserve",
 		TestingTitle:  "Open tests validating and teaching User understanding",
 	}
 
@@ -242,6 +243,9 @@ func BuildSidecar(g *graph.Graph) map[string]string {
 	}
 	for _, c := range g.UntestedConcepts {
 		s[c.ID] = "untested"
+	}
+	for _, c := range g.ReserveConcepts {
+		s[c.ID] = "reserve"
 	}
 	for _, item := range g.TestingItems {
 		if item.Q != nil {
