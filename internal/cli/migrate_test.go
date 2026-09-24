@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reithan/teach-me/internal/cli"
 	"github.com/reithan/teach-me/internal/graph"
 )
 
@@ -361,5 +362,100 @@ func TestMigrate_PositionalArgBeatsConfig(t *testing.T) {
 	afterG, _ := graph.Parse(afterData)
 	if afterG.FormatN() != 2 {
 		t.Errorf("format: want 2, got %d", afterG.FormatN())
+	}
+}
+
+// TestBuildEventForID verifies the contract that M15c migrate rules rely on:
+// (a) two add events for the same ID → later one wins,
+// (b) q events keyed by the "q" field are found by that qid,
+// (c) unknown IDs return nil,
+// (d) malformed JSON lines are skipped without corrupting the index.
+func TestBuildEventForID(t *testing.T) {
+	// Each case writes a log, builds an index, and checks individual lookups.
+	tests := []struct {
+		name    string
+		logData string
+		lookups []struct {
+			id      string
+			wantNil bool
+			wantKV  [2]string // expected [key, value] in the returned event; ignored if wantNil
+		}
+	}{
+		{
+			name: "(a) later add event wins for same concept ID",
+			logData: `{"ev":"add","id":"c1","x":"first"}` + "\n" +
+				`{"ev":"add","id":"c1","x":"second"}` + "\n",
+			lookups: []struct {
+				id      string
+				wantNil bool
+				wantKV  [2]string
+			}{
+				{id: "c1", wantKV: [2]string{"x", "second"}},
+			},
+		},
+		{
+			name:    "(b) q event found by its qid",
+			logData: `{"ev":"q","q":"q1","scope":"narrow"}` + "\n",
+			lookups: []struct {
+				id      string
+				wantNil bool
+				wantKV  [2]string
+			}{
+				{id: "q1", wantKV: [2]string{"scope", "narrow"}},
+			},
+		},
+		{
+			name:    "(c) unknown ID returns nil",
+			logData: `{"ev":"add","id":"known","x":"y"}` + "\n",
+			lookups: []struct {
+				id      string
+				wantNil bool
+				wantKV  [2]string
+			}{
+				{id: "unknown", wantNil: true},
+			},
+		},
+		{
+			name: "(d) malformed JSON line skipped; surrounding events still indexed",
+			logData: `{"ev":"add","id":"before","x":"ok"}` + "\n" +
+				`not valid json` + "\n" +
+				`{"ev":"add","id":"after","x":"ok"}` + "\n",
+			lookups: []struct {
+				id      string
+				wantNil bool
+				wantKV  [2]string
+			}{
+				{id: "before", wantKV: [2]string{"x", "ok"}},
+				{id: "after", wantKV: [2]string{"x", "ok"}},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "g.mmd.jsonl")
+			if err := os.WriteFile(logPath, []byte(tc.logData), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			lookup := cli.BuildEventForID(logPath)
+
+			for _, q := range tc.lookups {
+				ev := lookup(q.id)
+				if q.wantNil {
+					if ev != nil {
+						t.Errorf("lookup(%q): want nil, got %v", q.id, ev)
+					}
+					continue
+				}
+				if ev == nil {
+					t.Errorf("lookup(%q): want event, got nil", q.id)
+					continue
+				}
+				got, _ := ev[q.wantKV[0]].(string)
+				if got != q.wantKV[1] {
+					t.Errorf("lookup(%q)[%q]: want %q, got %q", q.id, q.wantKV[0], q.wantKV[1], got)
+				}
+			}
+		})
 	}
 }
