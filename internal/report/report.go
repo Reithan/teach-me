@@ -40,27 +40,49 @@ type TextReader func(citeStr, srcRoot string) (text string, drifted bool, err er
 
 // ── internal helpers ─────────────────────────────────────────────────────────
 
-// buildConceptMap returns a map from concept ID → *graph.ConceptNode.
+// buildConceptMap returns a map from concept ID → *graph.ConceptNode for all
+// four blocks (passed, untested, reserve, and their edges). Reserve concepts
+// are included so that edge resolution works correctly; Walk/WalkAll exclude
+// them from output until --reserve is implemented (M14c).
 func buildConceptMap(g *graph.Graph) map[string]*graph.ConceptNode {
-	all := make(map[string]*graph.ConceptNode, len(g.PassedConcepts)+len(g.UntestedConcepts))
+	all := make(map[string]*graph.ConceptNode, len(g.PassedConcepts)+len(g.UntestedConcepts)+len(g.ReserveConcepts))
 	for _, c := range g.PassedConcepts {
 		all[c.ID] = c
 	}
 	for _, c := range g.UntestedConcepts {
 		all[c.ID] = c
 	}
+	for _, c := range g.ReserveConcepts {
+		all[c.ID] = c
+	}
 	return all
 }
 
+// reserveSet returns a set of concept IDs that are in the reserve block.
+func reserveSet(g *graph.Graph) map[string]bool {
+	m := make(map[string]bool, len(g.ReserveConcepts))
+	for _, c := range g.ReserveConcepts {
+		m[c.ID] = true
+	}
+	return m
+}
+
 // conceptParentMap returns parentMap[childID] = []parentConceptIDs.
-// Only concept-to-concept edges are included.
+// Only concept-to-concept edges between non-reserve concepts are included;
+// reserve parents are excluded from the walk so they never appear in reports
+// (spec §6: "reserve concepts are omitted unless --reserve").
 func conceptParentMap(g *graph.Graph, all map[string]*graph.ConceptNode) map[string][]string {
+	reserve := reserveSet(g)
 	pm := make(map[string][]string, len(all))
 	for _, e := range g.Edges {
 		if _, ok := all[e.From]; !ok {
 			continue
 		}
 		if _, ok := all[e.To]; !ok {
+			continue
+		}
+		// Skip edges involving reserve concepts (omitted from reports).
+		if reserve[e.From] || reserve[e.To] {
 			continue
 		}
 		pm[e.To] = append(pm[e.To], e.From)
@@ -282,8 +304,11 @@ func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
 
 	all := buildConceptMap(g)
 	parentMap := conceptParentMap(g, all)
+	reserve := reserveSet(g)
 
 	// Build child map (concept-level): childMap[parentID] = []childIDs.
+	// Exclude reserve concepts so they are never traversed as BFS roots or
+	// children (they are omitted from report output by default until M14c).
 	childMap := make(map[string][]string, len(all))
 	seenEdge := make(map[[2]string]bool)
 	for _, e := range g.Edges {
@@ -291,6 +316,10 @@ func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
 			continue
 		}
 		if _, ok := all[e.To]; !ok {
+			continue
+		}
+		// Skip edges involving reserve concepts.
+		if reserve[e.From] || reserve[e.To] {
 			continue
 		}
 		key := [2]string{e.From, e.To}
@@ -301,7 +330,7 @@ func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
 		childMap[e.From] = append(childMap[e.From], e.To)
 	}
 
-	// BFS from roots (concepts with no parents), following child edges.
+	// BFS from roots (non-reserve concepts with no parents), following child edges.
 	type bfsItem struct {
 		id    string
 		depth int
@@ -309,6 +338,10 @@ func WalkAll(g *graph.Graph, s *state.State, depth int) []ConceptInfo {
 	visited := make(map[string]bool, len(all))
 	var queue []bfsItem
 	for id := range all {
+		// Reserve concepts are excluded from report output.
+		if reserve[id] {
+			continue
+		}
 		if len(parentMap[id]) == 0 {
 			visited[id] = true
 			queue = append(queue, bfsItem{id, 0})
