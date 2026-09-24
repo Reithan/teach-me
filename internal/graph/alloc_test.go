@@ -226,3 +226,47 @@ func TestAlloc_LogScanOnlyOnFirstAlloc(t *testing.T) {
 		t.Errorf("want counter value 20, got %d", got)
 	}
 }
+
+func TestAlloc_SeedsFromLog_NestedArray(t *testing.T) {
+	// Exercises the []any branch in scanLogValue (e.g. gc event nodes array).
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "graph.mmd.jsonl")
+	// nodes array containing maps with id fields like the gc event.
+	writeLogFile(t, logPath, []map[string]any{
+		{"ev": "gc", "nodes": []any{
+			map[string]any{"id": "q6", "class": "probe_2"},
+			map[string]any{"id": "a6", "class": "pass"},
+		}},
+	})
+	g := &Graph{}
+	got := NextQuestionN(g, logPath)
+	// Q: max(0, 6)+1 = 7. Batch: max(0, 2)+1 = 3.
+	if got != 7 {
+		t.Errorf("NextQuestionN from log nested array: want 7, got %d", got)
+	}
+	bGot := NextBatchN(g, logPath)
+	if bGot != 3 {
+		t.Errorf("NextBatchN from log nested array: want 3, got %d", bGot)
+	}
+}
+
+func TestAlloc_SeedsFromLog_MalformedLineIgnored(t *testing.T) {
+	// A malformed JSON line is skipped; valid lines after it still count.
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "graph.mmd.jsonl")
+	f, err := os.Create(logPath)
+	if err != nil {
+		t.Fatalf("create log: %v", err)
+	}
+	// Write a bad line then a valid line.
+	_, _ = f.WriteString("not valid json\n")
+	enc := json.NewEncoder(f)
+	_ = enc.Encode(map[string]any{"ev": "q", "q": "q4", "batch": "probe_2"})
+	_ = f.Close()
+
+	g := &Graph{}
+	got := NextQuestionN(g, logPath)
+	if got != 5 {
+		t.Errorf("NextQuestionN with malformed line: want 5, got %d", got)
+	}
+}

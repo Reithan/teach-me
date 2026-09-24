@@ -41,13 +41,6 @@ func seedNextMeta(g *Graph, logPath string) {
 	logQMax, logBMax := maxFromLog(logPath)
 	qNext := intMax(fileQMax, logQMax) + 1
 	bNext := intMax(fileBMax, logBMax) + 1
-	// min is 1; max(0,0)+1 = 1 already, but be explicit.
-	if qNext < 1 {
-		qNext = 1
-	}
-	if bNext < 1 {
-		bNext = 1
-	}
 	g.NextMeta = &NextMeta{Q: qNext, Batch: bNext}
 }
 
