@@ -286,6 +286,14 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
 | `tm check --drift <concept>` | grader: for a passed concept, read its `grade` events, resolve each question citation against the current source, and emit per-question pairs for judging whether the pass survives | the recheck payload |
 | `tm grade --drift <concept> keep\|reopen "<summary>"` | grader: record the recheck verdict; `keep` re-hashes the concept citation; `reopen` runs `reopen` with the summary as the GAP | `ok` |
+| `tm migrate [<file>]` | upgrade a format-1 graph to format 2 (section 4.6), rewriting each citation only to a locator that resolves to the same hash and listing what it cannot convert; always writes `%% tm:format 2` and exits 0. `--dry-run` prints without writing. Logged | one line per citation, then a summary |
+| `tm repo add <alias> <path>` | register a repo alias in machine config for `git:` locators (section 13) | `ok` |
+| `tm repo rm <alias>` | remove a repo alias | `ok` |
+| `tm repo list` | list registered aliases and their paths | one line per alias |
+| `tm cache clear` | empty the conversion and fetch cache (section 3) | `ok` |
+| `tm cache list` | list cache entries | one line per entry |
+| `tm aid <id> <path>` | link an aid to a concept or question (section 4.6). Logged | `ok` |
+| `tm aid rm <id> <path>` | unlink an aid. Logged | `ok` |
 | Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when a doc is configured; otherwise one usage line per command |
 | `tm --help --all` | one usage line per command, whatever the doc setting | usage lines |
 | `tm --help <command>`, `tm <command> --help [<flag>]` | specific inquiry | that command's usage line, or one line on the flag |
