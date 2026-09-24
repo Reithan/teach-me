@@ -173,7 +173,7 @@ The writer escapes `"` as `#quot;`, `'` as `#39;`, `#` as `#35;`, `<` and `>` as
 | Part | Rule |
 |---|---|
 | `hash` | first 12 hex characters of SHA-256 over the normalized cited text. Fixed width. Parsed first; the `@` after it is the delimiter, so `@` inside a locator is harmless |
-| `locator` | a path relative to `TM_SRC_ROOT`; an absolute path (`/...`, or a drive letter on Windows); or a URI with a scheme (`https://...`). Distinguished by prefix; no per-kind syntax |
+| `locator` | one of three kinds, distinguished by prefix with no per-kind syntax: a **plain path** relative to `TM_SRC_ROOT` or absolute (`/...`, or a drive letter on Windows), read from disk with no git semantics; a **`git:` URI** naming committed content in a machine-local repo (below); or a **fetched URI** with a scheme (`https://...`) |
 | `START-END` | 1-based inclusive line range into the resolved text, after conversion if any. Split on the last colon; the range never contains one, so scheme separators, ports, and drive letters are harmless |
 
 The model never types the hash. `tm add` and `tm q` accept the hashless form `<locator>:START-END`, resolve the text, compute the hash, and write the full form. The hash is a content hash of the cited lines, not a commit hash; the position invites that reading, so the spec says so here.
@@ -181,6 +181,26 @@ The model never types the hash. `tm add` and `tm q` accept the hashless form `<l
 Normalization before hashing: CRLF to LF; trailing whitespace stripped per line; lines joined with LF; no trailing newline; hash over the UTF-8 bytes. Internal whitespace is preserved because indentation is meaningful in code.
 
 A `"` in a locator must be percent-encoded; lint rejects a raw one.
+
+**Plain paths.** A plain path is a file read raw, or through a converter for its extension (section 13.1). It carries no git semantics: no `HEAD` fallback, no `commit` field. A path not in the working tree refuses:
+
+```
+err: <path> is not in the working tree
+fix: cite it as git:<alias>@<ref>:<path> if it is committed
+```
+
+**`git:` locators.** Committed content in any repo on the machine is cited through one grammar with optional parts:
+
+| Locator | Resolves to | Text that is cited |
+|---|---|---|
+| `git:<alias>@<ref>:<path>` | a file at a commit | the blob's lines |
+| `git:<alias>@<sha>` | one commit | `git show <sha>` output: header, message, patch |
+| `git:<alias>@<a>..<b>` | a diff | `git diff <a> <b>` output |
+| `git:<alias>@<a>..<b>:<path>` | that diff for one path | `git diff <a> <b> -- <path>` output |
+
+`<alias>` matches `[A-Za-z0-9_-]+` and holds no `@` or `:`, which keeps parsing unambiguous and sidesteps Windows drive letters; it names a repo registered in machine config (`tm repo add`, section 13). `<ref>` is anything `git rev-parse` accepts. A converter never applies to git output — it is already text — except a file at a ref, which goes through the extension rule like a plain path.
+
+**Resolution to SHA on write.** On `add`, `q`, and `recite` the CLI resolves every `<ref>`, `<a>`, `<b>` through `git rev-parse` and writes the short SHA (12 hex) into the stored citation, so a git citation never drifts unless history is rewritten. The ref as typed goes to the log (`ref` field, section 10). Forge-only objects (pull requests, issues) are not git; the teacher cites the forge's plain-text `.diff` or `.patch` URL as a fetched URI instead (sections 12, 13.1).
 
 ### 4.5 Classes
 
