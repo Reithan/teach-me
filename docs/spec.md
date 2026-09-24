@@ -214,7 +214,19 @@ Concepts carry no class. Their state is their block plus what hangs off them; a 
 
 ### 4.6 Meta lines
 
-- `%% tm:format <N>` — the graph format version. When present it is the first meta line in the `untested` block, before `%% tm:next`. At most one per file. Absent means format 1 (every graph written before v0.22); `tm new` writes `%% tm:format 2`. The format is the graph file's own version and is unrelated to the `tm-version` marker in the doc file. Every command except `migrate`, `lint`, and help refuses a graph below the binary's format (`fix: tm migrate`); every command refuses one above it (`fix:` to upgrade tm). See section 6 (`migrate`) and section 11.
+- `%% tm:format <N>` — the graph format version. When present it is the first meta line in the `untested` block, before `%% tm:next`. At most one per file. Absent means format 1 (every graph written before v0.22); `tm new` writes `%% tm:format 2`. The format is the graph file's own version and is unrelated to the `tm-version` marker in the doc file. Every command except `migrate`, `lint`, and help refuses a graph below the binary's format; every command refuses one above it. See section 6 (`migrate`) and section 11. A graph below the binary's format refuses:
+
+  ```
+  err: <file> is format 1, this is tm format 2
+  fix: tm migrate
+  ```
+
+  A graph above it refuses:
+
+  ```
+  err: <file> is format 3, this is tm format 2
+  fix: upgrade tm
+  ```
 - `%% tm:next q=<N> batch=<M>` — the monotonic allocation counter (§4.3). At most one per file. In the `untested` block, after `%% tm:format` and before any `%% tm:gate` lines. `N` and `M` are integers ≥ 1: the next question/answer number and the next batch number to allocate. Only commands that allocate new IDs (`tm q`) write or update this line; read-only commands and commands that do not allocate leave it unchanged.
 - `%% tm:gate <concept> base=<N>` — in the `untested` block; written when an upstream action clears a gate (section 7).
 - `%% tm:aid <concept|qid> <path>` — links an aid (section 3) to a concept or question. It sits in the block that holds the concept, or in `testing` for a qid, and moves with the concept. `<path>` is relative to the graph directory or absolute; it is not a citation and carries no hash. Written by `tm aid`, removed by `tm aid rm`. `tm show <id>` and `tm report` list aids. The gc that clears a passed concept's tests leaves concept aid lines alone; an aid on a qid is removed with the question and logged in the `gc` event's `meta` (section 8).
