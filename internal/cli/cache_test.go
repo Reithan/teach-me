@@ -255,3 +255,68 @@ func TestCacheFetch_WritesEntry(t *testing.T) {
 		t.Errorf("cache list output missing URL %s:\n%s", srv.URL, out)
 	}
 }
+
+// TestCacheList_NonExistentCacheDir verifies that tm cache list returns 0
+// with no output when the cache dir does not exist yet.
+func TestCacheList_NonExistentCacheDir(t *testing.T) {
+	tempErrlog(t)
+	t.Setenv("TM_FILE", "")
+	t.Setenv("TM_ROLE", "")
+
+	// Point to a dir that doesn't exist.
+	cacheDir := filepath.Join(t.TempDir(), "doesnotexist")
+	t.Setenv("TM_CACHE_DIR", cacheDir)
+
+	out, errOut, code := run(t, "cache", "list")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr: %s", code, errOut)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("want empty output for non-existent cache dir, got %q", out)
+	}
+}
+
+// TestCacheList_SkipsMalformedEntries verifies that tm cache list skips
+// malformed JSON files silently and still returns the valid entries.
+func TestCacheList_SkipsMalformedEntries(t *testing.T) {
+	tempErrlog(t)
+	t.Setenv("TM_FILE", "")
+	t.Setenv("TM_ROLE", "")
+
+	cacheDir := t.TempDir()
+	t.Setenv("TM_CACHE_DIR", cacheDir)
+
+	// Write one valid entry.
+	now := time.Now().UTC().Truncate(time.Second)
+	valid := map[string]any{
+		"locator":           "https://good.example.com/doc",
+		"final_url":         "https://good.example.com/doc",
+		"mime":              "text/plain",
+		"converter":         "",
+		"converter_version": "",
+		"fetched_at":        now.Format(time.RFC3339),
+		"text":              "content\n",
+	}
+	validData, _ := json.Marshal(valid)
+	_ = os.WriteFile(filepath.Join(cacheDir, "valid.json"), validData, 0o644)
+
+	// Write one malformed JSON file.
+	_ = os.WriteFile(filepath.Join(cacheDir, "broken.json"), []byte("not-json{{{"), 0o644)
+
+	// Write a non-.json file that should be skipped.
+	_ = os.WriteFile(filepath.Join(cacheDir, "other.txt"), []byte("skip me"), 0o644)
+
+	out, errOut, code := run(t, "cache", "list")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr: %s", code, errOut)
+	}
+
+	// Only the valid entry should appear.
+	if !strings.Contains(out, "https://good.example.com/doc") {
+		t.Errorf("want valid entry in output, got: %q", out)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 1 {
+		t.Errorf("want 1 output line (malformed skipped), got %d:\n%s", len(lines), out)
+	}
+}

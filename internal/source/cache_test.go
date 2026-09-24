@@ -1,6 +1,7 @@
 package source_test
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -323,5 +324,85 @@ func TestCache_DriftWithinTTL(t *testing.T) {
 	}
 	if !drifted {
 		t.Error("expected drift after cache clear, but got drifted=false")
+	}
+}
+
+// TestCache_MalformedCacheEntryIsMiss verifies that a malformed JSON cache
+// file is treated as a miss (not an error), triggering a re-fetch.
+func TestCache_MalformedCacheEntryIsMiss(t *testing.T) {
+	body := "test content\n"
+	handler, reqs := newCounter(&body)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	cacheDir := t.TempDir()
+	cfg := loadCfg(t, "", "")
+	// Default TTL (24h) via effectiveCacheTTL.
+	r := resolverWithCache(cfg, t.TempDir(), cacheDir)
+
+	// Write a malformed JSON file at the expected cache path.
+	h := sha256.Sum256([]byte(srv.URL))
+	entryPath := filepath.Join(cacheDir, fmt.Sprintf("%x.json", h))
+	if err := os.WriteFile(entryPath, []byte("not-json{{{"), 0o644); err != nil {
+		t.Fatalf("write malformed entry: %v", err)
+	}
+
+	// Read should treat the malformed entry as a miss and fetch.
+	c := cite.Citation{File: srv.URL, Start: 1, End: 1}
+	_, _, err := r.Read(c)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if atomic.LoadInt64(reqs) != 1 {
+		t.Errorf("want 1 fetch (malformed entry = miss), got %d", atomic.LoadInt64(reqs))
+	}
+}
+
+// TestCache_ConverterVersionChangeMiss verifies that when the version of an
+// otherwise-unchanged converter changes, the cache entry is treated as a miss.
+func TestCache_ConverterVersionChangeMiss(t *testing.T) {
+	cvDir := t.TempDir()
+	convScript := writeScript(t, cvDir, "conv", "cat")
+	ver1Script := writeScript(t, cvDir, "ver1", `printf "conv version 1.0"`)
+	ver2Script := writeScript(t, cvDir, "ver2", `printf "conv version 2.0"`)
+
+	body := "hello world\n"
+	handler, reqs := newCounter(&body)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	cacheDir := t.TempDir()
+
+	// First read: version 1.0
+	cfg1 := loadCfg(t, fmt.Sprintf(
+		"convert text/plain=%s\nversion %s=1.0\nversion-cmd %s=%s\n",
+		convScript, convScript, convScript, ver1Script,
+	), "")
+	cfg1.CacheTTLSet = true
+	cfg1.CacheTTL = 24 * time.Hour
+	r1 := resolverWithCache(cfg1, t.TempDir(), cacheDir)
+
+	c := cite.Citation{File: srv.URL, Start: 1, End: 1}
+	if _, _, err := r1.Read(c); err != nil {
+		t.Fatalf("Read with ver1: %v", err)
+	}
+	if atomic.LoadInt64(reqs) != 1 {
+		t.Fatalf("want 1 request, got %d", atomic.LoadInt64(reqs))
+	}
+
+	// Second read: same converter, different version → miss.
+	cfg2 := loadCfg(t, fmt.Sprintf(
+		"convert text/plain=%s\nversion %s=2.0\nversion-cmd %s=%s\n",
+		convScript, convScript, convScript, ver2Script,
+	), "")
+	cfg2.CacheTTLSet = true
+	cfg2.CacheTTL = 24 * time.Hour
+	r2 := resolverWithCache(cfg2, t.TempDir(), cacheDir)
+
+	if _, _, err := r2.Read(c); err != nil {
+		t.Fatalf("Read with ver2: %v", err)
+	}
+	if atomic.LoadInt64(reqs) != 2 {
+		t.Errorf("want 2 requests (version changed → miss), got %d", atomic.LoadInt64(reqs))
 	}
 }
