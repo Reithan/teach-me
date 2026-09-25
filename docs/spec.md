@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.26
+# tm: teaching-map CLI, draft spec v0.27
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.25: `tm check <qid>` prints the concept scope as `CONCEPT`, and the rubric grades a question outside it `unclear` so the teacher replaces it; §9, §9.1, §14 updated; the Map and Prune phases name what the teacher reads from the planner's and pruner's paragraphs.
+Changes from v0.26: the owner chose a license. teach-me ships under the teach-me Individual Use License, with negotiated licenses for organizational use, and contributors sign a CLA; decision 45, §16.1, §16.3, §16.7, and §16.9 updated; `version-sync` also checks `CITATION.cff`.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -819,7 +819,7 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 42 | Repository and module `github.com/reithan/teach-me`; binary and command `tm`; shipped skill `teach-me`, replacing the owner's existing skill of that name | a two-letter repository name collides and is hard to find; the command stays short because agents type it constantly; the project is the successor to the existing skill, so it takes its name | repository named `tm`; skill named `tm` | agreed, v0.15 |
 | 43 | Coverage is gated on the diff only: statement-level `diff-cover` against `origin/main` at 85%. No total gate. Condition coverage is deferred | a total gate penalizes code removal and refactors, since dropping well-tested lines reads as a net loss; no readily available diff filter exists for Go condition coverage | total coverage gate at 80% (v0.13); gobco plus an in-repo diff filter (v0.14) | agreed, v0.16 |
 | 44 | Git hooks in `.githooks/` via `core.hooksPath`, no framework: lint and light checks on commit, the CI suite on push, both refuse `main` | fast feedback before CI, and the same gates for a human or an agent; plain `sh` keeps the zero-dependency rule; branch protection stays the real enforcement because hooks can be skipped | a hook framework (lefthook, pre-commit); hooks as the only gate | agreed, v0.15 |
-| 45 | Repository private until the owner decides on a license, after testing the prototype build; no `LICENSE` file before then | licensing is a one-way door and should follow evidence that the tool works | choose a license up front; public from the start | agreed, v0.17 |
+| 45 | The teach-me Individual Use License: free for individual use (personal learning, study, and one's own research); organizational use (a course that requires it, deployment by a school, lab, or company, business use) needs a license the owner negotiates, possibly at no fee. Contributors sign a CLA that permits relicensing. The repository goes public once `LICENSE` and `CITATION.cff` exist | keeps individual students and researchers free while leaving institutional adoption open to negotiation; commercial licensing needs relicensing rights to every contribution | OSI permissive (MIT, Apache-2.0), which leaves no licensing option; PolyForm Noncommercial, which exempts educational institutions; AGPL dual licensing, which does not reach internal use of a local CLI; DCO only, which grants no relicensing rights | agreed, v0.27 (private until licensed, v0.17) |
 | 46 | Citations carry a content hash, hash first: `<hash>@<locator>:START-END` | drift detection on every read with no side state; the hash travels wherever the citation is printed; reads like a git revision | meta line per citation; hash in the log only | agreed |
 | 47 | One locator grammar: relative path, absolute path, URI | three source kinds with one parser and one document; the kind is a prefix, not a syntax | sister lookup file of selectors; per-kind citation forms; XPath | agreed |
 | 48 | Sources converted by user-configured external converters keyed by MIME and extension, pinned by version and checked at runtime | deterministic per version; zero CLI dependencies; user-extensible to any format | built-in tag stripper; pure-Go HTML library; runtime-loaded modules (Go has none) | agreed |
@@ -876,7 +876,7 @@ Everything here is decided. Where a value can only be known at repository creati
 
 ### 16.1 Repository and ownership
 
-The repository is `github.com/reithan/teach-me`, which is also the Go module path. The binary and the command stay `tm`. The shipped skill is `teach-me`: it replaces the owner's existing `/teach-me` skill, and porting that skill's behavior into the new body is the owner's work. The repository stays private until the owner reaches a licensing decision, and that decision follows the owner's own testing of the prototype build. Until then no `LICENSE` file is created, nothing is published outside the private repository, and the implementing agent does not change visibility or add a license.
+The repository is `github.com/reithan/teach-me`, which is also the Go module path. The binary and the command stay `tm`. The shipped skill is `teach-me`: it replaces the owner's existing `/teach-me` skill, and porting that skill's behavior into the new body is the owner's work. The code ships under the teach-me Individual Use License in `LICENSE` (decision 45); `CITATION.cff` gives the citation, and `THIRD_PARTY_NOTICES.md` carries the Go standard library license that release binaries include. Contributors sign `CLA.md` once, as `CONTRIBUTING.md` explains. The owner decides when the repository goes public; the implementing agent does not change visibility or the license terms.
 
 ### 16.2 Toolchain
 
@@ -927,6 +927,7 @@ docs/spec.md              this document
 .github/dependabot.yml    gomod, github-actions, npm (conformance/)
 .githooks/                pre-commit, pre-push (16.8)
 .golangci.yml  .goreleaser.yaml  .gitattributes  Makefile  AGENTS.md  README.md
+LICENSE  THIRD_PARTY_NOTICES.md  CITATION.cff  CLA.md  CONTRIBUTING.md  CHANGELOG.md
 ```
 
 `AGENTS.md` holds the `make` targets, a pointer to `docs/spec.md`, and the adapter table (teacher, grader, planner, pruner). The body of `skill/teach-me/SKILL.md` is the owner's to write; the implementing agent creates the frontmatter and a body that restates section 12's four unenforceable behaviors.
@@ -985,7 +986,7 @@ Runs on every pull request and on pushes to `main`. `actions/checkout` uses `fet
 | `diff-coverage` | pull requests only, Linux: `go test -race -covermode=atomic -coverprofile=coverage.out ./...`, excluding `cmd/tm` and `internal/tools`; convert with `go tool gocover-cobertura`; rewrite filenames from module path to repository-relative; then `diff-cover coverage.xml --compare-branch=origin/main --fail-under=85` | statement coverage of lines added or changed on the branch, relative to `main`, below 85% |
 | `conformance` | 16.6 | any parse failure or membership mismatch |
 | `vuln` | `go tool govulncheck ./...` | any finding |
-| `version-sync` | compares `internal/version/VERSION` with `metadata.tm-version` in `skill/teach-me/SKILL.md` | major.minor differ |
+| `version-sync` | compares `internal/version/VERSION` with `version` in `CITATION.cff` and with `metadata.tm-version` in `skill/teach-me/SKILL.md` | the `CITATION.cff` version differs, or major.minor differ from `tm-version` |
 | `release-check` | `goreleaser check` and `goreleaser release --snapshot --clean` | config invalid or any target fails to build |
 
 Coverage is gated on the diff only. A total-coverage gate penalizes deletions and refactors, because removing well-tested lines reads as a loss, so there is none. Go's native coverage is statement-level. The gate is 85%, not higher, because the error side of `if err != nil` on file-system calls often cannot be reached without fault injection. One acceptance check belongs to milestone 1: a pull request touching Go code must make `diff-cover` report a nonzero line count, since the module-path to repository-relative filename rewrite is a known friction point with `gocover-cobertura`.
@@ -1007,11 +1008,11 @@ Hooks can be skipped with `--no-verify`. That is acceptable for human users, and
 
 ### 16.9 Release (`release.yml`)
 
-1. A pull request bumps `internal/version/VERSION`, and `metadata.tm-version` when major or minor changes. `version-sync` guards it.
+1. A pull request bumps `internal/version/VERSION` and `version` in `CITATION.cff` (with `date-released`), and `metadata.tm-version` when major or minor changes. `version-sync` guards it.
 2. After merge, the owner tags `main` with `v<VERSION>` and pushes the tag. Nothing else triggers a release.
 3. The workflow fails unless the tag equals `v` plus the contents of `VERSION`, then runs every `ci.yml` job.
 4. GoReleaser v2 builds `./cmd/tm` as `tm` for linux, darwin, and windows on amd64 and arm64, with `CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`, and `mod_timestamp` set to the commit time so builds are reproducible.
-5. Archives are `tar.gz`, and `zip` on Windows, named `tm_<version>_<os>_<arch>`. Each holds the binary, `README.md`, and the whole `skill/teach-me/` tree (`SKILL.md`, `agents/`, `reference/`), so a release always ships the adapters that match it.
+5. Archives are `tar.gz`, and `zip` on Windows, named `tm_<version>_<os>_<arch>`. Each holds the binary, `README.md`, `CHANGELOG.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md`, `CITATION.cff`, and the whole `skill/teach-me/` tree (`SKILL.md`, `agents/`, `reference/`), so a release always ships the adapters that match it.
 6. GoReleaser writes `checksums.txt` and publishes the GitHub release with notes grouped by Conventional Commit type. Tags with a prerelease suffix publish as prereleases.
 7. `actions/attest-build-provenance` attests every archive; the step is skipped while the repository is private, since GitHub refuses attestations there. The workflow needs `contents: write`, `id-token: write`, and `attestations: write`.
 
