@@ -76,8 +76,14 @@ conformance:
 vuln:
 	go tool govulncheck ./...
 
-## version-sync: verify major.minor in VERSION matches metadata.tm-version in SKILL.md.
+## version-sync: verify VERSION matches version in CITATION.cff, and major.minor matches metadata.tm-version in SKILL.md.
 version-sync:
+	@ver=$$(cat internal/version/VERSION | tr -d '[:space:]'); \
+	cff_ver=$$(grep '^version:' CITATION.cff | sed 's/^version:[[:space:]]*//' | tr -d '"'"'"' '); \
+	if [ "$$ver" != "$$cff_ver" ]; then \
+		printf 'err: version mismatch: VERSION=%s, CITATION.cff version=%s\n' "$$ver" "$$cff_ver" >&2; \
+		exit 1; \
+	fi
 	@if [ ! -f skill/teach-me/SKILL.md ]; then \
 		echo "version-sync: skill/teach-me/SKILL.md not found, skipping"; \
 		exit 0; \
