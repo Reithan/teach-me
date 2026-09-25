@@ -166,13 +166,14 @@ A graph written before format 2 refuses every command (except `migrate`,
 `lint`, and help) with `fix: tm migrate`. To upgrade:
 
 ```
-tm migrate --dry-run <file>
+tm migrate --dry-run [<file>]
 ```
 
-Read the output: each line shows what would be rewritten and what stays. Then:
+`<file>` defaults to the configured graph when omitted. Read the output: each
+line shows what would be rewritten and what stays. Then:
 
 ```
-tm migrate <file>
+tm migrate [<file>]
 ```
 
 `tm migrate` rewrites citations in two passes:
