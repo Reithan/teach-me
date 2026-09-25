@@ -12,9 +12,10 @@ once to upgrade them (see Changed). Skill `tm-version` is `0.4`.
 
 ### Added
 
-- `tm edit --errata "<reason>"` rewrites the scope of a concept that already has
-  questions or a pass. Questions and answers stay untouched; the reason and the
-  before/after text are logged. A passed concept then goes to a grader recheck
+- `tm errata <concept> "<scope>" "<reason>"` rewrites the scope of a concept
+  that already has questions or a pass; `tm edit` is unchanged and still refuses
+  such a concept. Questions and answers stay untouched; the reason and the
+  before/after text are logged in an `errata` event. A passed concept then goes to a grader recheck
   through `tm check --errata` and `tm grade --errata keep|reopen`, mirroring the
   drift recheck. (#68)
 - `tm src <locator> [START-END] [--find <regex>] [--fulldump]` prints converted
