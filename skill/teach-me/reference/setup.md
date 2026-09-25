@@ -253,6 +253,14 @@ Without the sandbox, the deny rules cover only the harness's file tools, not
 shell reads, which is why the file-access rule in the skill also binds the
 model's own behavior directly.
 
+A harness that caps or rewrites tool output should exempt the reader sub-agent
+from that cap. `--fulldump` is designed to land the whole converted source in
+the reader's context at once, and a truncated dump defeats its purpose. Every
+other role — teacher, planner, grader, pruner — reads through the `more:`
+window and needs no exemption. The sandbox note above already covers `tm src`
+for all sub-agents; no additional `excludedCommands` entry is needed for the
+reader beyond the one already in place.
+
 ## Session limits
 
 Set these environment variables to override the defaults. Each is read once per

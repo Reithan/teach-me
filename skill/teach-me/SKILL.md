@@ -90,6 +90,10 @@ Line ranges come only from `tm src`: see the line-range workflow in the Source
 step above. Read and WebFetch decide whether a source is worth citing; they
 never supply a range.
 
+Window, reader, and `--fulldump`: `tm src` prints one window at a time; page
+with the `more:` line or spawn `teach-me-reader` for a whole-source read. The
+teacher never runs `--fulldump`. See the Source step for the full decision tree.
+
 ## Workflow
 
 `tm status` is your dashboard, and the `fix:` line on any refusal names your next
@@ -134,6 +138,15 @@ move. The phases:
      entry that expires between `tm src` and `tm add` on a changed page stores
      the new page's hash. Read and WebFetch may still decide whether a source
      is worth citing; they never supply a range.
+   - **Windows and the reader.** `tm src` prints at most one window (200 lines
+     or 8,000 characters) and ends with a `more:` line naming the next command;
+     page with that line when a few more windows will cover the area you need.
+     When the source is long and you need the whole of it to locate ranges,
+     spawn `teach-me-reader` with the locator and one question; it runs
+     `--fulldump` in a disposable context and returns a summary and candidate
+     ranges in `tm`'s numbering. Confirm each returned range with
+     `tm src <locator> START-END` before citing. The teacher never runs
+     `--fulldump`.
    - No egress: use local sources or ask the learner for citable documents; cite
      the learner-supplied copy as a plain path. Not a blocker. If a fetch fails
      later, retry when egress is available or ask the learner for a copy and
@@ -172,8 +185,10 @@ move. The phases:
 
 5. **Probe.** Draft between `TM_PROBE_MIN` and `TM_PROBE_MAX` narrow probe
    questions with `tm q`, then emit the batch with `tm ask <concept>`. A question
-   is immutable once written. See `skill/teach-me/reference/setup.md` for session
-   limit defaults.
+   is immutable once written. `tm q` refuses a citation over 120 lines or
+   6,000 characters; narrow with `tm src <locator> --find <regex>` or a tighter
+   range. A question needing two passages is two questions or a concept drawn
+   too wide. See `skill/teach-me/reference/setup.md` for session limit defaults.
 
 6. **Answer.** Present the emitted questions to the learner through the harness's
    built-in question tool (`tm ask --format json` maps onto it), offering an
@@ -198,9 +213,11 @@ move. The phases:
      the passed block.
    - no fail, some unclear → add one `tm q --re <qid>` replacement per unclear
      question, then `tm ask` again.
-   - any fail → open a teaching round: run `tm report <concept>` so the teach
-     questions build on the passed foundations, record the gap with `tm gap`,
-     then teach with `tm q --teach --re <qid>`. Once the teach batch resolves
+   - any fail → open a teaching round: run `tm report <concept> --fulltext` so
+     the teach questions build on the passed foundations (each concept's inlined
+     text is bounded to one window; a cut concept ends with a `more:` trailer
+     naming the next `tm src` command), record the gap with `tm gap`, then teach
+     with `tm q --teach --re <qid>`. Once the teach batch resolves
      all pass, the locked fallback probes become answerable.
    - gated → `q`, `ask`, and `answer` refuse on the concept until you take one
      of four exits. Take one now, before moving to another concept: a gate left

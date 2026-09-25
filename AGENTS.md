@@ -43,13 +43,18 @@ under `skill/teach-me/`:
 | Grader | `skill/teach-me/agents/teach-me-grader.md` | `.claude/agents/` |
 | Planner | `skill/teach-me/agents/teach-me-planner.md` | `.claude/agents/` |
 | Pruner | `skill/teach-me/agents/teach-me-pruner.md` | `.claude/agents/` |
+| Reader | `skill/teach-me/agents/teach-me-reader.md` | `.claude/agents/` |
 
 The teacher drives the session: it spawns one `teach-me-planner` sub-agent to
 decompose source into a concept graph, one `teach-me-pruner` sub-agent after every
 planner run to cut the active graph down to what the goal requires, and one
 `teach-me-grader` sub-agent per answer. The planner writes concepts and edges; the
 pruner parks unneeded concepts in reserve; the grader scores each answer in
-isolation through `tm check` and `tm grade`.
+isolation through `tm check` and `tm grade`. When a source exceeds one `tm src`
+window and the teacher needs the whole of it to locate ranges, the teacher spawns
+one `teach-me-reader` sub-agent with the locator and a question; the reader runs
+`tm src --fulldump` in a disposable context and returns a summary and candidate
+line ranges without writing to the graph.
 
 ## Architecture
 
