@@ -84,8 +84,7 @@ be obtained, say so and stop.
 
 Never write under src-root: write aids under aids-dir and link them with
 `tm aid`. A file the teacher writes outside aids-dir cannot be detected by the
-CLI; the harness deny rule is the only guard (see §12 rule 4 and the setup
-reference).
+CLI; the harness deny rule is the only guard (see `skill/teach-me/reference/setup.md`).
 
 Line ranges come only from `tm src`: see the line-range workflow in the Source
 step above. Read and WebFetch decide whether a source is worth citing; they

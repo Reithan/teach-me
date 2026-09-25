@@ -14,6 +14,10 @@ Pass the following to the `teach-me-planner` sub-agent:
     have changed.
 - For `extend` and `errata` scopes, include the output of
   `tm report <concept>` so the planner sees the existing foundations.
+- The registered repo names (from `tm repo list`), so the planner can cite
+  through `git:<name>@<ref>:<path>` locators.
+- The aids-dir path, so the planner knows where aids land and never cites them
+  as sources.
 
 Read the planner's results through `tm status` and `tm show`. Ignore its prose
 summary.
