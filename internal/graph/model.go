@@ -32,6 +32,10 @@ type ConceptNode struct {
 	GAP string
 	// Cites holds the raw citation strings (e.g. "raft.txt:120-188").
 	Cites []string
+	// Aids holds the linked aid paths for this concept (§4.6), in declaration
+	// order. Paths are stored exactly as written; no existence check is
+	// performed at parse time.
+	Aids []string
 	// Block records which subgraph the concept belongs to.
 	Block Block
 	// Class is the :::class suffix if present; always empty for valid concepts.
@@ -47,7 +51,10 @@ type QuestionNode struct {
 	Scope string
 	Cite  string
 	// Class is the batch class, e.g. "probe_1" or "teach_3".
-	Class           string
+	Class string
+	// Aids holds the linked aid paths for this question (§4.6), in declaration
+	// order. Paths are stored exactly as written.
+	Aids            []string
 	LeadingComments []string
 }
 

@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+// aidEntry pairs a node id with one aid path for sort/emit purposes.
+type aidEntry struct {
+	id   string
+	path string
+}
+
 const (
 	indent1 = "    "     // 4 spaces: subgraph/end/classDef level
 	indent2 = "        " // 8 spaces: node/edge level inside a subgraph
@@ -47,6 +53,7 @@ func writePassedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 			writeEdge(b, e)
 		}
 	}
+	writeConceptAidMetas(b, g.PassedConcepts)
 	writeSubgraphClose(b)
 }
 
@@ -77,6 +84,7 @@ func writeUntestedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 			writeEdge(b, e)
 		}
 	}
+	writeConceptAidMetas(b, g.UntestedConcepts)
 	writeSubgraphClose(b)
 }
 
@@ -99,6 +107,7 @@ func writeReserveBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 			writeEdge(b, e)
 		}
 	}
+	writeConceptAidMetas(b, g.ReserveConcepts)
 	writeSubgraphClose(b)
 }
 
@@ -120,6 +129,7 @@ func writeTestingBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 			writeEdge(b, e)
 		}
 	}
+	writeQuestionAidMetas(b, g.TestingItems)
 	writeSubgraphClose(b)
 }
 
@@ -307,4 +317,49 @@ func writeInt(b *strings.Builder, n int) {
 		n /= 10
 	}
 	b.Write(digits[i:])
+}
+
+// writeConceptAidMetas emits %% tm:aid lines for a slice of concept nodes.
+// Sorted by id (alphabetically) then by original path order within each id.
+func writeConceptAidMetas(b *strings.Builder, concepts []*ConceptNode) {
+	var entries []aidEntry
+	for _, c := range concepts {
+		for _, p := range c.Aids {
+			entries = append(entries, aidEntry{id: c.ID, path: p})
+		}
+	}
+	writeAidEntries(b, entries)
+}
+
+// writeQuestionAidMetas emits %% tm:aid lines for all questions in items.
+func writeQuestionAidMetas(b *strings.Builder, items []TestingItem) {
+	var entries []aidEntry
+	for _, item := range items {
+		if item.Q == nil {
+			continue
+		}
+		for _, p := range item.Q.Aids {
+			entries = append(entries, aidEntry{id: item.Q.ID, path: p})
+		}
+	}
+	writeAidEntries(b, entries)
+}
+
+// writeAidEntries sorts entries by id then emits %% tm:aid lines.
+// Stable sort preserves original path order within each id.
+func writeAidEntries(b *strings.Builder, entries []aidEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].id < entries[j].id
+	})
+	for _, e := range entries {
+		b.WriteString(indent2)
+		b.WriteString("%% tm:aid ")
+		b.WriteString(e.id)
+		b.WriteByte(' ')
+		b.WriteString(e.path)
+		b.WriteByte('\n')
+	}
 }

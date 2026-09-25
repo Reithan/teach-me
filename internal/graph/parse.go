@@ -28,6 +28,13 @@ type parser struct {
 	lines           []string
 	pos             int
 	pendingComments []string
+	pendingAids     []parsedAid
+}
+
+type parsedAid struct {
+	block Block
+	id    string
+	path  string
 }
 
 func (p *parser) peekTrimmed() (string, bool) {
@@ -94,6 +101,10 @@ func (p *parser) parse() (*Graph, error) {
 			continue
 		}
 		return nil, fmt.Errorf("graph: unexpected line after blocks: %q", p.lines[p.pos])
+	}
+
+	if err := p.applyAidMetas(g); err != nil {
+		return nil, err
 	}
 
 	return g, nil
@@ -263,6 +274,17 @@ func (p *parser) parseBlock(g *Graph, block Block) error {
 				return fmt.Errorf("graph: tm:gate meta outside untested block")
 			}
 			g.UntestedMetas = append(g.UntestedMetas, meta)
+			continue
+		}
+
+		// %% tm:aid is a meta line accepted in every block.
+		if strings.HasPrefix(t, "%% tm:aid ") {
+			p.pos++
+			id, path, err := parseAidLine(t)
+			if err != nil {
+				return err
+			}
+			p.pendingAids = append(p.pendingAids, parsedAid{block: block, id: id, path: path})
 			continue
 		}
 
@@ -559,5 +581,77 @@ func parseEdge(g *Graph, t string, comments []string) error {
 		Label:           label,
 		LeadingComments: comments,
 	})
+	return nil
+}
+
+// parseAidLine parses a %% tm:aid line:
+//
+//	%% tm:aid <id> <path>
+//
+// <path> is the rest of the line after the id, trimmed; internal spaces are allowed.
+func parseAidLine(t string) (id, path string, err error) {
+	rest := strings.TrimPrefix(t, "%% tm:aid ")
+	rest = strings.TrimSpace(rest)
+	idx := strings.IndexByte(rest, ' ')
+	if idx < 0 {
+		return "", "", fmt.Errorf("graph: invalid tm:aid line (missing path): %q", t)
+	}
+	id = rest[:idx]
+	path = strings.TrimSpace(rest[idx+1:])
+	if path == "" {
+		return "", "", fmt.Errorf("graph: invalid tm:aid line (empty path): %q", t)
+	}
+	return id, path, nil
+}
+
+// applyAidMetas validates the collected aid entries and attaches them to their
+// nodes. Called after all blocks have been parsed.
+func (p *parser) applyAidMetas(g *Graph) error {
+	if len(p.pendingAids) == 0 {
+		return nil
+	}
+	nodeBlock := g.nodeBlocks()
+	seen := make(map[string]bool)
+	for _, a := range p.pendingAids {
+		b, ok := nodeBlock[a.id]
+		if !ok || ValidAnswerID(a.id) {
+			return fmt.Errorf("graph: tm:aid for unknown id %s", a.id)
+		}
+		if b != a.block {
+			return fmt.Errorf("graph: tm:aid %s outside its block", a.id)
+		}
+		key := a.id + "\x00" + a.path
+		if seen[key] {
+			return fmt.Errorf("graph: duplicate tm:aid %s %s", a.id, a.path)
+		}
+		seen[key] = true
+		if ValidQuestionID(a.id) {
+			for _, item := range g.TestingItems {
+				if item.Q != nil && item.Q.ID == a.id {
+					item.Q.Aids = append(item.Q.Aids, a.path)
+					break
+				}
+			}
+		} else {
+			for _, c := range g.PassedConcepts {
+				if c.ID == a.id {
+					c.Aids = append(c.Aids, a.path)
+					break
+				}
+			}
+			for _, c := range g.UntestedConcepts {
+				if c.ID == a.id {
+					c.Aids = append(c.Aids, a.path)
+					break
+				}
+			}
+			for _, c := range g.ReserveConcepts {
+				if c.ID == a.id {
+					c.Aids = append(c.Aids, a.path)
+					break
+				}
+			}
+		}
+	}
 	return nil
 }
