@@ -67,6 +67,11 @@ once to upgrade them (see Changed). Skill `tm-version` is `0.4`.
 - `SKILL.md` loads session start, gate exits, and errata handling on demand
   from `reference/start.md`, `reference/gate.md`, and `reference/errata.md`;
   the session ends when the goal concept passes. (#70)
+- Agents and references revised after a prompt review: the planner labels
+  `QUESTION:` and `ERR:` lines the teacher acts on, the pruner walks outward
+  from the goal under a checkable done condition, the reader returns inclusive
+  ranges or `ranges: none`, and `setup.md` states the session limits as the
+  spec defines them. (#71)
 
 ### Fixed
 
