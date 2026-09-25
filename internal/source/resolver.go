@@ -42,12 +42,16 @@ const (
 
 // Meta holds metadata from a resolved source, optionally written to the event log.
 type Meta struct {
-	Commit           string    // git commit SHA (for path locators inside a repo)
+	Commit           string    // git commit SHA: HEAD for plain paths (PR 1), resolved SHA for git: file-at-ref
+	Ref              string    // ref as typed for git: locators (e.g. "main" or "a..b"); not set for other kinds
 	URL              string    // final URL after redirects (for URI locators)
 	MIME             string    // MIME type (when a converter was used or for URIs)
 	Converter        string    // converter program name
 	ConverterVersion string    // first line of the converter's version output
 	FetchedAt        time.Time // when the URI was fetched (zero if not fetched)
+	// ResolvedLocator is the SHA-pinned locator for git: citations.
+	// Set by readGit; used by HashCitation to store the pinned form; not logged.
+	ResolvedLocator string
 }
 
 // Resolver resolves citations through converters, URIs, and git HEAD.
@@ -93,6 +97,9 @@ func NewResolverWithConfig(cfg *Config, srcRoot string) *Resolver {
 // text of lines [c.Start, c.End] along with metadata. The text is suitable for
 // hashing (Normalize is not applied here; cite.Hash calls it internally).
 func (r *Resolver) Read(c cite.Citation) (string, Meta, error) {
+	if cite.IsGit(c.File) {
+		return r.readGit(c)
+	}
 	if cite.IsURI(c.File) {
 		return r.readURI(c)
 	}
@@ -122,6 +129,11 @@ func (r *Resolver) HashCitation(citeStr string) (string, Meta, error) {
 	}
 
 	c.Hash = computed
+	// For git: locators, replace the locator with the SHA-pinned form so that
+	// every ref is resolved to a 12-hex SHA on write (§4.4, §13.1).
+	if cite.IsGit(c.File) && meta.ResolvedLocator != "" {
+		c.File = meta.ResolvedLocator
+	}
 	return cite.Format(c), meta, nil
 }
 
@@ -144,6 +156,143 @@ func (r *Resolver) CheckDrift(citeStr string) (bool, Meta, error) {
 
 	computed := cite.Hash(text)
 	return computed != c.Hash, meta, nil
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// git: locator resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// readGit resolves a git: locator. It runs the appropriate git command and
+// slices the output to the line range in c.
+func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
+	gl, parseErr := cite.ParseGit(c.File)
+	if parseErr != nil {
+		return "", Meta{}, &RefusalError{Err: parseErr.Error()}
+	}
+
+	// Alias lookup.
+	repoPath, ok := r.Cfg.Repos[gl.Alias]
+	if !ok {
+		return "", Meta{}, &RefusalError{
+			Err: fmt.Sprintf("unknown repo alias %s", gl.Alias),
+			Fix: fmt.Sprintf("tm repo add %s <path>", gl.Alias),
+		}
+	}
+
+	// git executable required.
+	if r.Cfg.Git == "" {
+		return "", Meta{}, &RefusalError{
+			Err: "git: locator needs git",
+			Fix: fmt.Sprintf("set git in %s", r.Cfg.ConfigPath),
+		}
+	}
+
+	// Resolve a ref to a 12-hex SHA via rev-parse.
+	resolveRef := func(ref string) (string, error) {
+		// Refuse refs that begin with "-": git would interpret them as options.
+		if strings.HasPrefix(ref, "-") {
+			return "", &RefusalError{
+				Err: "ref must not start with -",
+				Fix: "use git:<alias>@<ref>[:<path>] where ref is a branch, tag, or SHA",
+			}
+		}
+		cmd := exec.Command(r.Cfg.Git, "-C", repoPath, "rev-parse", "--verify", "--short=12", ref+"^{commit}") //nolint:gosec
+		out, err := cmd.Output()
+		if err != nil {
+			return "", &RefusalError{
+				Err: fmt.Sprintf("%s does not resolve in %s", ref, gl.Alias),
+				Fix: fmt.Sprintf("check that the ref exists; register the repo with tm repo add %s <path>", gl.Alias),
+			}
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
+	sha, err := resolveRef(gl.Ref)
+	if err != nil {
+		return "", Meta{}, err
+	}
+	var shaB string
+	if gl.RefB != "" {
+		shaB, err = resolveRef(gl.RefB)
+		if err != nil {
+			return "", Meta{}, err
+		}
+	}
+
+	// Build meta with Ref (as typed) and the SHA-pinned locator.
+	refStr := gl.Ref
+	if gl.RefB != "" {
+		refStr = gl.Ref + ".." + gl.RefB
+	}
+	meta := Meta{Ref: refStr}
+
+	pinnedGL := cite.GitLocator{Alias: gl.Alias, Ref: sha, RefB: shaB, Path: gl.Path}
+	meta.ResolvedLocator = cite.FormatGit(pinnedGL)
+
+	// Set Commit only for file-at-ref (the only form with a blob to pin).
+	if gl.RefB == "" && gl.Path != "" {
+		meta.Commit = sha
+	}
+
+	// Run the git command with a timeout and size cap like URIs.
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	defer cancel()
+
+	gitArgs := []string{"-C", repoPath, "-c", "core.pager=cat", "-c", "color.ui=false"}
+	var raw []byte
+	var runErr error
+
+	switch {
+	case gl.RefB == "" && gl.Path != "":
+		// File at ref: git cat-file -p <sha>:<path>
+		args := append(gitArgs, "cat-file", "-p", sha+":"+filepath.ToSlash(gl.Path)) //nolint:gocritic
+		raw, runErr = exec.CommandContext(ctx, r.Cfg.Git, args...).Output()          //nolint:gosec
+	case gl.RefB == "" && gl.Path == "":
+		// Commit: git show <sha>
+		args := append(gitArgs, "show", "--no-ext-diff", "--no-textconv", sha) //nolint:gocritic
+		raw, runErr = exec.CommandContext(ctx, r.Cfg.Git, args...).Output()    //nolint:gosec
+	case gl.RefB != "" && gl.Path == "":
+		// Diff: git diff <sha_a> <sha_b>
+		args := append(gitArgs, "diff", "--no-ext-diff", "--no-textconv", sha, shaB) //nolint:gocritic
+		raw, runErr = exec.CommandContext(ctx, r.Cfg.Git, args...).Output()          //nolint:gosec
+	default:
+		// Diff for path: git diff <sha_a> <sha_b> -- <path>
+		args := append(gitArgs, "diff", "--no-ext-diff", "--no-textconv", sha, shaB, "--", filepath.ToSlash(gl.Path)) //nolint:gocritic
+		raw, runErr = exec.CommandContext(ctx, r.Cfg.Git, args...).Output()                                           //nolint:gosec
+	}
+
+	if runErr != nil {
+		return "", meta, &RefusalError{
+			Err: fmt.Sprintf("git command failed for %s: %v", c.File, runErr),
+		}
+	}
+	if int64(len(raw)) > fetchSizeMax {
+		return "", meta, &RefusalError{
+			Err: fmt.Sprintf("git output for %s exceeds 16 MiB size cap", c.File),
+		}
+	}
+
+	// File-at-ref: apply converter for the path extension, then slice.
+	if gl.RefB == "" && gl.Path != "" {
+		ext := strings.ToLower(filepath.Ext(gl.Path))
+		mime := r.Cfg.ExtToMIME(ext)
+		text, convMeta, convErr := r.convertAndSlice(c, raw, mime, "")
+		if convErr != nil {
+			return "", meta, convErr
+		}
+		// Merge converter-specific fields from convMeta into meta.
+		meta.MIME = convMeta.MIME
+		meta.Converter = convMeta.Converter
+		meta.ConverterVersion = convMeta.ConverterVersion
+		return text, meta, nil
+	}
+
+	// Commit/diff/diff-for-path: slice raw.
+	text, sliceErr := sliceLines(raw, c)
+	if sliceErr != nil {
+		return "", meta, fmt.Errorf("citation %q: %w", c.File, sliceErr)
+	}
+	return text, meta, nil
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

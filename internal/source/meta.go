@@ -8,6 +8,9 @@ func ApplyMeta(fields map[string]any, meta Meta) {
 	if meta.Commit != "" {
 		fields["commit"] = meta.Commit
 	}
+	if meta.Ref != "" {
+		fields["ref"] = meta.Ref
+	}
 	if meta.URL != "" {
 		fields["url"] = meta.URL
 	}

@@ -109,22 +109,31 @@ func Set(path string, kv map[string]string) error {
 		pending[k] = v
 	}
 
-	var lines []string
+	var rawLines []string
 	if len(data) > 0 {
-		lines = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+		rawLines = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	}
-	for i, line := range lines {
+	// Rebuild the line list: replace existing keys, delete keys with empty value.
+	var lines []string
+	for _, line := range rawLines {
 		k, _, isKV := parseLine(line)
-		if !isKV {
-			continue
+		if isKV {
+			if v, ok := pending[k]; ok {
+				delete(pending, k)
+				if v != "" {
+					lines = append(lines, k+" = "+v)
+				}
+				// v == "" means delete: skip the line.
+				continue
+			}
 		}
-		if v, ok := pending[k]; ok {
-			lines[i] = k + " = " + v
-			delete(pending, k)
-		}
+		lines = append(lines, line)
 	}
+	// Append new keys that were not found in the existing file (non-empty only).
 	for _, k := range sortedKeys(pending) {
-		lines = append(lines, k+" = "+pending[k])
+		if pending[k] != "" {
+			lines = append(lines, k+" = "+pending[k])
+		}
 	}
 
 	dir := filepath.Dir(path)

@@ -5,9 +5,11 @@ package source
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 
+	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/config"
 )
 
@@ -28,6 +30,9 @@ type Config struct {
 	VersionCmds map[string][]string
 	// Git is the git executable path. Empty means git is not configured.
 	Git string
+	// Repos maps alias → absolute local repo path.
+	// Populated from "repo <alias> = <path>" config lines; written by tm repo add.
+	Repos map[string]string
 	// ConfigPath is the user config file path used in error messages.
 	ConfigPath string
 }
@@ -54,6 +59,7 @@ func LoadConfigPaths(userCfgPath, tmcfgPath string) (*Config, error) {
 		ExtMIME:     make(map[string]string),
 		Versions:    make(map[string]string),
 		VersionCmds: make(map[string][]string),
+		Repos:       make(map[string]string),
 		ConfigPath:  userCfgPath,
 	}
 
@@ -72,6 +78,8 @@ func LoadConfigPaths(userCfgPath, tmcfgPath string) (*Config, error) {
 
 // parseConfigFile parses one config file (key=value lines) and applies the
 // recognised source-related keys to cfg. Absent files are not errors.
+// A "repo <alias>" key with an alias that does not match [A-Za-z0-9_-]+ is a
+// config parse error (spec §13, §4.4).
 func parseConfigFile(path string, cfg *Config) error {
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
@@ -83,7 +91,9 @@ func parseConfigFile(path string, cfg *Config) error {
 	defer f.Close() //nolint:errcheck
 
 	sc := bufio.NewScanner(f)
+	lineNum := 0
 	for sc.Scan() {
+		lineNum++
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -97,6 +107,13 @@ func parseConfigFile(path string, cfg *Config) error {
 		if rawKey == "" || val == "" {
 			continue
 		}
+		// Validate repo alias before applying (§4.4: alias matches [A-Za-z0-9_-]+).
+		if strings.HasPrefix(rawKey, "repo ") {
+			alias := strings.TrimSpace(rawKey[len("repo "):])
+			if !cite.ValidAlias(alias) {
+				return fmt.Errorf("%s line %d: invalid repo alias %q (must match [A-Za-z0-9_-]+)", path, lineNum, alias)
+			}
+		}
 		applyKey(rawKey, val, cfg)
 	}
 	return sc.Err()
@@ -107,6 +124,13 @@ func applyKey(key, val string, cfg *Config) {
 	switch {
 	case key == "git":
 		cfg.Git = val
+
+	case strings.HasPrefix(key, "repo "):
+		alias := strings.TrimSpace(key[len("repo "):])
+		// Alias validity is pre-checked in parseConfigFile; accept here.
+		if alias != "" {
+			cfg.Repos[alias] = val
+		}
 
 	case strings.HasPrefix(key, "convert "):
 		mime := strings.TrimSpace(key[len("convert "):])
