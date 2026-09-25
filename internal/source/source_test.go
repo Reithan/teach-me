@@ -89,34 +89,6 @@ func initGitRepo(t *testing.T, dir, content string) {
 	}
 }
 
-// makeFakeGit creates a .git directory with the given HEAD, optional loose ref, and packed-refs.
-func makeFakeGit(t *testing.T, head, looseRef, looseSHA, packed string) string {
-	t.Helper()
-	dir := t.TempDir()
-	gitDir := filepath.Join(dir, ".git")
-	if err := os.MkdirAll(filepath.Join(gitDir, "refs", "heads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte(head), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if looseRef != "" {
-		p := filepath.Join(gitDir, filepath.FromSlash(looseRef))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(looseSHA+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if packed != "" {
-		if err := os.WriteFile(filepath.Join(gitDir, "packed-refs"), []byte(packed), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return dir
-}
-
 // makeConvFixture builds a text/html converter in a fresh temp dir.
 // convBody is the script body; cfgPin is the expected version ("" → omit version key);
 // verOutput is what the version script prints; docContent is written to doc.html.
@@ -494,7 +466,6 @@ func TestPath(t *testing.T) {
 		wantText             string
 		wantErr              bool
 		wantInErr            string
-		skipNoGit            bool
 		extra                func(t *testing.T, dir string, r *source.Resolver)
 	}{
 		{
@@ -512,9 +483,12 @@ func TestPath(t *testing.T) {
 			wantErr: true, wantInErr: "not in the working tree",
 		},
 		{
-			name: "missing file inside git repo is read from HEAD blob",
-			file: "file.txt", start: 1, end: 1, wantText: "blob line",
-			skipNoGit: true,
+			name:      "missing file inside git repo returns refusal (no HEAD fallback)",
+			file:      "file.txt",
+			start:     1,
+			end:       1,
+			wantErr:   true,
+			wantInErr: "not in the working tree",
 		},
 		{
 			// HashCitation produces a stable content hash; CheckDrift returns
@@ -585,11 +559,6 @@ func TestPath(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gitBin := ""
-			if tc.skipNoGit {
-				gitBin = skipIfNoGit(t)
-			}
-
 			dir := t.TempDir()
 			cfgExtra := tc.cfgExtra
 
@@ -602,11 +571,7 @@ func TestPath(t *testing.T) {
 				if err := os.WriteFile(filepath.Join(dir, "a.html"), []byte("raw\n"), 0o644); err != nil {
 					t.Fatal(err)
 				}
-			case "file.txt":
-				initGitRepo(t, dir, "blob line\n")
-				cfgExtra += fmt.Sprintf("git=%s\n", gitBin)
-				// Remove the file so it must be read from HEAD.
-				_ = os.Remove(filepath.Join(dir, "file.txt"))
+				// "file.txt" and "missing.txt": no file created — the test expects a refusal error.
 			}
 
 			r := resolverFrom(loadCfg(t, cfgExtra, ""), dir)
@@ -630,60 +595,6 @@ func TestPath(t *testing.T) {
 			}
 			if tc.extra != nil {
 				tc.extra(t, dir, r)
-			}
-		})
-	}
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Commit recording
-// ──────────────────────────────────────────────────────────────────────────────
-
-func TestCommitRecording(t *testing.T) {
-	const sha = "aabbccddeeff0011223344556677889900112233"
-
-	tests := []struct {
-		name    string
-		makeDir func(t *testing.T) string
-		wantSHA string
-	}{
-		{
-			name:    "branch ref resolves via loose ref",
-			makeDir: func(t *testing.T) string { return makeFakeGit(t, "ref: refs/heads/main\n", "refs/heads/main", sha, "") },
-			wantSHA: sha,
-		},
-		{
-			name: "branch ref resolves via packed-refs",
-			makeDir: func(t *testing.T) string {
-				return makeFakeGit(t, "ref: refs/heads/main\n", "", "", sha+" refs/heads/main\n")
-			},
-			wantSHA: sha,
-		},
-		{
-			name:    "detached HEAD uses SHA directly",
-			makeDir: func(t *testing.T) string { return makeFakeGit(t, sha+"\n", "", "", "") },
-			wantSHA: sha,
-		},
-		{
-			name:    "invalid HEAD returns empty commit",
-			makeDir: func(t *testing.T) string { return makeFakeGit(t, "not-a-sha\n", "", "", "") },
-		},
-		{
-			name:    "path not in any repo returns empty commit",
-			makeDir: func(t *testing.T) string { return t.TempDir() },
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := tc.makeDir(t)
-			got := source.CommitForPath(filepath.Join(dir, "file.txt"))
-			if tc.wantSHA == "" {
-				if got != "" {
-					t.Errorf("CommitForPath = %q, want empty", got)
-				}
-			} else if got != tc.wantSHA {
-				t.Errorf("CommitForPath = %q, want %q", got, tc.wantSHA)
 			}
 		})
 	}
