@@ -84,6 +84,12 @@ Register a repo alias for any source that lives in a git repository:
 tm repo add <name> <path>
 ```
 
+This writes a `repo` key into machine config (`key = value` format):
+
+```
+repo myrepo = /path/to/checkout
+```
+
 The alias lives in machine config; the graph stores only the alias, making it
 portable across machines. When the graph moves to another machine, register the
 same alias name pointing at wherever the repo is checked out there:
