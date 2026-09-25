@@ -151,7 +151,8 @@ func (c Command) Usage() string {
 // example `tm grade --drift <concept> keep|reopen "<summary>"`. Help output
 // prints these; error fix lines use the single Usage line.
 func (c Command) UsageLines() []string {
-	lines := []string{c.Usage()}
+	lines := make([]string, 0, 1+len(c.Forms))
+	lines = append(lines, c.Usage())
 	for _, f := range c.Forms {
 		lines = append(lines, fmt.Sprintf("tm %s --%s %s", c.Name, f.Flag, strings.Join(f.PosArgs, " ")))
 	}
