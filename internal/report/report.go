@@ -31,6 +31,14 @@ type Options struct {
 	PassedOnly     bool
 	IncludeReserve bool // --reserve: include reserve concepts in output
 	SrcRoot        string
+
+	// WindowLineMax and WindowCharMax bound each concept's inlined --fulltext
+	// source across all of its citations (§1, §6). The CLI sets them from the
+	// output-window constants for --fulltext and leaves them zero otherwise;
+	// zero means no window. When a concept's text is cut, renderFulltext ends it
+	// with one more: trailer naming the citation where the cut fell.
+	WindowLineMax int
+	WindowCharMax int
 }
 
 // TextReader reads source text and drift status for citeStr under srcRoot.
@@ -509,6 +517,13 @@ func renderFulltext(concepts []ConceptInfo, opts Options, reader TextReader) str
 			}
 		}
 
+		// Per-concept output window (§6): the concept's inlined source across all
+		// its citations is one window. linesUsed/charsUsed track what earlier
+		// citations spent; when the budget runs out the concept ends with one
+		// more: trailer naming the citation where the cut fell.
+		windowed := opts.WindowLineMax > 0
+		linesUsed, charsUsed := 0, 0
+
 		for _, citeStr := range cn.Cites {
 			sb.WriteString("\n")
 
@@ -532,13 +547,32 @@ func renderFulltext(concepts []ConceptInfo, opts Options, reader TextReader) str
 				fmt.Fprintf(&sb, "DRIFT %s\n", citeStr)
 			}
 
-			// Fenced block with cited text.
-			sb.WriteString("```\n")
-			if !strings.HasSuffix(text, "\n") {
-				text += "\n"
+			lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+			kept, cut := lines, false
+			if windowed {
+				kept, cut = windowBudget(lines, linesUsed, charsUsed, opts.WindowLineMax, opts.WindowCharMax)
 			}
-			sb.WriteString(text)
-			sb.WriteString("```\n")
+
+			// Fenced block with the kept text (omit an empty block).
+			if len(kept) > 0 {
+				sb.WriteString("```\n")
+				sb.WriteString(strings.Join(kept, "\n"))
+				sb.WriteString("\n```\n")
+			}
+
+			if cut {
+				// The window ran out inside this citation. next-start is the line
+				// after the last kept line in the source's own numbering; next-end
+				// is the citation's end. Stop the concept's remaining citations.
+				start, end, locator := citeSpan(citeStr)
+				fmt.Fprintf(&sb, "more: tm src %s %d-%d\n", locator, start+len(kept), end)
+				break
+			}
+
+			linesUsed += len(kept)
+			for _, ln := range kept {
+				charsUsed += len(ln) + 1
+			}
 		}
 
 		if len(cn.Aids) > 0 {
@@ -552,4 +586,40 @@ func renderFulltext(concepts []ConceptInfo, opts Options, reader TextReader) str
 	}
 
 	return sb.String()
+}
+
+// windowBudget returns the leading whole lines of lines that fit in what is
+// left of a per-concept window (§6): at most lineMax lines and charMax
+// characters across all of a concept's citations, counting each line plus its
+// newline. linesUsed and charsUsed are what earlier citations already spent. It
+// stops before the line whose inclusion would exceed either bound; a single
+// line over the char bound is still returned when nothing has been emitted yet
+// (linesUsed == 0), so progress is always made. more reports whether any line
+// was dropped.
+func windowBudget(lines []string, linesUsed, charsUsed, lineMax, charMax int) (kept []string, more bool) {
+	used := charsUsed
+	for i, line := range lines {
+		cost := len(line) + 1 // line plus its newline
+		atStart := linesUsed == 0 && i == 0
+		if !atStart && (linesUsed+i >= lineMax || used+cost > charMax) {
+			return lines[:i], true
+		}
+		used += cost
+	}
+	return lines, false
+}
+
+// citeSpan parses a stored citation into its source line range and locator for
+// the more: trailer. A citation without an explicit range reports start 1 so
+// the trailer's next-start is a valid line number.
+func citeSpan(citeStr string) (start, end int, locator string) {
+	c, err := cite.Parse(citeStr)
+	if err != nil {
+		return 1, 1, citeStr
+	}
+	start = c.Start
+	if start < 1 {
+		start = 1
+	}
+	return start, c.End, c.File
 }

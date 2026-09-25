@@ -98,6 +98,14 @@ func reportRun(ctx *Context) int {
 		IncludeReserve: includeReserve,
 		SrcRoot:        srcRoot,
 	}
+	// Bound each concept's inlined text to one output window (§1, §6). The
+	// numbers are the same constants tm src uses; report walks its own per-
+	// concept budget (it cannot import the cli window helper, since cli imports
+	// report and not the reverse). Left zero when not --fulltext.
+	if fulltext {
+		opts.WindowLineMax = windowLineMax
+		opts.WindowCharMax = windowCharMax
+	}
 
 	// reader wraps readCiteText and cite.CheckDrift so the report package
 	// goes through the CLI's single read funnel rather than calling cite
