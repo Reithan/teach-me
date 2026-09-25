@@ -876,7 +876,7 @@ Everything here is decided. Where a value can only be known at repository creati
 
 ### 16.1 Repository and ownership
 
-The repository is `github.com/reithan/teach-me`, which is also the Go module path. The binary and the command stay `tm`. The shipped skill is `teach-me`: it replaces the owner's existing `/teach-me` skill, and porting that skill's behavior into the new body is the owner's work. The code ships under the teach-me Individual Use License in `LICENSE` (decision 45); `CITATION.cff` gives the citation, and `THIRD_PARTY_NOTICES.md` carries the Go standard library license that release binaries include. Contributors sign `CLA.md` once, as `CONTRIBUTING.md` explains. The owner decides when the repository goes public; the implementing agent does not change visibility or the license terms.
+The repository is `github.com/reithan/teach-me`, which is also the Go module path. The binary and the command stay `tm`. The shipped skill is `teach-me`: it replaces the owner's existing `/teach-me` skill, and porting that skill's behavior into the new body is the owner's work. The code ships under the teach-me Individual Use License in `LICENSE` (decision 45), with Dark Planet Games, LLC as licensor and California governing law; `CITATION.cff` gives the citation, and `THIRD_PARTY_NOTICES.md` carries the Go standard library license that release binaries include. Contributors sign `CLA.md` once, as `CONTRIBUTING.md` explains. The owner decides when the repository goes public; the implementing agent does not change visibility or the license terms.
 
 ### 16.2 Toolchain
 
