@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.23
+# tm: teaching-map CLI, draft spec v0.24
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.22: `tm src` prints a source's converted, numbered text so agents cite the lines tm hashes; §2.1, §6, §12, §13.1, §14, §16.5 updated.
+Changes from v0.23: `tm src` and `tm report --fulltext` print a bounded window with a `more:` trailer, `tm src --fulldump` prints everything, `tm q` refuses citations over the question cap, and a reader role summarises sources that exceed the window; §1, §2.1, §6, §7, §9, §12, §14, §15 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -10,6 +10,7 @@ Every interaction with the CLI is built for an agent reader at the lowest token 
 
 - Input. Each command has the form an agent gets right on the first try in the fewest tokens: a short verb, required arguments positional in a fixed order, flags only for optional arguments, `-` to read free text from stdin.
 - Output. Each command returns only the minimum the caller needs to move on, in a terse line format an agent reads at a glance. Often that is `ok`. It never echoes inputs, prints banners, reports status or progress, or gives advice on success.
+- Bounded source output. A command that prints source text prints at most a window: 200 lines or 8,000 characters, whichever comes first, cut at a whole line, with the head kept. When more remains it ends with one `more:` line naming the command that prints the next window. The window is a constant, not configuration, so tm never depends on a harness output cap that would keep the tail and drop the head.
 - Errors and warnings. The CLI returns one only when it must, and appends every one to `ERRORS.jsonl` (10.1) without saying so. Each is an `err:` line saying what is wrong, plus a `fix:` line with the command or action that unblocks the agent when the error does not already make that obvious.
 
 - Help. All help text is written for an agent: terse lines generated from the argument parser, with no prose, examples, or color. What the CLI returns depends on what the call reveals:
@@ -55,6 +56,7 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 | Grader invocation | carries `check` output to a model and a verdict back to `grade` | a sub-agent the teacher spawns, on any harness with sub-agents and a shell. Automatic spawning is deferred (section 15) |
 | Planner invocation | uses `tm src` to read sources (converted, numbered text) and writes concepts with citations; called from Map and errata | `skill/teach-me/agents/teach-me-planner.md` |
 | Pruner invocation | decides which mapped concepts the goal requires and parks the rest in `reserve`; called after every Map | `skill/teach-me/agents/teach-me-pruner.md` |
+| Reader invocation | a disposable-context sub-agent given one locator and one question, allowed only `tm src`, returning a summary and candidate ranges in tm's numbering; the only role that runs `tm src --fulldump` | `skill/teach-me/agents/teach-me-reader.md` |
 | Question UI | maps `ask --format json` onto the harness's question tool | a small script or skill |
 | Role guard | replaces the `TM_ROLE` soft check | a pre-tool hook |
 | Setup reference | converter and git configuration the teacher reads when advising the user | `skill/teach-me/reference/setup.md` |
@@ -285,7 +287,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm reserve <concept>` | move an untested concept with no questions to `reserve`. Its edges stay; its children stop being blocked by it. Logged | `ok` |
 | `tm activate <concept>` | move a reserve concept to `untested`. Its own reserve parents stay parked. When it is a parent of a gated concept, the gate clears with `via: activate` (section 7). Logged | `ok` |
 | `tm prune <goal> [--keep N]` | park every untested concept with no questions that is outside the goal's ancestor closure; with `--keep N`, also park closure members beyond the N nearest untested concepts by hop distance, the goal counted first and ties broken by ID. Concepts with questions are never moved. Logged with the moved IDs | `reserved <n>` |
-| `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe | `qN` |
+| `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe. Refuses when the cited text exceeds 120 lines or 6,000 characters (§7) | `qN` |
 | `tm q <concept> <cite> "<narrow scope>" --teach --re <qid>` | add a teach question hung off that question's answer. `--re` is required: it names the failed answer being taught, directly or through an earlier teach question | `qN` |
 | `tm ask <concept> [--format lines\|json] [--src-text]` | read-only: emit the batch to ask next (section 8) | batch ID, then one line per unanswered question |
 | `tm answer <qid> "<raw>" [--asked "<wording>"] [--concede]` | record the human's answer as `pending`; with `--concede`, also writes a `fail` verdict with summary `conceded` and runs the section 8 transitions; no grader is involved | `ok` |
@@ -293,7 +295,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm grade <qid> pass\|fail\|unclear "<summary>" [--guided] [--oos]` | grader: write the verdict, run the transitions in section 8 | `ok` |
 | `tm lint [<file>]` | check the graph (section 11) | `ok`, or every violation |
 | `tm lint --drift` | resolve local citations; list mismatches one per line; exit 1 if any. Does not block mutations | mismatches or `ok` |
-| `tm report [<concept>] [--hops N] [--fulltext] [--passed-only] [--reserve]` | read-only: with concept, walk parent edges up to `N` hops, emit foundations as Markdown; without concept, emit whole graph from roots (depth ≤ 5 by default, `--hops` overrides); `--fulltext` inlines cited text (default 2 hops with concept); `--passed-only` drops open and blocked concepts; reserve concepts are omitted unless `--reserve` | Markdown on stdout |
+| `tm report [<concept>] [--hops N] [--fulltext] [--passed-only] [--reserve]` | read-only: with concept, walk parent edges up to `N` hops, emit foundations as Markdown; without concept, emit whole graph from roots (depth ≤ 5 by default, `--hops` overrides); `--fulltext` inlines cited text (default 2 hops with concept), each concept's inlined text bounded to one window (§1), a concept whose text is cut ending with `more: tm src <locator> <next-start>-<next-end>`; `--passed-only` drops open and blocked concepts; reserve concepts are omitted unless `--reserve` | Markdown on stdout |
 | `tm rehash [<file>]` | for every citation without a hash: resolve the text, write the hash, log a `rehash` event | `ok`, or one line per updated citation |
 | `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
 | `tm check --drift <concept>` | grader: for a passed concept, read its `grade` events, resolve each question citation against the current source, and emit per-question pairs for judging whether the pass survives | the recheck payload |
@@ -304,7 +306,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm repo list` | list registered aliases and their paths | one line per alias |
 | `tm cache clear` | empty the conversion and fetch cache (section 3) | `ok` |
 | `tm cache list` | list cache entries | one line per entry |
-| `tm src <locator> [START-END] [--find <regex>]` | read-only: resolve the locator exactly as `add` and `q` do (src-root, repo aliases, converters, cache, aids-dir refusal) and print its text with 1-based line numbers, restricted to the range or to lines matching the regex; a `git:` locator or a redirected URI prints the resolved locator first | `src: <locator>` then `N\t<text>` lines |
+| `tm src <locator> [START-END] [--find <regex>] [--fulldump]` | read-only: resolve the locator exactly as `add` and `q` do (src-root, repo aliases, converters, cache, aids-dir refusal) and print its text with 1-based line numbers, restricted to the range or to lines matching the regex. The window (§1) applies to the whole file, an explicit range, and `--find` hits alike; the trailer is `more: tm src <locator> <next-start>-<next-end>` (with `--find <regex>` appended when it was given), where `<next-start>` is the line after the last printed line and `<next-end>` is `<next-start>+199` capped at the last line, and there is no trailer when nothing remains. `--fulldump` prints everything with no trailer. A `git:` locator or a redirected URI prints the resolved locator first | `src: <locator>` then `N\t<text>` lines, then a `more:` line unless done |
 | `tm aid <id> <path>` | link an aid to a concept or question (section 4.6). Logged | `ok` |
 | `tm aid rm <id> <path>` | unlink an aid. Logged | `ok` |
 | Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when a doc is configured; otherwise one usage line per command |
@@ -368,6 +370,7 @@ The `reserve` count is printed only when it is nonzero.
 | `add`, `q`, `recite` | a `git:` locator names an unknown alias (`fix: tm repo add <alias> <path>`) |
 | `add`, `q`, `recite` | a `git:` locator is used with no `git` configured, or its `<ref>`, `<a>`, or `<b>` does not resolve |
 | `add`, `q`, `recite` | the resolved locator lies under aids-dir (`err: <path> is an aid, not a source`; `fix: cite the primary source; link the aid with tm aid <id> <path>`); `tm src` gives the same `err:` with only `fix: cite the primary source` (no node id) |
+| `q` (all forms, including `--re` and `--teach`) | the cited text exceeds 120 lines or 6,000 characters (`err: citation spans <N> lines/<M> chars; a question cites at most 120 lines or 6000 chars`; `fix: narrow with tm src <locator> --find <regex>`). This is write-time only: `add`, `edit --src`, `reopen --src`, and `recite` are uncapped, and a question already in the graph above the cap keeps working, so `ask`, `check`, and `grade` are unchanged. No lint check |
 | `recite` | the new range does not hash to the existing citation hash |
 | `check --drift` | the event log is missing or unreadable (`fix: tm reopen`) |
 | `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |
@@ -450,7 +453,7 @@ If Q teaches something outside TARGET and GAP, add --oos.
 
 The teacher sees the flag in `tm status --concept <id>` as `q7 pass oos`. It means: stop extending that line of questions and get back to the open targets or the locked probes.
 
-The instruction block comes last so it lands after the parent's prompt in the grader's context. The CLI inlines the cited lines, so the grader needs no file access.
+The instruction block comes last so it lands after the parent's prompt in the grader's context. The CLI inlines the cited lines, so the grader needs no file access. The cap on question citations (§7) bounds the `SRC` block, so the check payload stays small enough for the grader to read the question and the source together.
 
 ### 9.1 Recheck payload
 
@@ -602,7 +605,7 @@ stateDiagram-v2
     }
 ```
 
-Five behaviors the CLI cannot enforce belong in the teacher's prompt:
+The behaviors the CLI cannot enforce belong in the teacher's prompt:
 
 1. Teach questions target the diagnosed gap, not the scopes of the locked probes.
 2. The grader's spawn prompt carries the question ID and nothing about the user.
@@ -610,6 +613,7 @@ Five behaviors the CLI cannot enforce belong in the teacher's prompt:
 4. The file-access rule: the model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on those file patterns; the CLI cannot. Alongside that deny, the adapter recommends a deny on writes under src-root with an allow for aids-dir; that pairing is the only enforcement against a teacher-authored file placed outside aids-dir and cited as a plain path.
 5. The aids rule: everything the teacher writes — examples, study guides, generated diffs, copies it fetches for itself — goes in aids-dir and is linked with `tm aid`; it is never cited. `tm add`, `tm q`, and `tm recite` refuse a citation resolving under aids-dir and lint refuses one in the graph, but a teacher-authored file placed elsewhere is undetectable by the CLI; the harness deny in rule 4 is the only guard.
 6. The line-range rule: line ranges come only from `tm src`. An agent never derives a range from Read, WebFetch, a search result, or its own memory of a document; it runs `tm src <locator>` (with `--find` or a range to narrow), then cites the numbers it printed. Read and WebFetch remain useful for deciding whether a source is worth citing.
+7. The reader rule: when a `tm src` trailer shows the source exceeds one window and the teacher needs the whole of it to find ranges, the teacher spawns a reader (§2.1) with the locator and a question, then cites the ranges the reader returns after confirming them with `tm src <locator> START-END`. The teacher and planner never run `--fulldump` themselves; only the reader does.
 
 The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and records their root with `tm new --src-root <dir>`. It registers every repo the learner names with `tm repo add <alias> <path>`, so repo content cites through one portable `git:` form. It cites web docs by URL and lets the cache carry the fetch and conversion cost; drift on a live URL is caught at most one cache TTL late. Learner-supplied local files — corporate downloads, output of other programs or agents — are cited as plain paths. The teacher never saves a copy of anything: a copy it makes is an aid, and only a copy the learner supplies is a legitimate plain-path source. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and for writes under src-root outside aids-dir, and points at the setup reference.
 
@@ -804,6 +808,9 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 67 | The conversion and fetch cache ships, in the user cache dir keyed by locator, converter, and version, with a `cache-ttl` (default 24h, `0` disables); it holds regenerable text and cost, never graph state | re-fetching and re-converting on every read is the cost the deferred cache was meant to remove; a TTL bounds live-URL staleness to one interval; scoping "no cache or side state" to graph state reconciles §3 | the OS temp directory (the v0.21 deferral); the graph directory or src-root; no TTL, which never notices live-URL drift | agreed, 2026-09-24 |
 | 68 | Teacher aids get a home (`aids-dir`, linked with `tm aid`) and cannot be cited: `add`, `q`, `recite`, and lint refuse a citation resolving under aids-dir, and the adapter recommends a harness deny on writes under src-root outside aids-dir | aids are useful but citing them defeats the source machinery; a mechanical refusal plus one deny rule is the enforceable part, and a file placed elsewhere is the harness's to block | a source registry the grader checks; the grader policing citations; the CLI detecting model authorship of a file | agreed, 2026-09-24 |
 | 69 | `tm src` is the only sanctioned way to obtain line numbers; it reuses the citation resolver end to end | harness readers (Read, WebFetch) render differently from tm's converters, so any range from them is unstable; a separate numbering path would drift from the hashing path | a `--dry-run` on `tm add` (needs a range to begin with); trusting harness readers with a converter-free mode; teaching converters to emit line maps | agreed, 2026-09-24 |
+| 70 | Output windows are constants in tm (200 lines / 8,000 chars for source reads, §1), not harness caps | a harness cap that keeps the tail deletes the head of prompt-shaped output, where the question and locator sit; a constant in tm bounds its own output and avoids a config key nobody tunes | rely on the harness output cap; a configurable window size | agreed, 2026-09-25 |
+| 71 | Question citations are capped (120 lines / 6,000 chars, §7); concept citations are not | no grade is earned against a concept citation, so its size never bounds a grader payload; only `tm report --fulltext` prints concept text, and that print is windowed (§1) | cap every citation; cap none | agreed, 2026-09-25 |
+| 72 | `--fulldump` exists for the reader role only (§2.1); every other role pages through the `more:` trailer | the reader has disposable context and needs the whole source once to find ranges, while paging suits the teacher and planner | paging-only with no full dump (more tool calls for a cheap model); a `--full` on every read command | agreed, 2026-09-25 |
 
 ## 15. Deferred
 
@@ -823,6 +830,7 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 - Mermaid size limits under long URIs: measure in M9.
 - Decay and re-test of passed concepts across days.
 - Adapters from `tm ask --format json` to a specific harness's question UI.
+- Multiple citations per concept via a `%% tm:cite <id> <cite>` meta line at format 3. Not needed until a lesson shows a concept whose foundation is two disjoint passages.
 
 ## 16. Implementation
 
