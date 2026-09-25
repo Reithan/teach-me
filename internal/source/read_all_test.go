@@ -234,7 +234,7 @@ func TestReadAll_PropertyConsistency(t *testing.T) {
 // when ReadAll and then Read are called within the same TTL.
 func TestReadAll_URICacheSharing(t *testing.T) {
 	var fetches int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fetches++
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = fmt.Fprint(w, "line one\nline two\n")

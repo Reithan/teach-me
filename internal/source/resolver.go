@@ -298,7 +298,7 @@ func (r *Resolver) readGitContent(c cite.Citation) ([]byte, Meta, error) {
 	case gl.RefB == "" && gl.Path != "":
 		// File at ref: git cat-file -p <sha>:<path>
 		args := append(gitArgs, "cat-file", "-p", sha+":"+filepath.ToSlash(gl.Path)) //nolint:gocritic
-		raw, runErr = exec.CommandContext(ctx, r.Cfg.Git, args...).Output()           //nolint:gosec
+		raw, runErr = exec.CommandContext(ctx, r.Cfg.Git, args...).Output()          //nolint:gosec
 	case gl.RefB == "" && gl.Path == "":
 		// Commit: git show <sha>
 		args := append(gitArgs, "show", "--no-ext-diff", "--no-textconv", sha) //nolint:gocritic
@@ -716,7 +716,6 @@ func (r *Resolver) convertContent(raw []byte, mime string) ([]byte, Meta, error)
 	}
 	return raw, meta, nil
 }
-
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers

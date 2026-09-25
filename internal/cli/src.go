@@ -108,7 +108,7 @@ func srcRun(ctx *Context) int {
 			return 3
 		}
 		if s < 1 || e < s {
-			ctx.ErrMsg = fmt.Sprintf("line range must be START-END with 1 <= START <= END")
+			ctx.ErrMsg = "line range must be START-END with 1 <= START <= END"
 			ctx.FixMsg = FindCommand("src").Usage()
 			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
 			return 3
