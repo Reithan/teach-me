@@ -225,6 +225,47 @@ func TestLoadConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "cache-ttl is parsed correctly",
+			user: "cache-ttl=12h\n",
+			check: func(t *testing.T, cfg *source.Config) {
+				if !cfg.CacheTTLSet {
+					t.Error("CacheTTLSet = false, want true")
+				}
+				if cfg.CacheTTL != 12*time.Hour {
+					t.Errorf("CacheTTL = %v, want 12h", cfg.CacheTTL)
+				}
+			},
+		},
+		{
+			name: "cache-ttl=0 disables cache (CacheTTLSet=true)",
+			user: "cache-ttl=0\n",
+			check: func(t *testing.T, cfg *source.Config) {
+				if !cfg.CacheTTLSet {
+					t.Error("CacheTTLSet = false, want true for cache-ttl=0")
+				}
+				if cfg.CacheTTL != 0 {
+					t.Errorf("CacheTTL = %v, want 0", cfg.CacheTTL)
+				}
+			},
+		},
+		{
+			name: "invalid cache-ttl returns error",
+			check: func(t *testing.T, _ *source.Config) {
+				dir := t.TempDir()
+				p := filepath.Join(dir, "config")
+				if err := os.WriteFile(p, []byte("cache-ttl=not-a-duration\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				_, err := source.LoadConfigPaths(p, filepath.Join(dir, "nofile"))
+				if err == nil {
+					t.Fatal("expected error for invalid cache-ttl")
+				}
+				if !strings.Contains(err.Error(), "cache-ttl") {
+					t.Errorf("error should mention cache-ttl; got: %v", err)
+				}
+			},
+		},
+		{
 			name: "XDG_CONFIG_HOME is used to locate user config",
 			check: func(t *testing.T, _ *source.Config) {
 				xdg := t.TempDir()

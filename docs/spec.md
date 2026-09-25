@@ -636,6 +636,7 @@ The **Prune phase** follows every Map. The planner's prompt primes inclusion, an
 | `TM_ERRORS` | `ERRORS.jsonl` beside the graph | error log path |
 | `TM_DOC` | unset | path to the skill or agent file that documents `tm` for this harness; baseline help defers to it, and its `metadata.tm-version` is checked. Overrides the `doc` config key for one call |
 | `TM_CACHE_TTL` | `24h` | conversion and fetch cache TTL (Go duration); overrides the `cache-ttl` key for one call; `0` disables the cache |
+| `TM_CACHE_DIR` | `<user cache dir>/tm` | cache location; overrides the default for one call |
 | `TM_PROBE_MIN` / `TM_PROBE_MAX` | 2 / 5 | probe batch size |
 | `TM_TEACH_MIN` / `TM_TEACH_MAX` | 1 / 3 | teach batch size |
 | `TM_MAX_FAILS` | 2 | failed probe batches before the gate |
@@ -688,7 +689,7 @@ err: fetch https://... failed: no converter for <mime>
 fix: add a convert <mime> line to <config>
 ```
 
-Fetch and conversion pass through the cache (section 3), keyed by SHA-256 over the final locator string, the converter command, and the converter version. A hit within the TTL skips the fetch and the conversion, and the hash check runs against the cached text; a miss or an expired entry fetches, converts, stores the text and `fetched_at`, then checks. The TTL is `TM_CACHE_TTL` or the `cache-ttl` key (Go duration, default `24h`; `0` disables the cache). Drift on a live URL is therefore detected at most one TTL late; that is the accepted trade for not re-fetching on every read.
+Fetch and conversion pass through the cache (section 3), keyed by SHA-256 over the final locator string, the converter command, and the converter version. A hit within the TTL skips the fetch and the conversion, and the hash check runs against the cached text; a miss or an expired entry fetches, converts, stores the text and `fetched_at`, then checks. The TTL is `TM_CACHE_TTL` or the `cache-ttl` key (Go duration, default `24h`; `0` disables the cache). The cache is stored under `<user cache dir>/tm` (XDG `$XDG_CACHE_HOME/tm` on Linux, `~/Library/Caches/tm` on macOS, `%LocalAppData%\tm` on Windows); `TM_CACHE_DIR` overrides the location for one call. Drift on a live URL is therefore detected at most one TTL late; that is the accepted trade for not re-fetching on every read.
 
 A failed fetch (no egress, timeout, non-2xx) refuses:
 

@@ -57,8 +57,9 @@ type Meta struct {
 // Resolver resolves citations through converters, URIs, and git HEAD.
 // Create one per command invocation via NewResolver.
 type Resolver struct {
-	Cfg     *Config
-	SrcRoot string
+	Cfg      *Config
+	SrcRoot  string
+	CacheDir string // empty disables the cache (e.g. when UserCacheDir errors)
 
 	mu       sync.Mutex
 	verified map[string]versionEntry // program → verified entry
@@ -76,21 +77,39 @@ func NewResolver(graphDir string) (*Resolver, error) {
 	if err != nil {
 		return nil, err
 	}
+	cacheDir := resolverCacheDir()
 	return &Resolver{
 		Cfg:      cfg,
 		SrcRoot:  cite.SrcRoot(graphDir),
+		CacheDir: cacheDir,
 		verified: make(map[string]versionEntry),
 	}, nil
 }
 
 // NewResolverWithConfig creates a Resolver from an already-loaded Config and srcRoot.
 // Used in tests and when the caller needs explicit control over config paths.
+// CacheDir defaults to the user cache dir; callers may override it directly after construction.
 func NewResolverWithConfig(cfg *Config, srcRoot string) *Resolver {
 	return &Resolver{
 		Cfg:      cfg,
 		SrcRoot:  srcRoot,
+		CacheDir: resolverCacheDir(),
 		verified: make(map[string]versionEntry),
 	}
+}
+
+// resolverCacheDir returns the default cache directory for a Resolver.
+// TM_CACHE_DIR overrides the location (useful for tests and isolated runs).
+// Returns "" when the directory cannot be determined (disables the cache).
+func resolverCacheDir() string {
+	if v := os.Getenv("TM_CACHE_DIR"); v != "" {
+		return v
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(base, "tm")
 }
 
 // Read resolves citation c, applies any configured converter, and returns the
@@ -325,6 +344,43 @@ func (r *Resolver) readPath(c cite.Citation) (string, Meta, error) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
+	ttl := r.effectiveCacheTTL()
+
+	// ── Cache read ────────────────────────────────────────────────────────────
+	// When cache is enabled and the entry is a hit, skip the fetch entirely.
+	if ttl > 0 && r.CacheDir != "" {
+		entryPath := cachePath(r.CacheDir, c.File)
+		if entry, _ := readCacheEntry(entryPath); entry != nil {
+			// Resolve what converter/version the current config would use for
+			// the entry's MIME. A changed converter or version is a miss.
+			converterCmds := r.Cfg.ConverterFor(entry.MIME)
+			converterVer := ""
+			if len(converterCmds) > 0 {
+				if ver, verErr := r.checkVersion(converterCmds[0]); verErr == nil {
+					converterVer = ver
+				}
+				// verErr != nil → version changed or converter missing → miss
+			}
+			if isCacheHit(entry, time.Now().UTC(), ttl, converterCmds, converterVer) {
+				text, sliceErr := sliceLines([]byte(entry.Text), c)
+				if sliceErr != nil {
+					return "", Meta{}, fmt.Errorf("citation %q: %w", c.File, sliceErr)
+				}
+				meta := Meta{
+					URL:       entry.FinalURL,
+					MIME:      entry.MIME,
+					FetchedAt: entry.FetchedAt,
+				}
+				if len(converterCmds) > 0 {
+					meta.Converter = converterCmds[0]
+					meta.ConverterVersion = converterVer
+				}
+				return text, meta, nil
+			}
+		}
+	}
+
+	// ── Full fetch ────────────────────────────────────────────────────────────
 	fetchedAt := time.Now().UTC()
 
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
@@ -437,6 +493,27 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 		meta.ConverterVersion = converterVer
 	}
 
+	// ── Cache write ───────────────────────────────────────────────────────────
+	// Store the full (unsliced) converted text. Write failures are ignored;
+	// the cache is regenerable cost, not state.
+	if ttl > 0 && r.CacheDir != "" {
+		converterStr := ""
+		if len(convCmds) > 0 {
+			converterStr = strings.Join(convCmds, " ")
+		}
+		entry := &cacheEntry{
+			Locator:          c.File,
+			FinalURL:         finalURL,
+			MIME:             mime,
+			Converter:        converterStr,
+			ConverterVersion: converterVer,
+			FetchedAt:        fetchedAt,
+			Text:             string(converted),
+		}
+		entryPath := cachePath(r.CacheDir, c.File)
+		_ = writeCacheEntry(entryPath, entry) // ignore write error
+	}
+
 	text, sliceErr := sliceLines(converted, c)
 	if sliceErr != nil {
 		return "", meta, fmt.Errorf("citation %q: %w", c.File, sliceErr)
@@ -448,7 +525,7 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 func (r *Resolver) fetchFailure(url, reason string) error {
 	return &RefusalError{
 		Err: fmt.Sprintf("fetch %s failed: %s", url, reason),
-		Fix: "save a static copy under TM_SRC_ROOT and cite it",
+		Fix: "retry when egress is available, or ask the learner for a copy and cite the copy as a plain path",
 	}
 }
 

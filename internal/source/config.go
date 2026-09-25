@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/config"
@@ -33,6 +34,13 @@ type Config struct {
 	// Repos maps alias → absolute local repo path.
 	// Populated from "repo <alias> = <path>" config lines; written by tm repo add.
 	Repos map[string]string
+	// CacheTTL is the conversion and fetch cache TTL (§13.1).
+	// CacheTTLSet is true when cache-ttl was explicitly set in a config file
+	// (including when set to 0 to disable). When CacheTTLSet is false the
+	// built-in default of 24h applies.
+	// Use effectiveCacheTTL() on the Resolver for the resolved value.
+	CacheTTL    time.Duration
+	CacheTTLSet bool
 	// ConfigPath is the user config file path used in error messages.
 	ConfigPath string
 }
@@ -114,6 +122,12 @@ func parseConfigFile(path string, cfg *Config) error {
 				return fmt.Errorf("%s line %d: invalid repo alias %q (must match [A-Za-z0-9_-]+)", path, lineNum, alias)
 			}
 		}
+		// Validate cache-ttl is a valid Go duration before applying.
+		if rawKey == "cache-ttl" {
+			if _, parseErr := time.ParseDuration(val); parseErr != nil {
+				return fmt.Errorf("%s line %d: invalid cache-ttl %q: %v", path, lineNum, val, parseErr)
+			}
+		}
 		applyKey(rawKey, val, cfg)
 	}
 	return sc.Err()
@@ -157,6 +171,13 @@ func applyKey(key, val string, cfg *Config) {
 		prog := strings.TrimSpace(key[len("version "):])
 		if prog != "" {
 			cfg.Versions[prog] = val
+		}
+
+	case key == "cache-ttl":
+		// Validated by parseConfigFile before reaching here; ignore parse errors.
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.CacheTTL = d
+			cfg.CacheTTLSet = true
 		}
 
 		// Unknown keys (file=, doc=, TM_* env keys, etc.) are silently ignored.
