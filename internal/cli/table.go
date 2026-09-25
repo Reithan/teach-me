@@ -100,7 +100,6 @@ var Table = []Command{
 		},
 		Flags: []FlagSpec{
 			{Name: "src", TakesValue: true, ValueName: "<cite>"},
-			{Name: "errata", TakesValue: true, ValueName: `"<reason>"`},
 		},
 		ForbidGrader: true,
 		Run:          editRun,
@@ -133,6 +132,19 @@ var Table = []Command{
 		},
 		ForbidGrader: true,
 		Run:          reopenRun,
+	},
+	{
+		Name: "errata",
+		PosArgs: []PosArg{
+			{Name: "<concept>"},
+			{Name: `"<scope>"`},
+			{Name: `"<reason>"`, Stdin: true},
+		},
+		Flags: []FlagSpec{
+			{Name: "src", TakesValue: true, ValueName: "<cite>"},
+		},
+		ForbidGrader: true,
+		Run:          errataRun,
 	},
 	{
 		Name: "reserve",

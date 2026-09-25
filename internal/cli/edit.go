@@ -11,42 +11,22 @@ import (
 	"github.com/reithan/teach-me/internal/state"
 )
 
-// editRun is the Run handler for
-// `tm edit <concept> "<scope>" [--src <cite>] [--errata "<reason>"]`.
+// editRun is the Run handler for `tm edit <concept> "<scope>" [--src <cite>]`.
 //
-// Rewrites the scope of a concept. Without --errata the concept must have no
-// questions and not be passed. With --errata (decision 73) it also accepts a
-// concept that has questions or is passed: the reason is logged, questions and
-// answers are untouched, and a pass then goes to a grader recheck
-// (`tm check --errata` / `tm grade --errata`). An optional --src flag replaces
-// the citation. Outputs "ok".
+// Rewrites the scope of a concept that has no questions yet. An optional
+// --src flag replaces the citation. Outputs "ok".
 //
 // Exit codes:
 //
 //	0  ok
-//	1  invariant refusal (passed or has questions without --errata; wrong type)
+//	1  invariant refusal (passed, wrong type, has questions)
 //	2  output fails lint (internal error)
-//	3  usage error, unknown ID, bad --src citation, empty --errata reason
+//	3  usage error, unknown ID, bad --src citation
 func editRun(ctx *Context) int {
 	concept := ctx.Positionals[0]
 	scope := ctx.Positionals[1]
 
 	usageLine := FindCommand("edit").Usage()
-
-	// --errata "<reason>": with it, edit accepts a passed concept or one with
-	// questions. The reason must be non-empty.
-	errata := ""
-	hasErrata := false
-	if vals := ctx.Flags["errata"]; len(vals) > 0 {
-		hasErrata = true
-		errata = vals[0]
-		if errata == "" {
-			ctx.ErrMsg = "--errata needs a reason"
-			ctx.FixMsg = fmt.Sprintf("tm edit %s \"<scope>\" --errata \"<why the old scope was wrong>\"", concept)
-			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
-			return 3
-		}
-	}
 
 	// ── Pre-Mutate validation (exit 3) ───────────────────────────────────────
 
@@ -60,20 +40,9 @@ func editRun(ctx *Context) int {
 	ctx.GraphFile = file
 
 	// Validate --src citation if given.
-	citeStr := ""
-	if vals := ctx.Flags["src"]; len(vals) > 0 {
-		citeStr = vals[0]
-		resolver, resolverErr := source.NewResolver(filepath.Dir(file))
-		if resolverErr != nil {
-			ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
-			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-			return 3
-		}
-		hashedCite, _, hashErr := resolver.HashCitation(citeStr)
-		if hashErr != nil {
-			return citeHashError(ctx, citeStr, hashErr, usageLine)
-		}
-		citeStr = hashedCite
+	citeStr, code := hashSrcFlag(ctx, file, usageLine)
+	if code != 0 {
+		return code
 	}
 
 	// ── Apply closure ────────────────────────────────────────────────────────
@@ -111,7 +80,7 @@ func editRun(ctx *Context) int {
 			}
 		}
 
-		// Not a concept (q or a node) → exit 1. This holds even with --errata.
+		// Not a concept (q or a node) → exit 1.
 		if !allConcepts[concept] {
 			return nil, nil, &ops.Refusal{
 				Err:  concept + " is not a concept",
@@ -119,10 +88,8 @@ func editRun(ctx *Context) int {
 			}
 		}
 
-		inPassed := passedSet[concept]
-
-		// Passed concept → exit 1 without --errata; allowed with --errata.
-		if inPassed && !hasErrata {
+		// Passed concept → exit 1.
+		if passedSet[concept] {
 			return nil, nil, &ops.Refusal{
 				Err:  concept + " is passed",
 				Fix:  fmt.Sprintf("tm reopen %s \"<gap>\"", concept),
@@ -130,29 +97,23 @@ func editRun(ctx *Context) int {
 			}
 		}
 
-		// Has questions → exit 1 without --errata; allowed with --errata.
-		if !hasErrata {
-			for _, item := range g.TestingItems {
-				if item.Q == nil {
-					continue
-				}
-				cid, ok := s.ConceptOf(item.Q.ID)
-				if ok && cid == concept {
-					return nil, nil, &ops.Refusal{
-						Err:  concept + " has questions",
-						Exit: 1,
-					}
+		// Has questions → exit 1.
+		for _, item := range g.TestingItems {
+			if item.Q == nil {
+				continue
+			}
+			cid, ok := s.ConceptOf(item.Q.ID)
+			if ok && cid == concept {
+				return nil, nil, &ops.Refusal{
+					Err:  concept + " has questions",
+					Exit: 1,
 				}
 			}
 		}
 
-		// Find the target node in the list that currently holds it.
-		list := g.UntestedConcepts
-		if inPassed {
-			list = g.PassedConcepts
-		}
+		// Find the target node in untested.
 		var targetNode *graph.ConceptNode
-		for _, c := range list {
+		for _, c := range g.UntestedConcepts {
 			if c.ID == concept {
 				targetNode = c
 				break
@@ -160,10 +121,6 @@ func editRun(ctx *Context) int {
 		}
 
 		oldScope := targetNode.Scope
-		oldCite := ""
-		if len(targetNode.Cites) > 0 {
-			oldCite = targetNode.Cites[0]
-		}
 
 		// Build new node (copy-on-write).
 		newNode := *targetNode
@@ -172,39 +129,49 @@ func editRun(ctx *Context) int {
 			newNode.Cites = []string{citeStr}
 		}
 
-		// Build new graph with the edited node replaced in its list.
+		// Build new graph with the edited node.
 		newG := *g
-		newConcepts := make([]*graph.ConceptNode, len(list))
-		for i, c := range list {
+		newConcepts := make([]*graph.ConceptNode, len(g.UntestedConcepts))
+		for i, c := range g.UntestedConcepts {
 			if c.ID == concept {
 				newConcepts[i] = &newNode
 			} else {
 				newConcepts[i] = c
 			}
 		}
-		if inPassed {
-			newG.PassedConcepts = newConcepts
-		} else {
-			newG.UntestedConcepts = newConcepts
-		}
+		newG.UntestedConcepts = newConcepts
 
-		fields := map[string]any{
+		row := eventlog.NewRow("edit", map[string]any{
 			"id":     concept,
 			"before": oldScope,
 			"after":  scope,
-		}
-		if hasErrata {
-			fields["errata"] = errata
-			// Log the citation move only when --errata --src re-points it.
-			if citeStr != "" {
-				fields["src_before"] = oldCite
-				fields["src_after"] = citeStr
-			}
-		}
-		row := eventlog.NewRow("edit", fields)
+		})
 
 		return &newG, []eventlog.Row{row}, nil
 	}
 
 	return runMutationWithFile(ctx, file, apply)
+}
+
+// hashSrcFlag validates the --src citation, if given, against the sources of
+// the graph at file and returns it with its hash. It returns "" when --src is
+// absent. On failure it writes the err:/fix: lines and returns a nonzero exit
+// code. Shared by edit and errata.
+func hashSrcFlag(ctx *Context, file, usageLine string) (string, int) {
+	vals := ctx.Flags["src"]
+	if len(vals) == 0 {
+		return "", 0
+	}
+	citeStr := vals[0]
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return "", 3
+	}
+	hashedCite, _, hashErr := resolver.HashCitation(citeStr)
+	if hashErr != nil {
+		return "", citeHashError(ctx, citeStr, hashErr, usageLine)
+	}
+	return hashedCite, 0
 }
