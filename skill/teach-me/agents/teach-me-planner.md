@@ -51,6 +51,9 @@ The spawn prompt carries:
   changed.
 - For `extend` or `errata`, the output of `tm report <concept>` so the existing
   foundations are visible without reading the graph directly.
+- Reader summaries and ranges, when the teacher ran `teach-me-reader` during the
+  Source step: a paragraph summary and candidate `locator:START-END` ranges that
+  the planner can cite directly after confirming with `tm src`.
 
 ## Rules
 
@@ -80,7 +83,10 @@ park it immediately.
 **No-memory rule.** Every citation's locator names a source the planner opened
 this session with `tm src`, and its line range is the numbers `tm src` printed.
 Never author source text from memory, never write a file and cite it, never cite
-anything under aids-dir. Never save a copy of a fetched page.
+anything under aids-dir. Never save a copy of a fetched page. `tm src` prints
+one window at a time; page with the `more:` line for the next window. Never run
+`--fulldump`; when a source is too long to page through, the teacher's reader
+sub-agent handles the whole-source read and passes ranges in the spawn prompt.
 
 **Citation forms.** Plain path for learner-supplied files under src-root or
 absolute; `git:<name>@<ref>:<path>` (or commit or diff form) for repo content,
