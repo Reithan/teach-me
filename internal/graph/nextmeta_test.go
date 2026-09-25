@@ -246,3 +246,242 @@ func TestNextMeta_WrittenBeforeGateLines(t *testing.T) {
 		t.Errorf("tm:next appears after tm:gate; want it before\noutput:\n%s", out)
 	}
 }
+
+// ── %% tm:format parse / write round-trip ────────────────────────────────────
+
+// minimalGraphWithFormatMeta builds a graph string with %% tm:format in the
+// untested block. If also has %% tm:next when nextQ > 0.
+func minimalGraphWithFormatMeta(n, nextQ, nextBatch int) string {
+	var b strings.Builder
+	b.WriteString("flowchart TB\n")
+	b.WriteString("    subgraph passed[\"P\"]\n")
+	b.WriteString("    end\n")
+	b.WriteString("    subgraph untested[\"U\"]\n")
+	b.WriteString("        %% tm:format ")
+	writeInt(&b, n)
+	b.WriteString("\n")
+	if nextQ > 0 {
+		b.WriteString("        %% tm:next q=")
+		writeInt(&b, nextQ)
+		b.WriteString(" batch=")
+		writeInt(&b, nextBatch)
+		b.WriteString("\n")
+	}
+	b.WriteString("    end\n")
+	b.WriteString("    subgraph reserve[\"R\"]\n")
+	b.WriteString("    end\n")
+	b.WriteString("    subgraph testing[\"T\"]\n")
+	b.WriteString("    end\n")
+	b.WriteString("    classDef pass stroke:#3fb950\n")
+	b.WriteString("    classDef fail stroke:#f85149\n")
+	b.WriteString("    classDef unclear stroke:#d29922\n")
+	b.WriteString("    classDef pending stroke-dasharray:4 3\n")
+	return b.String()
+}
+
+func TestFormatMeta_ParseRoundTrip(t *testing.T) {
+	cases := []struct {
+		n, nextQ, nextBatch int
+	}{
+		{1, 0, 0},
+		{2, 0, 0},
+		{2, 5, 3},
+	}
+	for _, tc := range cases {
+		src := minimalGraphWithFormatMeta(tc.n, tc.nextQ, tc.nextBatch)
+		g, err := Parse([]byte(src))
+		if err != nil {
+			t.Fatalf("Parse n=%d nextQ=%d: %v", tc.n, tc.nextQ, err)
+		}
+		if g.Format == nil {
+			t.Fatalf("Format is nil after parsing n=%d", tc.n)
+		}
+		if g.Format.N != tc.n {
+			t.Errorf("Format.N: want %d, got %d", tc.n, g.Format.N)
+		}
+
+		// Write and re-parse: must be identical.
+		got := Write(g)
+		if !bytes.Equal(got, []byte(src)) {
+			t.Errorf("Write output differs from source\nwant: %q\n got: %q", src, got)
+		}
+	}
+}
+
+func TestFormatMeta_AbsentMeansFormatOne(t *testing.T) {
+	src := `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+	g, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if g.Format != nil {
+		t.Errorf("Format should be nil for a file without the line; got %+v", g.Format)
+	}
+	if g.FormatN() != 1 {
+		t.Errorf("FormatN() should return 1 when absent; got %d", g.FormatN())
+	}
+	// Write must not insert the line.
+	out := Write(g)
+	if strings.Contains(string(out), "tm:format") {
+		t.Errorf("Write must not emit tm:format when Format is nil; got:\n%s", out)
+	}
+}
+
+func TestFormatMeta_FormatNReturnsN(t *testing.T) {
+	g := &Graph{Format: &FormatMeta{N: 2}}
+	if got := g.FormatN(); got != 2 {
+		t.Errorf("FormatN: want 2, got %d", got)
+	}
+}
+
+// ── tm:format parse errors ────────────────────────────────────────────────────
+
+func TestFormatMeta_ParseRejectsDuplicate(t *testing.T) {
+	src := `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+        %% tm:format 1
+        %% tm:format 2
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+    end
+`
+	_, err := Parse([]byte(src))
+	if err == nil {
+		t.Fatal("expected parse error for duplicate tm:format; got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("expected 'duplicate' in error; got: %v", err)
+	}
+}
+
+func TestFormatMeta_ParseRejectsAfterNextMeta(t *testing.T) {
+	src := `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+        %% tm:next q=2 batch=2
+        %% tm:format 2
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+    end
+`
+	_, err := Parse([]byte(src))
+	if err == nil {
+		t.Fatal("expected parse error for tm:format after tm:next; got nil")
+	}
+	if !strings.Contains(err.Error(), "first meta") {
+		t.Errorf("expected 'first meta' in error; got: %v", err)
+	}
+}
+
+func TestFormatMeta_ParseRejectsOutsideUntested(t *testing.T) {
+	src := `flowchart TB
+    subgraph passed["P"]
+        %% tm:format 2
+    end
+    subgraph untested["U"]
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+    end
+`
+	_, err := Parse([]byte(src))
+	if err == nil {
+		t.Fatal("expected parse error for tm:format outside untested; got nil")
+	}
+	if !strings.Contains(err.Error(), "outside untested") {
+		t.Errorf("expected 'outside untested' in error; got: %v", err)
+	}
+}
+
+func TestFormatMeta_ParseRejectsMalformed_ZeroValue(t *testing.T) {
+	src := `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+        %% tm:format 0
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+    end
+`
+	_, err := Parse([]byte(src))
+	if err == nil {
+		t.Fatal("expected parse error for tm:format 0; got nil")
+	}
+	if !strings.Contains(err.Error(), ">= 1") {
+		t.Errorf("expected '>= 1' in error; got: %v", err)
+	}
+}
+
+func TestFormatMeta_ParseRejectsMalformed_NonDigit(t *testing.T) {
+	src := `flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+        %% tm:format abc
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+    end
+`
+	_, err := Parse([]byte(src))
+	if err == nil {
+		t.Fatal("expected parse error for tm:format abc; got nil")
+	}
+}
+
+// ── Writer ordering ───────────────────────────────────────────────────────────
+
+func TestFormatMeta_WrittenBeforeNextMetaAndGateLines(t *testing.T) {
+	g := &Graph{
+		PassedTitle:   "P",
+		UntestedTitle: "U",
+		ReserveTitle:  "R",
+		TestingTitle:  "T",
+		Format:        &FormatMeta{N: 2},
+		NextMeta:      &NextMeta{Q: 5, Batch: 3},
+		UntestedMetas: []GateMeta{{Concept: "c1", Base: 2}},
+	}
+	out := string(Write(g))
+	fmtPos := strings.Index(out, "tm:format")
+	nextPos := strings.Index(out, "tm:next")
+	gatePos := strings.Index(out, "tm:gate")
+	if fmtPos < 0 {
+		t.Fatal("tm:format not found in output")
+	}
+	if nextPos < 0 {
+		t.Fatal("tm:next not found in output")
+	}
+	if gatePos < 0 {
+		t.Fatal("tm:gate not found in output")
+	}
+	if fmtPos > nextPos {
+		t.Errorf("tm:format appears after tm:next; want it before\noutput:\n%s", out)
+	}
+	if fmtPos > gatePos {
+		t.Errorf("tm:format appears after tm:gate; want it before\noutput:\n%s", out)
+	}
+}

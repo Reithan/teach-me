@@ -36,6 +36,7 @@ func newRun(ctx *Context) int {
 		PassedTitle:   "Concepts User understands",
 		UntestedTitle: "Concepts User has not been tested on",
 		TestingTitle:  "Open tests validating and teaching User understanding",
+		Format:        &graph.FormatMeta{N: graph.CurrentFormat},
 	}
 	out := graph.Write(g)
 

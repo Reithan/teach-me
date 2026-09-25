@@ -65,6 +65,7 @@ func Check(data []byte, cfg Config) []Violation {
 		check11(g, cfg),
 		check12(g, allConcepts, inEdges, qByID, aByID),
 		check15(g),
+		check17(g),
 	}
 	total := 0
 	for _, r := range perCheck {
@@ -929,4 +930,22 @@ func check12(
 		}
 	}
 	return viols
+}
+
+// check17 verifies that when %% tm:format is present, its value does not exceed
+// the binary's CurrentFormat (§11 check 17). A format above the binary refuses
+// with a fix to upgrade tm; a lower format is accepted so migrate can lint its result.
+func check17(g *graph.Graph) []Violation {
+	if g.Format == nil {
+		return nil
+	}
+	if g.Format.N > graph.CurrentFormat {
+		return []Violation{{
+			Msg: fmt.Sprintf(
+				"%% tm:format %d is above this binary (format %d); fix: upgrade tm",
+				g.Format.N, graph.CurrentFormat,
+			),
+		}}
+	}
+	return nil
 }

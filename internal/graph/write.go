@@ -53,7 +53,12 @@ func writePassedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 // writeUntestedBlock emits the untested subgraph.
 func writeUntestedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 	writeSubgraphOpen(b, "untested", g.UntestedTitle)
-	// NextMeta line comes first (§4.6: before any %% tm:gate lines).
+	// FormatMeta line comes first (§4.6: before %% tm:next and any %% tm:gate lines).
+	if g.Format != nil {
+		writeLeadingComments(b, g.Format.LeadingComments)
+		writeFormatMeta(b, g.Format)
+	}
+	// NextMeta line comes next (§4.6: before any %% tm:gate lines).
 	if g.NextMeta != nil {
 		writeLeadingComments(b, g.NextMeta.LeadingComments)
 		writeNextMeta(b, g.NextMeta)
@@ -132,6 +137,14 @@ func writeSubgraphOpen(b *strings.Builder, id, title string) {
 func writeSubgraphClose(b *strings.Builder) {
 	b.WriteString(indent1)
 	b.WriteString("end\n")
+}
+
+// writeFormatMeta emits the %% tm:format meta line.
+func writeFormatMeta(b *strings.Builder, m *FormatMeta) {
+	b.WriteString(indent2)
+	b.WriteString("%% tm:format ")
+	writeInt(b, m.N)
+	b.WriteByte('\n')
 }
 
 // writeNextMeta emits the %% tm:next meta line.

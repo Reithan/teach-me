@@ -212,6 +212,27 @@ func (p *parser) parseBlock(g *Graph, block Block) error {
 			continue
 		}
 
+		// %% tm:format is a meta line (untested block only, at most one, first).
+		if strings.HasPrefix(t, "%% tm:format ") {
+			if block != BlockUntested {
+				return fmt.Errorf("graph: tm:format meta outside untested block")
+			}
+			if g.Format != nil {
+				return fmt.Errorf("graph: duplicate tm:format meta line")
+			}
+			if g.NextMeta != nil || len(g.UntestedMetas) > 0 {
+				return fmt.Errorf("graph: tm:format must be the first meta line in untested")
+			}
+			comments := p.takePending()
+			p.pos++
+			meta, err := parseFormatMeta(t, comments)
+			if err != nil {
+				return err
+			}
+			g.Format = meta
+			continue
+		}
+
 		// %% tm:next is a meta line (untested block only, at most one).
 		if strings.HasPrefix(t, "%% tm:next ") {
 			if block != BlockUntested {
@@ -330,6 +351,22 @@ func parseNextMeta(t string, comments []string) (*NextMeta, error) {
 		return nil, fmt.Errorf("graph: invalid tm:next line (values must be >= 1): %q", t)
 	}
 	return &NextMeta{Q: q, Batch: b, LeadingComments: comments}, nil
+}
+
+// parseFormatMeta parses a %% tm:format line:
+//
+//	%% tm:format <N>
+func parseFormatMeta(t string, comments []string) (*FormatMeta, error) {
+	rest := strings.TrimPrefix(t, "%% tm:format ")
+	rest = strings.TrimSpace(rest)
+	if !isDigits(rest) || len(rest) == 0 {
+		return nil, fmt.Errorf("graph: invalid tm:format line: %q", t)
+	}
+	n := parseDigits(rest)
+	if n < 1 {
+		return nil, fmt.Errorf("graph: invalid tm:format line (value must be >= 1): %q", t)
+	}
+	return &FormatMeta{N: n, LeadingComments: comments}, nil
 }
 
 // parseGateMeta parses a %% tm:gate line:

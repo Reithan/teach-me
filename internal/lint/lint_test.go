@@ -1118,3 +1118,71 @@ func TestCheck15_BatchTooLow_Violation(t *testing.T) {
 		t.Errorf("expected check15 violation for batch counter too low; got %v", viols)
 	}
 }
+
+// ── check 17: %% tm:format ────────────────────────────────────────────────────
+
+func minimalFormatGraph(n int) string {
+	fmtLine := ""
+	if n >= 0 {
+		fmtLine = fmt.Sprintf("        %%%% tm:format %d\n", n)
+	}
+	return fmt.Sprintf(`flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+%s    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`, fmtLine)
+}
+
+func TestCheck17_FormatAboveBinaryRefuses(t *testing.T) {
+	// A graph with %% tm:format 3 on a binary that knows format 2 should refuse.
+	src := minimalFormatGraph(3)
+	viols := lint.Check([]byte(src), defaultCfg())
+	if !hasMsgContaining(viols, "above this binary") {
+		t.Errorf("expected 'above this binary' violation; got: %v", viols)
+	}
+	if !hasMsgContaining(viols, "fix: upgrade tm") {
+		t.Errorf("expected 'fix: upgrade tm' in violation; got: %v", viols)
+	}
+}
+
+func TestCheck17_FormatAtBinaryAccepts(t *testing.T) {
+	// Format 2 == CurrentFormat → no violation.
+	src := minimalFormatGraph(2)
+	viols := lint.Check([]byte(src), defaultCfg())
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "above this binary") {
+			t.Errorf("unexpected format violation for format 2: %v", viols)
+		}
+	}
+}
+
+func TestCheck17_FormatBelowBinaryAccepts(t *testing.T) {
+	// Format 1 < CurrentFormat → no violation (migrate matter, not a lint failure).
+	src := minimalFormatGraph(1)
+	viols := lint.Check([]byte(src), defaultCfg())
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "above this binary") {
+			t.Errorf("unexpected format violation for format 1: %v", viols)
+		}
+	}
+}
+
+func TestCheck17_FormatAbsentAccepts(t *testing.T) {
+	// No %% tm:format line → format 1 implicitly; no violation.
+	src := minimalFormatGraph(-1)
+	viols := lint.Check([]byte(src), defaultCfg())
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "above this binary") {
+			t.Errorf("unexpected format violation when line absent: %v", viols)
+		}
+	}
+}
