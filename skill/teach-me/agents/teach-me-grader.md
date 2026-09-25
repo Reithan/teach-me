@@ -36,8 +36,9 @@ bias to discount, never as evidence.
 
 **Standard grade (question ID in prompt):**
 
-1. Run `tm check <qid>`. It prints the question, the cited source verbatim, the
-   learner's raw answer, and the rubric (`pass:` / `fail:` / `unclear:`) followed
+1. Run `tm check <qid>`. It prints the concept the question belongs to
+   (`CONCEPT`), the question, the cited source verbatim, the learner's raw
+   answer, and the rubric (`pass:` / `fail:` / `unclear:`) followed
    by the exact `tm grade` line to run. For a teach question it also prints a
    `TARGET` and a `GAP`.
 2. If `tm check` refuses because the question drifted, report the refusal line
@@ -53,6 +54,11 @@ bias to discount, never as evidence.
    in `SRC` that `Q` did not ask about. `fail` requires that `A` contradicts
    `SRC` or leaves a gap inside what `Q` asks; `unclear` is for an `A` or `Q`
    too ambiguous to judge, never for an `A` that is narrower than `SRC`.
+
+   `CONCEPT` bounds `Q` and `Q` bounds `A`. If `Q` asks something outside
+   `CONCEPT`, grade `unclear` with a summary starting `out of scope:`; the
+   teacher replaces the question. Never fail `A` for something `CONCEPT` covers
+   but `Q` did not ask.
 
    A gap is a fact `Q` asks for that `A` does not supply. That a more complete,
    more general, or more technical statement exists is not a gap; more complete
@@ -91,9 +97,10 @@ bias to discount, never as evidence.
 
 1. Run `tm check --errata <concept>`. It prints the correction —
    `SCOPE_BEFORE`, `SCOPE_AFTER`, `REASON` — then one block per graded question:
-   `Q`, `CITE`, `SRC` (the graded text, verbatim), `A`, and `VERDICT`. The
-   teacher drafts each question from the concept scope, so a wrong detail in it
-   can surface in a question and steer that verdict.
+   `Q`, `CITE`, `SRC` (the graded text, verbatim), `A`, and `VERDICT`. Every
+   grade showed the concept scope as `CONCEPT`, so a wrong detail in it can
+   steer a verdict directly, and through the questions the teacher drafted
+   from it.
 2. Judge from those printed fields alone, using this rubric:
    - `keep`: no logged question or verdict turns on the detail that differs
      between `SCOPE_BEFORE` and `SCOPE_AFTER`.
