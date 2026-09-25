@@ -1,9 +1,9 @@
 # Contributor License Agreement
 
-This agreement is between you (the contributor) and Bryan O'Malley, together
-with any successors and assigns (the maintainer), and covers every contribution
-you submit to teach-me: code, documentation, skill and agent files, tests, and
-any other material.
+This agreement is between you (the contributor) and Dark Planet Games, LLC,
+together with its successors and assigns (the maintainer), and covers every
+contribution you submit to teach-me: code, documentation, skill and agent files,
+tests, and any other material.
 
 teach-me is published under the teach-me Individual Use License, and the
 maintainer sells separate licenses for organizational use. This agreement lets
