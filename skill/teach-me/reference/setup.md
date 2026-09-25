@@ -132,3 +132,18 @@ planner are covered by the same settings.
 Without the sandbox, the deny rules cover only the harness's file tools, not
 shell reads, which is why the file-access rule in the skill also binds the
 model's own behavior directly.
+
+## Session limits
+
+Set these environment variables to override the defaults. Each is read once per
+`tm` call; they do not persist across calls in an agent harness.
+
+| Variable | Bounds | Default |
+|---|---|---|
+| `TM_PROBE_MIN` | minimum questions per probe batch | 2 |
+| `TM_PROBE_MAX` | maximum questions per probe batch | 5 |
+| `TM_TEACH_MIN` | minimum questions per teaching round | 1 |
+| `TM_TEACH_MAX` | maximum questions per teaching round | 3 |
+| `TM_MAX_FAILS` | failed probe batches before the gate trips | 2 |
+| `TM_MAX_TEACH` | total teach questions per concept before teaching is spent | 8 |
+| `TM_MAX_STALL` | consecutive unclear answers before the stall gate trips | 4 |
