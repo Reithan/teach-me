@@ -28,9 +28,9 @@ The model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or
 writes go through a `tm` command.
 
 On every `tm new`, before the first `tm add`, tell the user to configure harness
-deny rules for those three files and point at
-`skill/teach-me/reference/setup.md`. Continue once the user confirms or declines.
-Declining is allowed; this rule still binds.
+deny rules for those three files and for writes under src-root outside aids-dir,
+and point at `skill/teach-me/reference/setup.md`. Continue once the user confirms
+or declines. Declining is allowed; this rule still binds.
 
 If the model finds it has read or written one of those files — by accident or by a
 tool it did not expect to reach them — say so immediately, remind the user that the
@@ -82,6 +82,15 @@ the CLI or the harness's file or fetch tools. Never author source text from memo
 and never write a notes file from memory and then cite it. If no real source can
 be obtained, say so and stop.
 
+Never write under src-root: write aids under aids-dir and link them with
+`tm aid`. A file the teacher writes outside aids-dir cannot be detected by the
+CLI; the harness deny rule is the only guard (see §12 rule 4 and the setup
+reference).
+
+Line ranges come only from `tm src`: see the line-range workflow in the Source
+step above. Read and WebFetch decide whether a source is worth citing; they
+never supply a range.
+
 ## Workflow
 
 `tm status` is your dashboard, and the `fix:` line on any refusal names your next
@@ -94,28 +103,59 @@ move. The phases:
      repo, papers. Markdown or any line-addressable text. Ask where the lesson
      files should live; the graph goes there, and `tm` records the pointer in
      the user config, so the launch directory does not matter.
-   - A repo: pass its root as `--src-root` to `tm new`, or cite absolute paths.
-     When the graph must be portable across machines, cite the remote URL at a
-     commit instead.
-   - Web sources: prefer immutable or versioned URLs (versioned arXiv, tagged
-     docs, permalinks at a commit, archive snapshots). arXiv HTML or e-print over
-     PDF. For dynamic pages, save a static copy and cite it.
-   - No egress: use local sources or ask the learner for citable documents.
-     Not a blocker.
+   - A repo: run `tm repo add <name> <path>` for every repo the learner names.
+     Repo content then cites through `git:<name>@<ref>:<path>` (a file at a
+     ref), `git:<name>@<sha>` (a commit), or `git:<name>@<a>..<b>[:<path>]`
+     (a diff). Refs are pinned to short SHAs on write, so a branch name is
+     fine at cite time. Do not pass a repo root as `--src-root`; `--src-root`
+     is for learner-supplied plain files only.
+   - Web docs: cite the URL. The cache carries the fetch and conversion cost;
+     drift on a live URL is caught at most one cache TTL late. If the learner
+     reports a page has changed, run `tm cache clear` and re-check. Prefer
+     immutable or versioned URLs (versioned arXiv, tagged docs, permalinks at a
+     commit, archive snapshots). arXiv HTML or e-print over PDF.
+   - Learner-supplied local files (corporate downloads, output of other programs
+     or agents): cite as plain paths under src-root or absolute. "The teacher
+     never saves a copy of anything: a copy it makes is an aid, and only a copy
+     the learner supplies is a legitimate plain-path source."
+   - Aids: anything the teacher writes — study guides, generated diffs,
+     summaries — goes under aids-dir (default `<lesson dir>/aids`) and is
+     linked with `tm aid <id> <path>`; it is never cited. `tm add`, `tm q`,
+     `tm recite`, and lint refuse a citation under aids-dir, so a refusal with
+     that `fix:` line means "cite the primary source instead". No registry file
+     of sources exists or is needed; the graph and `tm show` are the registry.
+   - **Line ranges come only from `tm src`.** Never derive a range from Read,
+     WebFetch, a search result, or memory. Workflow: find a candidate source
+     (search results and summaries give URLs or paths, never line numbers); run
+     `tm src <locator>` to see the converted, numbered text; narrow with
+     `tm src <locator> --find <regex>` or `tm src <locator> START-END`; cite
+     the numbers it printed with `tm add` or `tm q`. Cite promptly: a cache
+     entry that expires between `tm src` and `tm add` on a changed page stores
+     the new page's hash. Read and WebFetch may still decide whether a source
+     is worth citing; they never supply a range.
+   - No egress: use local sources or ask the learner for citable documents; cite
+     the learner-supplied copy as a plain path. Not a blocker. If a fetch fails
+     later, retry when egress is available or ask the learner for a copy and
+     cite it as a plain path.
    - When a citation refuses for want of a converter: read
      `skill/teach-me/reference/setup.md`, advise the user on the config lines,
      run a test conversion, and confirm with the user before writing the config.
-   - Run `tm new <lesson-dir>/<name>.mmd --src-root <dir>`, both as absolute
-     paths. Never set `TM_SRC_ROOT` or `TM_FILE` for a session; they do not
-     survive to the next call.
+   - Run `tm new <lesson-dir>/<name>.mmd [--src-root <dir>]`, both as absolute
+     paths. Pass `--src-root` only when the session includes plain-path sources.
+     Never set `TM_SRC_ROOT` or `TM_FILE` for a session; they do not survive to
+     the next call.
    - **File-access rule (repeated).** Before the first `tm add`, tell the user
-     to configure harness deny rules for `*.mmd`, `*.mmd.jsonl`, and
-     `*.mmd.lock`, and point at `skill/teach-me/reference/setup.md`. Continue
-     once the user confirms or declines. Declining is allowed; the rule above
-     still binds.
+     to configure harness deny rules for `*.mmd`, `*.mmd.jsonl`, `*.mmd.lock`,
+     and for writes under src-root outside aids-dir, and point at
+     `skill/teach-me/reference/setup.md`. Continue once the user confirms or
+     declines. Declining is allowed; the rule above still binds.
 
-   On `tm load` (resuming): run `tm load <file>`, then `tm report` before
-   continuing.
+   On `tm load` (resuming): run `tm load <file>`. If `tm load` refuses with
+   `fix: tm migrate`, tell the learner the graph predates this `tm`, run
+   `tm migrate --dry-run`, show the learner what it would rewrite and what it
+   leaves, then run `tm migrate` and continue with `tm report`. A citation left
+   unconverted still works as a plain path; it just carries no git pinning.
+   Otherwise run `tm report` before continuing.
 
 2. **Orient.** Run `tm status`, `tm find`, `tm show` to see what is passed, open,
    blocked, and the frontier (untested concepts whose prerequisites are all
@@ -126,14 +166,6 @@ move. The phases:
    spawning either sub-agent; it is loaded only then. Spawn the
    `teach-me-planner` sub-agent, then spawn the `teach-me-pruner` sub-agent
    after it.
-
-   Expect the pruner to park more than you would. That is its job: a parked
-   concept costs nothing until a probe fails, and `tm activate` restores it in
-   one command, while an unneeded active concept costs the learner a full probe
-   batch. Do not activate concepts after a prune on your own read of the map.
-   Activate only from a gate's `fix:` line, or when the learner asks. If the
-   frontier is empty after a prune, the goal is blocked by a kept foundation;
-   probe that foundation, do not un-park others.
 
 4. **Pick** a frontier concept.
 
@@ -202,7 +234,8 @@ cycle.
 - **Drifted ungraded question** (`DRIFT` marker on an ungraded question, or
   `answer` or a grader refusing with a drift error): `tm drop <qid>`, then
   `tm q --re <qid>` with a fresh citation. Ask the learner again; nothing is
-  graded.
+  graded. Drift on a live URL surfaces at most one cache TTL late; if the
+  learner reports a page has changed, run `tm cache clear` then `tm check`.
 - **Drifted passed concept**: if the current text at a new range hashes the same,
   run `tm recite`. Otherwise spawn a `teach-me-grader` with the concept ID and
   the instruction to recheck it; the grader runs `tm check --drift` and decides
