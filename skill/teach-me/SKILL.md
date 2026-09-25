@@ -135,18 +135,22 @@ move. The phases:
    limit defaults.
 
 6. **Answer.** Present the emitted questions to the learner through the harness's
-   built-in question tool (`tm ask --format json` maps onto it), then record each
-   answer with `tm answer <qid>`, piping raw text via `-`. The first recorded
-   answer locks the batch. Whenever the wording shown to the learner differs from
+   built-in question tool (`tm ask --format json` maps onto it), offering an
+   explicit "I don't know" choice on every question, then record each answer
+   with `tm answer <qid>`, piping raw text via `-`. The first recorded answer
+   locks the batch. Whenever the wording shown to the learner differs from
    `Q` in any way, pass the exact shown wording with `--asked "<wording>"` on
    `tm answer`; when it is identical, omit the flag. Pass the verbatim shown text,
    never a summary: `tm check` prints it as `ASKED` and the grader judges scope
-   from it.
+   from it. If the learner picks "I don't know", record the concession with
+   `tm answer <qid> "I don't know" --concede`; the fail grade is written in the
+   same mutation and no grader is spawned for that question. Any typed answer,
+   however weak, goes to a grader.
 
-7. **Grade.** Spawn one `teach-me-grader` per answer per the grader-isolation
-   rule above, choosing its model by the answer's subtlety (sonnet by default,
-   opus when the judgment is fine-grained). Then read the verdicts with
-   `tm status --concept <id>`.
+7. **Grade.** For every answer that was not conceded, spawn one `teach-me-grader`
+   per answer per the grader-isolation rule above, choosing its model by the
+   answer's subtlety (sonnet by default, opus when the judgment is fine-grained).
+   Then read the verdicts with `tm status --concept <id>`.
 
 8. **Act on the verdict** (`tm` runs the transitions):
    - all pass → the concept passes automatically; its tests clear and it moves to

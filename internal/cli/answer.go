@@ -11,13 +11,18 @@ import (
 
 // answerRun is the Run handler for:
 //
-//	tm answer <qid> "<raw>" [--asked "<wording>"] [--override "<reason>"]
+//	tm answer <qid> "<raw>" [--asked "<wording>"] [--override "<reason>"] [--concede]
 //
 // Records the human's raw answer as a pending answer node a<N> (where N
 // matches the question's N) with class "pending". The answer is stored
 // verbatim; the writer escapes it. --asked stores the teacher's wording in
 // AnswerNode.Asked. --override is gate-clearing wired in m6e; accepted but
 // ignored here.
+//
+// With --concede: in the same mutation, immediately writes a fail verdict with
+// summary "conceded" and runs the §8 transitions (batch lock, fail counting,
+// gate trip). The answer event gains concede:true; the grade event gains
+// via:"concede". No grader sub-agent is invoked.
 //
 // The answer is answerable iff its question is in the batch that `tm ask
 // <concept>` would currently emit. This mirrors ask.go's batch-answerability
@@ -42,6 +47,8 @@ func answerRun(ctx *Context) int {
 	if v := ctx.Flags["override"]; len(v) > 0 {
 		overrideReason = v[0]
 	}
+
+	concede := len(ctx.Flags["concede"]) > 0
 
 	usageLine := FindCommand("answer").Usage()
 
@@ -252,11 +259,16 @@ func answerRun(ctx *Context) int {
 			To:   aid,
 		})
 
-		answerRow := eventlog.NewRow("answer", map[string]any{
+		answerFields := map[string]any{
 			"q":     qid,
 			"raw":   rawAnswer,
 			"asked": askedWording,
-		})
+		}
+		if concede {
+			answerFields["concede"] = true
+		}
+		answerRow := eventlog.NewRow("answer", answerFields)
+
 		// Gate row (if any) must precede the answer row in the event log (spec §7,
 		// dec#9; mirrors the ordering in ask.go's --override path).
 		var rows []eventlog.Row
@@ -265,7 +277,20 @@ func answerRun(ctx *Context) int {
 		}
 		rows = append(rows, answerRow)
 
-		return &newG, rows, nil
+		if !concede {
+			return &newG, rows, nil
+		}
+
+		// --concede: in the same mutation, apply a fail verdict with summary
+		// "conceded". Load a fresh state from the new graph (which now has the
+		// pending answer node) so gradeApply can find it.
+		newS := state.LoadFromGraph(&newG, cfg)
+		finalG, gradeRows, ref := gradeApply(&newG, newS, qid, "fail", "conceded", false, false, "concede")
+		if ref != nil {
+			return nil, nil, ref
+		}
+		rows = append(rows, gradeRows...)
+		return finalG, rows, nil
 	}
 
 	return runMutation(ctx, apply)
