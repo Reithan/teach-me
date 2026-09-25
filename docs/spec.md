@@ -304,7 +304,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm repo list` | list registered aliases and their paths | one line per alias |
 | `tm cache clear` | empty the conversion and fetch cache (section 3) | `ok` |
 | `tm cache list` | list cache entries | one line per entry |
-| `tm src <locator> [START-END] [--find <regex>]` | read-only: resolve the locator exactly as `add` and `q` do (src-root, repo aliases, converters, cache, aids-dir refusal) and print its text with 1-based line numbers, restricted to the range or to lines matching the regex; a `git:` locator prints the resolved locator first | `src: <locator>` then `N\t<text>` lines |
+| `tm src <locator> [START-END] [--find <regex>]` | read-only: resolve the locator exactly as `add` and `q` do (src-root, repo aliases, converters, cache, aids-dir refusal) and print its text with 1-based line numbers, restricted to the range or to lines matching the regex; a `git:` locator or a redirected URI prints the resolved locator first | `src: <locator>` then `N\t<text>` lines |
 | `tm aid <id> <path>` | link an aid to a concept or question (section 4.6). Logged | `ok` |
 | `tm aid rm <id> <path>` | unlink an aid. Logged | `ok` |
 | Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when a doc is configured; otherwise one usage line per command |
