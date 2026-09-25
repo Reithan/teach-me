@@ -367,7 +367,7 @@ The `reserve` count is printed only when it is nonzero.
 | `add`, `q` | a plain-path locator is not in the working tree (`fix: cite it as git:<alias>@<ref>:<path>` when it is committed) |
 | `add`, `q`, `recite` | a `git:` locator names an unknown alias (`fix: tm repo add <alias> <path>`) |
 | `add`, `q`, `recite` | a `git:` locator is used with no `git` configured, or its `<ref>`, `<a>`, or `<b>` does not resolve |
-| `add`, `q`, `recite` | the resolved locator lies under aids-dir (`err: <path> is an aid, not a source`; `fix: cite the primary source; link the aid with tm aid <id> <path>`) |
+| `add`, `q`, `recite` | the resolved locator lies under aids-dir (`err: <path> is an aid, not a source`; `fix: cite the primary source; link the aid with tm aid <id> <path>`); `tm src` gives the same `err:` with only `fix: cite the primary source` (no node id) |
 | `recite` | the new range does not hash to the existing citation hash |
 | `check --drift` | the event log is missing or unreadable (`fix: tm reopen`) |
 | `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |

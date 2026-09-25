@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/reithan/teach-me/internal/source"
 )
@@ -25,14 +24,14 @@ func citeHashError(ctx *Context, citeStr string, err error, usageLine string) in
 	return 3
 }
 
-// aidRefusalWithID replaces the "<id>" placeholder in a RefusalError Fix line
-// with the real node id. Returns the original error if it is not a
-// source.RefusalError or does not contain the placeholder.
+// aidRefusalWithID augments an aids-dir RefusalError by appending the full §7
+// fix hint with the real node id. Returns the original error unchanged if it is
+// not a source.RefusalError or has no AidPath.
 func aidRefusalWithID(err error, id string) error {
 	var ref *source.RefusalError
-	if errors.As(err, &ref) && strings.Contains(ref.Fix, "<id>") {
+	if errors.As(err, &ref) && ref.AidPath != "" {
 		newRef := *ref
-		newRef.Fix = strings.Replace(ref.Fix, "<id>", id, 1)
+		newRef.Fix = fmt.Sprintf("%s; link the aid with tm aid %s %s", ref.Fix, id, ref.AidPath)
 		return &newRef
 	}
 	return err

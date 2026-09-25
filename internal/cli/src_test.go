@@ -424,3 +424,34 @@ func TestTmSrc_FetchFailureErrlog(t *testing.T) {
 		t.Errorf("no errlog row with 'fetch'; rows=%+v", rows)
 	}
 }
+
+// TestTmSrc_AidsDirRefusalShortForm verifies that when tm src resolves a
+// locator under aids-dir the fix line is just "cite the primary source" —
+// no "<id>" placeholder, since tm src has no concept ID context (§7).
+func TestTmSrc_AidsDirRefusalShortForm(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	srcMakeGraph(t, dir)
+	srcSetupXDG(t, "")
+
+	// Create aids/ref.txt under the graph directory.
+	aidsDir := filepath.Join(dir, "aids")
+	if err := os.MkdirAll(aidsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(aidsDir, "ref.txt"), []byte("aid content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errOut, code := run(t, "src", "aids/ref.txt")
+	if code != 1 {
+		t.Fatalf("want exit 1 for aids-dir refusal, got %d; stderr=%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "cite the primary source") {
+		t.Errorf("stderr=%q; want 'cite the primary source'", errOut)
+	}
+	if strings.Contains(errOut, "<id>") {
+		t.Errorf("stderr=%q; must not contain '<id>' placeholder (tm src has no concept id)", errOut)
+	}
+}

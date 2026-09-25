@@ -19,9 +19,12 @@ import (
 // RefusalError is a structured err:/fix: refusal from the resolver.
 // CLI handlers should detect this type and call writeErrFix(e.Err, e.Fix)
 // directly, without wrapping the message in "citation <cite>: ...".
+// AidPath is non-empty for aids-dir refusals; CLI callers that have a concept
+// ID available pass it to aidRefusalWithID to append the full §7 fix hint.
 type RefusalError struct {
-	Err string
-	Fix string
+	Err     string
+	Fix     string
+	AidPath string // set when the refusal is an aids-dir violation
 }
 
 func (e *RefusalError) Error() string {
@@ -372,8 +375,9 @@ func (r *Resolver) readPathContent(c cite.Citation) ([]byte, Meta, error) {
 		absPath := filepath.Clean(path)
 		if isUnderDir(absPath, aidsDir) {
 			return nil, Meta{}, &RefusalError{
-				Err: fmt.Sprintf("%s is an aid, not a source", c.File),
-				Fix: fmt.Sprintf("cite the primary source; link the aid with tm aid <id> %s", c.File),
+				Err:     fmt.Sprintf("%s is an aid, not a source", c.File),
+				Fix:     "cite the primary source",
+				AidPath: c.File,
 			}
 		}
 	}
