@@ -1,8 +1,9 @@
 # Contributor License Agreement
 
-This agreement is between you (the contributor) and Bryan O'Malley (the
-maintainer) and covers every contribution you submit to teach-me: code,
-documentation, skill and agent files, tests, and any other material.
+This agreement is between you (the contributor) and Bryan O'Malley, together
+with any successors and assigns (the maintainer), and covers every contribution
+you submit to teach-me: code, documentation, skill and agent files, tests, and
+any other material.
 
 teach-me is published under the teach-me Individual Use License, and the
 maintainer sells separate licenses for organizational use. This agreement lets
@@ -21,7 +22,9 @@ reproduce, modify, prepare derivative works of, publicly display, publicly
 perform, sublicense, and distribute your contributions and derivative works of
 them. This license includes the right to distribute your contributions under
 any license terms the maintainer chooses, including commercial and proprietary
-terms, and to change those terms at any time.
+terms, and to change those terms at any time. To the extent the law allows, you
+waive, or agree not to assert, any moral rights in your contributions against
+the maintainer or those recipients.
 
 ## 3. Patent license
 
