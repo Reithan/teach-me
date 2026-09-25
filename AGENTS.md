@@ -25,7 +25,7 @@ make tools hooks
 | `make fuzz` | Run fuzz targets for 10 s each |
 | `make conformance` | Run the Mermaid conformance suite |
 | `make vuln` | Run `go tool govulncheck ./...` |
-| `make version-sync` | Verify `internal/version/VERSION` major.minor matches `metadata.tm-version` in `skill/teach-me/SKILL.md` |
+| `make version-sync` | Verify `internal/version/VERSION` matches `version` in `CITATION.cff`, and its major.minor matches `metadata.tm-version` in `skill/teach-me/SKILL.md` |
 
 ## Spec
 
