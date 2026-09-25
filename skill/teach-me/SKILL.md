@@ -82,94 +82,38 @@ the CLI or the harness's file or fetch tools. Never author source text from memo
 and never write a notes file from memory and then cite it. If no real source can
 be obtained, say so and stop.
 
-Never write under src-root: write aids under aids-dir and link them with
-`tm aid`. A file the teacher writes outside aids-dir cannot be detected by the
-CLI; the harness deny rule is the only guard (see `skill/teach-me/reference/setup.md`).
+Write everything you author (study guides, generated diffs, summaries) under
+aids-dir (default `<lesson dir>/aids`) and link it with `tm aid <id> <path>`;
+never write under src-root and never cite an aid. `tm add`, `tm q`, `tm recite`,
+`tm src`, and lint refuse a citation under aids-dir with
+`fix: cite the primary source`. A file you write outside aids-dir cannot be
+detected by the CLI; the harness deny rule is the only guard. The graph and
+`tm show` are the source registry; keep no other.
 
-Line ranges come only from `tm src`: see the line-range workflow in the Source
-step above. Read and WebFetch decide whether a source is worth citing; they
-never supply a range.
+**Line ranges come only from `tm src`.** Find a candidate source (search results
+and summaries give URLs or paths, never line numbers); run `tm src <locator>`
+to see the converted, numbered text; narrow with `--find <regex>` or
+`START-END`; cite the numbers it printed with `tm add` or `tm q`. Cite promptly:
+a cache entry that expires between `tm src` and `tm add` on a changed page
+stores the new page's hash. Read and WebFetch may decide whether a source is
+worth citing; they never supply a range.
 
-Window, reader, and `--fulldump`: `tm src` prints one window at a time; page
-with the `more:` line or spawn `teach-me-reader` for a whole-source read. The
-teacher never runs `--fulldump`. See the Source step for the full decision tree.
+**Windows and the reader.** `tm src` prints at most one window (200 lines or
+8,000 characters) and ends with a `more:` line naming the next command; page
+with it when a few more windows cover the area you need. When the source is
+long and you need the whole of it to locate ranges, spawn `teach-me-reader`
+with the locator and one question; it returns a summary and candidate ranges in
+`tm`'s numbering. Confirm each range with `tm src <locator> START-END` before
+citing. If the reader returns `err:`, fix the locator; if it returns
+`unanswered:`, find another source. Only the reader runs `--fulldump`.
 
 ## Workflow
 
 `tm status` is your dashboard, and the `fix:` line on any refusal names your next
 move. The phases:
 
-1. **Source.** On `tm new` (fresh session only):
-   - Ask the learner for their learning goal in their own words and what they
-     already know. Record both; the planner and pruner need them.
-   - Ask the learner for source materials — notes, textbook chapters, docs, a
-     repo, papers. Markdown or any line-addressable text. Ask where the lesson
-     files should live; the graph goes there, and `tm` records the pointer in
-     the user config, so the launch directory does not matter.
-   - A repo: run `tm repo add <name> <path>` for every repo the learner names.
-     Repo content then cites through `git:<name>@<ref>:<path>` (a file at a
-     ref), `git:<name>@<sha>` (a commit), or `git:<name>@<a>..<b>[:<path>]`
-     (a diff). Refs are pinned to short SHAs on write, so a branch name is
-     fine at cite time. Do not pass a repo root as `--src-root`; `--src-root`
-     is for learner-supplied plain files only.
-   - Web docs: cite the URL. The cache carries the fetch and conversion cost;
-     drift on a live URL is caught at most one cache TTL late. If the learner
-     reports a page has changed, run `tm cache clear` and re-check. Prefer
-     immutable or versioned URLs (versioned arXiv, tagged docs, permalinks at a
-     commit, archive snapshots). arXiv HTML or e-print over PDF.
-   - Learner-supplied local files (corporate downloads, output of other programs
-     or agents): cite as plain paths under src-root or absolute. "The teacher
-     never saves a copy of anything: a copy it makes is an aid, and only a copy
-     the learner supplies is a legitimate plain-path source."
-   - Aids: anything the teacher writes — study guides, generated diffs,
-     summaries — goes under aids-dir (default `<lesson dir>/aids`) and is
-     linked with `tm aid <id> <path>`; it is never cited. `tm add`, `tm q`,
-     `tm recite`, and lint refuse a citation under aids-dir
-     (`fix: cite the primary source; link the aid with tm aid <id> <path>`);
-     `tm src` gives the same `err:` with only `fix: cite the primary source`.
-     No registry file
-     of sources exists or is needed; the graph and `tm show` are the registry.
-   - **Line ranges come only from `tm src`.** Never derive a range from Read,
-     WebFetch, a search result, or memory. Workflow: find a candidate source
-     (search results and summaries give URLs or paths, never line numbers); run
-     `tm src <locator>` to see the converted, numbered text; narrow with
-     `tm src <locator> --find <regex>` or `tm src <locator> START-END`; cite
-     the numbers it printed with `tm add` or `tm q`. Cite promptly: a cache
-     entry that expires between `tm src` and `tm add` on a changed page stores
-     the new page's hash. Read and WebFetch may still decide whether a source
-     is worth citing; they never supply a range.
-   - **Windows and the reader.** `tm src` prints at most one window (200 lines
-     or 8,000 characters) and ends with a `more:` line naming the next command;
-     page with that line when a few more windows will cover the area you need.
-     When the source is long and you need the whole of it to locate ranges,
-     spawn `teach-me-reader` with the locator and one question; it runs
-     `--fulldump` in a disposable context and returns a summary and candidate
-     ranges in `tm`'s numbering. Confirm each returned range with
-     `tm src <locator> START-END` before citing. The teacher never runs
-     `--fulldump`.
-   - No egress: use local sources or ask the learner for citable documents; cite
-     the learner-supplied copy as a plain path. Not a blocker. If a fetch fails
-     later, retry when egress is available or ask the learner for a copy and
-     cite it as a plain path.
-   - When a citation refuses for want of a converter: read
-     `skill/teach-me/reference/setup.md`, advise the user on the config lines,
-     run a test conversion, and confirm with the user before writing the config.
-   - Run `tm new <lesson-dir>/<name>.mmd [--src-root <dir>]`, both as absolute
-     paths. Pass `--src-root` only when the session includes plain-path sources.
-     Never set `TM_SRC_ROOT` or `TM_FILE` for a session; they do not survive to
-     the next call.
-   - **File-access rule (repeated).** Before the first `tm add`, tell the user
-     to configure harness deny rules for `*.mmd`, `*.mmd.jsonl`, `*.mmd.lock`,
-     and for writes under src-root outside aids-dir, and point at
-     `skill/teach-me/reference/setup.md`. Continue once the user confirms or
-     declines. Declining is allowed; the rule above still binds.
-
-   On `tm load` (resuming): run `tm load <file>`. If `tm load` refuses with
-   `fix: tm migrate`, tell the learner the graph predates this `tm`, run
-   `tm migrate --dry-run`, show the learner what it would rewrite and what it
-   leaves, then run `tm migrate` and continue with `tm report`. A citation left
-   unconverted still works as a plain path; it just carries no git pinning.
-   Otherwise run `tm report` before continuing.
+1. **Source.** On `tm new` or `tm load`, read
+   `skill/teach-me/reference/start.md` and follow it before Orient.
 
 2. **Orient.** Run `tm status`, `tm find`, `tm show` to see what is passed, open,
    blocked, and the frontier (untested concepts whose prerequisites are all
