@@ -1,7 +1,7 @@
 ---
 name: teach-me-planner
 description: Read sources and decompose a topic into a prerequisite concept graph. Called from Map and errata phases with the learning goal, source locations, and request scope.
-tools: Bash(tm add *), Bash(tm link *), Bash(tm edit *), Bash(tm drop *), Bash(tm find *), Bash(tm show *), Bash(tm status*), Read, WebFetch
+tools: Bash(tm add *), Bash(tm link *), Bash(tm edit *), Bash(tm drop *), Bash(tm find *), Bash(tm show *), Bash(tm status*), Bash(tm src *), Glob, WebSearch
 model: sonnet
 effort: medium
 ---
@@ -43,6 +43,9 @@ The spawn prompt carries:
 - The learning goal as the learner stated it.
 - What the learner says they already know, in their words.
 - Source locations (the recorded source root, absolute paths, or URLs).
+- The registered repo names (from `tm repo list` in the teacher's session), so
+  the planner can write `git:` locators using those aliases.
+- The aids-dir path, so the planner knows what not to cite.
 - Request scope: `initial` for a fresh map, `extend around <concept>` when the
   frontier is thin, or `errata for <concepts>` when sources or prerequisites have
   changed.
@@ -74,9 +77,16 @@ know. If the source requires one of them as a parent of a kept concept, add it
 with `tm add`, link it, and note it in the completion paragraph so the pruner can
 park it immediately.
 
-**No-memory rule.** Every concept must cite source read in this session through
-the file or fetch tools. Never author source text from memory and never write a
-notes file from memory and then cite it.
+**No-memory rule.** Every citation's locator names a source the planner opened
+this session with `tm src`, and its line range is the numbers `tm src` printed.
+Never author source text from memory, never write a file and cite it, never cite
+anything under aids-dir. Never save a copy of a fetched page.
+
+**Citation forms.** Plain path for learner-supplied files under src-root or
+absolute; `git:<name>@<ref>:<path>` (or commit or diff form) for repo content,
+using the alias names from the spawn prompt; URL for web docs. If a plain-path
+citation refuses with `fix: cite it as git:<alias>@<ref>:<path>`, the file is
+inside a registered repo: write the `git:` form instead.
 
 **Probe-sized scopes.** A concept's scope must be testable by two to five narrow
 probes. If it cannot, split it into smaller concepts.
@@ -91,5 +101,6 @@ completion paragraph and stop; do not guess.
 ## Completion
 
 One paragraph: what was added, what was linked, what was found in reserve instead
-of re-added, what was left unmapped and why, and any question for the learner.
-Then stop.
+of re-added, what was left unmapped and why, any source the planner could not
+convert (include the refusal's `err:` line so the teacher can fix config), and
+any question for the learner. Then stop.
