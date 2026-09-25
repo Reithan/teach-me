@@ -30,6 +30,7 @@ archives:
     name_template: "tm_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+      - CHANGELOG.md
       - skill/teach-me/**
 
 checksum:

@@ -40,20 +40,9 @@ func editRun(ctx *Context) int {
 	ctx.GraphFile = file
 
 	// Validate --src citation if given.
-	citeStr := ""
-	if vals := ctx.Flags["src"]; len(vals) > 0 {
-		citeStr = vals[0]
-		resolver, resolverErr := source.NewResolver(filepath.Dir(file))
-		if resolverErr != nil {
-			ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
-			writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-			return 3
-		}
-		hashedCite, _, hashErr := resolver.HashCitation(citeStr)
-		if hashErr != nil {
-			return citeHashError(ctx, citeStr, hashErr, usageLine)
-		}
-		citeStr = hashedCite
+	citeStr, code := hashSrcFlag(ctx, file, usageLine)
+	if code != 0 {
+		return code
 	}
 
 	// ── Apply closure ────────────────────────────────────────────────────────
@@ -162,4 +151,27 @@ func editRun(ctx *Context) int {
 	}
 
 	return runMutationWithFile(ctx, file, apply)
+}
+
+// hashSrcFlag validates the --src citation, if given, against the sources of
+// the graph at file and returns it with its hash. It returns "" when --src is
+// absent. On failure it writes the err:/fix: lines and returns a nonzero exit
+// code. Shared by edit and errata.
+func hashSrcFlag(ctx *Context, file, usageLine string) (string, int) {
+	vals := ctx.Flags["src"]
+	if len(vals) == 0 {
+		return "", 0
+	}
+	citeStr := vals[0]
+	resolver, resolverErr := source.NewResolver(filepath.Dir(file))
+	if resolverErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("source config: %v", resolverErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return "", 3
+	}
+	hashedCite, _, hashErr := resolver.HashCitation(citeStr)
+	if hashErr != nil {
+		return "", citeHashError(ctx, citeStr, hashErr, usageLine)
+	}
+	return hashedCite, 0
 }

@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.24
+# tm: teaching-map CLI, draft spec v0.25
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.23: `tm src` and `tm report --fulltext` print a bounded window with a `more:` trailer, `tm src --fulldump` prints everything, `tm q` refuses citations over the question cap, and a reader role summarises sources that exceed the window; §1, §2.1, §6, §7, §9, §12, §14, §15 updated.
+Changes from v0.24: `tm errata <concept> "<scope>" "<reason>"` corrects the scope of a concept that has questions or a pass, logging the reason; a passed concept's pass then goes to a grader recheck through `tm check --errata` and `tm grade --errata keep|reopen`; §6, §7, §9.1, §10, §12, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -64,7 +64,7 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 ## 3. Files
 
 - Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; the graph carries no cache or side state. Its first `untested` meta line records the graph format when present; absent, the format is 1 (§4.6). Every command except `migrate`, `lint`, and help refuses a graph whose format is below the binary's with `fix: tm migrate`.
-- Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history` and `tm check --drift`.
+- Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history`, `tm check --drift`, and `tm check --errata`.
 - Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolves at all (a usage error with no pointer set). Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
 - Lock: `<name>.mmd.lock`. Every mutating command takes the lock, writes a temp file, lints the result, then renames over the graph. Graders run in parallel, so this is required.
 - File resolution: `--file` > `$TM_FILE` > `file` key in `.tmconfig` in the working directory > `file` key in the user config. `tm new` and `tm load` write the `file` key (and `src-root` when given) into the user config as absolute paths, so the pointer holds from any working directory; with `--local` they write `.tmconfig` in the working directory instead, for two lessons on one machine. Use the env var or `--file` when two concurrent sessions need different graphs.
@@ -284,6 +284,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm drop <id>` | remove an untested leaf concept that has no questions; or, for a drifted ungraded question, add an `unclear` tombstone answer to the graph so `--re` can target it. Logged | `ok` |
 | `tm gap <concept> "<gap>"` | set or replace the GAP field | `ok` |
 | `tm reopen <concept> "<gap>" [--src <cite>]` | move a passed concept to `untested` with a GAP; `--src` re-points the concept citation in the same operation. Descendants stay passed | `ok` |
+| `tm errata <concept> "<scope>" "<reason>" [--src <cite>]` | teacher: correct the scope of a concept in any active state, including one that has questions or is passed; logs the reason, leaves questions and answers untouched, and a pass then goes to a grader recheck. `--src` re-points the concept citation in the same operation | `ok` |
 | `tm reserve <concept>` | move an untested concept with no questions to `reserve`. Its edges stay; its children stop being blocked by it. Logged | `ok` |
 | `tm activate <concept>` | move a reserve concept to `untested`. Its own reserve parents stay parked. When it is a parent of a gated concept, the gate clears with `via: activate` (section 7). Logged | `ok` |
 | `tm prune <goal> [--keep N]` | park every untested concept with no questions that is outside the goal's ancestor closure; with `--keep N`, also park closure members beyond the N nearest untested concepts by hop distance, the goal counted first and ties broken by ID. Concepts with questions are never moved. Logged with the moved IDs | `reserved <n>` |
@@ -300,6 +301,8 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
 | `tm check --drift <concept>` | grader: for a passed concept, read its `grade` events, resolve each question citation against the current source, and emit per-question pairs for judging whether the pass survives | the recheck payload |
 | `tm grade --drift <concept> keep\|reopen "<summary>"` | grader: record the recheck verdict; `keep` re-hashes the concept citation; `reopen` runs `reopen` with the summary as the GAP | `ok` |
+| `tm check --errata <concept>` | grader: for a passed concept corrected with `tm errata`, print the old scope, new scope, and reason, then each graded answer for judging whether the pass survives the correction | the recheck payload |
+| `tm grade --errata <concept> keep\|reopen "<summary>"` | grader: record the errata recheck verdict; `keep` leaves the pass; `reopen` runs `reopen` with the summary as the GAP | `ok` |
 | `tm migrate [<file>]` | upgrade a format-1 graph to format 2 (section 4.6), rewriting each citation only to a locator that resolves to the same hash and listing what it cannot convert; always writes `%% tm:format 2` and exits 0. `--dry-run` prints without writing. Logged | one line per citation, then a summary |
 | `tm repo add <alias> <path> [--local]` | register a repo alias in machine config for `git:` locators (section 13), or to `.tmconfig` with `--local` | `ok` |
 | `tm repo rm <alias> [--local]` | remove a repo alias, or from `.tmconfig` with `--local` | `ok` |
@@ -357,6 +360,7 @@ The `reserve` count is printed only when it is nonzero.
 | `add` | ID exists (`fix: tm reopen` when it is passed), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
 | `link` | unknown ID, non-concept endpoint, or cycle |
 | `edit` | the ID is a question or answer; the concept is passed or has any question |
+| `errata` | the ID is a question or answer; the reason is empty (`err: errata needs a reason`; `fix: tm errata <concept> "<scope>" "<why the old scope was wrong>"`) |
 | `drop` (concept) | the concept is passed, has children, or has any question |
 | `drop` (question) | the question is already graded; or the citation has not drifted |
 | `reopen` | the concept is not in `passed` |
@@ -373,6 +377,8 @@ The `reserve` count is printed only when it is nonzero.
 | `q` (all forms, including `--re` and `--teach`) | the cited text exceeds 120 lines or 6,000 characters (`err: citation spans <N> lines/<M> chars; a question cites at most 120 lines or 6000 chars`; `fix: narrow with tm src <locator> --find <regex>`). This is write-time only: `add`, `edit --src`, `reopen --src`, and `recite` are uncapped, and a question already in the graph above the cap keeps working, so `ask`, `check`, and `grade` are unchanged. No lint check |
 | `recite` | the new range does not hash to the existing citation hash |
 | `check --drift` | the event log is missing or unreadable (`fix: tm reopen`) |
+| `check --errata`, `grade --errata` | the concept is not passed, or has no `errata` event since its last pass (`fix: tm errata <concept> "<scope>" "<reason>"`) |
+| `grade --errata` | the verdict is not `keep` or `reopen` |
 | `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |
 | `q` | the concept is passed or gated; the draft batch is at max; a probe question while a probe batch under the concept is locked or open; a teach question while a teach batch under the concept is open; `--teach` without `--re`; `--teach` once teaching is spent; `--teach` while the concept has no GAP; `--teach` with no failed probe batch above `base`; `--teach` without a fallback probe batch at min size that has no answers yet; `--re` on a probe whose target is not an `unclear` probe; `--re` on a teach question whose target is not a `fail` or `unclear` answer, or is flagged `OOS` |
 | `ask`, `answer` | the batch is under min; any parent of the concept is in `untested`; the concept is gated; the batch is the fallback probes and any teach batch under the concept is unresolved; or the latest one is not all `pass` and teaching is not spent |
@@ -479,6 +485,30 @@ Grader rubric for `tm grade --drift <concept> keep|reopen "<summary>"`:
 
 The teacher never makes this call. Its bias runs toward re-testing always or never, depending on the model; the grader sees the logged answers and the current text, not the teacher.
 
+**Errata payload.** `tm check --errata <concept>` reads the concept's latest `errata` event since its last pass, prints the correction header, then one block per `grade` event:
+
+```
+SCOPE_BEFORE <old scope>
+SCOPE_AFTER <new scope>
+REASON <reason>
+```
+
+```
+Q <qid>: <question scope>
+CITE <citation>
+SRC
+  <src_text from the grade event, verbatim>
+A: <raw answer from the grade event>
+VERDICT: <recorded verdict>
+```
+
+The teacher drafts each question from the concept scope, so a wrong detail in it can surface in a question and steer that verdict. Grader rubric for `tm grade --errata <concept> keep|reopen "<summary>"`:
+
+- `keep`: no logged question or verdict turns on the detail that differs between `SCOPE_BEFORE` and `SCOPE_AFTER`. `keep` leaves the pass and logs a `recheck` event with `kind: errata`.
+- `reopen`: a logged question or verdict turns on that detail, or the grader cannot tell. `reopen` runs `tm reopen` with the summary as the GAP and logs the same event.
+
+The teacher never makes this call.
+
 ## 10. Event log
 
 One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_ROLE` or null). Every mutation is logged; `gc` and `grade` carry the content that leaves the graph. `ask` is a read and logs nothing.
@@ -489,6 +519,7 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `add` | `id`, `scope`, `src`, `parents`, `children`; optional: `ref` (the git ref as typed), `commit` (resolved SHA for a `git:` file-at-ref citation), `url` (final URL after redirects), `mime`, `converter`, `converter_version`, `fetched_at` |
 | `link` | `from`, `to`, `rel` |
 | `edit` | `id`, `before`, `after` |
+| `errata` | `id`, `reason`, `before`, `after`; optional: `src_before`, `src_after` (when `--src` re-points the citation) |
 | `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and `answer: <pending answer text>` if a pending answer existed |
 | `gap` | `concept`, `before`, `after` |
 | `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `ref`, `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
@@ -503,7 +534,7 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `gate` | `concept`, `trip` (`probes`, `stall`), `base`, `via` (`add`, `activate`, `reopen`, `override`), `reason` |
 | `rehash` | `id`, `before` (old citation), `after` (new citation with hash) |
 | `recite` | `id`, `before` (old citation), `after` (new citation at new range); optional: `ref` (the git ref as typed), `commit` (resolved SHA for a `git:` file-at-ref citation) |
-| `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; per question: `q`, `src_text_before`, `src_text_after` |
+| `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; optional: `kind: errata` (a scope-errata recheck, which carries no per-question fields); for a drift recheck, per question: `q`, `src_text_before`, `src_text_after` |
 | `aid` | `id` (concept or qid), `path`, `action` (`add`, `rm`) |
 | `migrate` | `from`, `to` (format numbers), `rewritten` (count), `left` (count), `unresolved` (IDs left as plain paths) |
 
@@ -625,6 +656,7 @@ The **Prune phase** follows every Map. The planner's prompt primes inclusion, an
 
 - `DRIFT` on an ungraded question: `tm drop <qid>`, then `tm q --re <qid>` with a fresh citation. The learner is asked again.
 - `DRIFT` on a passed concept: if the new range hashes the same, `tm recite`. Otherwise spawn a grader with the concept ID and the instruction to run `tm check --drift`; the grader decides `keep` or `reopen`. The teacher never decides whether a pass survives a source change.
+- A wrong detail in a concept's scope: `tm errata <id> "<scope>" "<reason>"`. If the concept is passed, spawn a grader with the concept ID and the instruction to run `tm check --errata`; the grader decides `keep` or `reopen`.
 - A source replaced or a learner correction revealing a missing prerequisite: spawn the planner in errata mode for the affected concepts.
 - A learner who disputes a verdict: not errata. Re-probe with `--re`; the grader decides.
 - A gate: take the exits in the `fix:` line's order. Activate a reserve parent when one fits the GAP; otherwise spawn the planner to add one, or reopen a passed parent. `--override` only when the learner asks for it, with the learner's reason; the teacher's own read of the verdicts is the bias the grader isolation exists to block.
@@ -811,6 +843,7 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 70 | Output windows are constants in tm (200 lines / 8,000 chars for source reads, §1), not harness caps | a harness cap that keeps the tail deletes the head of prompt-shaped output, where the question and locator sit; a constant in tm bounds its own output and avoids a config key nobody tunes | rely on the harness output cap; a configurable window size | agreed, 2026-09-25 |
 | 71 | Question citations are capped (120 lines / 6,000 chars, §7); concept citations are not | no grade is earned against a concept citation, so its size never bounds a grader payload; only `tm report --fulltext` prints concept text, and that print is windowed (§1) | cap every citation; cap none | agreed, 2026-09-25 |
 | 72 | `--fulldump` exists for the reader role only (§2.1); every other role pages through the `more:` trailer | the reader has disposable context and needs the whole source once to find ranges, while paging suits the teacher and planner | paging-only with no full dump (more tool calls for a cheap model); a `--full` on every read command | agreed, 2026-09-25 |
+| 73 | Scope errata on a graded concept is its own command, `tm errata`: a logged rewrite plus a grader recheck through `tm check --errata` / `tm grade --errata keep\|reopen` | the teacher drafts each question from the scope, so a wrong detail can surface in a question and steer its verdict, which is the drift shape (56), while questions stay immutable (21) because they were graded against SRC; a separate command keeps the planner and pruner, which hold `tm edit`, out of it, since a tool allow-list cannot exclude one flag | hand edits only (invisible to the log and closed to the teacher); reopen-then-edit (costs the learner a pass the error may not have touched); teacher-decided keep; `--errata` as a flag on `tm edit` (reachable by every role that holds `tm edit`) | agreed, 2026-09-25 |
 
 ## 15. Deferred
 

@@ -13,9 +13,11 @@ import (
 //
 //   - `tm grade <qid> pass|fail|unclear "<summary>" [--guided] [--oos]`
 //   - `tm grade --drift <concept> keep|reopen "<summary>"`
+//   - `tm grade --errata <concept> keep|reopen "<summary>"`
 //
-// Without --drift: implements the §8 grade procedure (steps 1–10).
-// With --drift: implements the §9.1 recheck verdict (keep or reopen).
+// Without --drift/--errata: implements the §8 grade procedure (steps 1–10).
+// With --drift: implements the §9.1 drift recheck verdict (keep or reopen).
+// With --errata: implements the §9.1 errata recheck verdict (keep or reopen).
 //
 // ForbidTeacher: true is enforced by the dispatcher (run.go checkRole).
 //
@@ -29,6 +31,10 @@ func gradeRun(ctx *Context) int {
 	// Route to drift-grade handler when --drift is supplied.
 	if len(ctx.Flags["drift"]) > 0 {
 		return gradeDriftRun(ctx)
+	}
+	// Route to errata-grade handler when --errata is supplied.
+	if len(ctx.Flags["errata"]) > 0 {
+		return gradeErrataRun(ctx)
 	}
 
 	qid := ctx.Positionals[0]

@@ -134,6 +134,19 @@ var Table = []Command{
 		Run:          reopenRun,
 	},
 	{
+		Name: "errata",
+		PosArgs: []PosArg{
+			{Name: "<concept>"},
+			{Name: `"<scope>"`},
+			{Name: `"<reason>"`, Stdin: true},
+		},
+		Flags: []FlagSpec{
+			{Name: "src", TakesValue: true, ValueName: "<cite>"},
+		},
+		ForbidGrader: true,
+		Run:          errataRun,
+	},
+	{
 		Name: "reserve",
 		PosArgs: []PosArg{
 			{Name: "<concept>"},
@@ -221,6 +234,7 @@ var Table = []Command{
 		},
 		Flags: []FlagSpec{
 			{Name: "drift"},
+			{Name: "errata"},
 		},
 		ForbidGrader: false,
 		Run:          checkRun,
@@ -242,6 +256,7 @@ var Table = []Command{
 			{Name: "guided"},
 			{Name: "oos"},
 			{Name: "drift"},
+			{Name: "errata"},
 		},
 		ForbidGrader:  false,
 		ForbidTeacher: true,

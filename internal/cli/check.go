@@ -11,7 +11,8 @@ import (
 // checkRun is the Run handler for:
 //
 //   - `tm check <qid>` — emits the grading payload (§9)
-//   - `tm check --drift <concept>` — emits the recheck payload (§9.1)
+//   - `tm check --drift <concept>` — emits the drift recheck payload (§9.1)
+//   - `tm check --errata <concept>` — emits the errata recheck payload (§9.1)
 //
 // Exit codes:
 //
@@ -22,6 +23,10 @@ func checkRun(ctx *Context) int {
 	// Route to drift-check handler when --drift is supplied.
 	if len(ctx.Flags["drift"]) > 0 {
 		return checkDriftRun(ctx)
+	}
+	// Route to errata-check handler when --errata is supplied.
+	if len(ctx.Flags["errata"]) > 0 {
+		return checkErrataRun(ctx)
 	}
 
 	qid := ctx.Positionals[0]
