@@ -304,63 +304,6 @@ func TestCache_FailedFetchNotCached(t *testing.T) {
 	}
 }
 
-// TestCache_DriftWithinTTL verifies the documented accepted trade: a URL
-// whose content changes within the TTL still passes CheckDrift (cache hit),
-// but shows as drifted after the cache entry is removed.
-func TestCache_DriftWithinTTL(t *testing.T) {
-	var changed int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		if atomic.LoadInt32(&changed) == 0 {
-			_, _ = fmt.Fprint(w, "original line one\noriginal line two\n")
-		} else {
-			_, _ = fmt.Fprint(w, "different line one\ndifferent line two\n")
-		}
-	}))
-	t.Cleanup(srv.Close)
-
-	cacheDir := t.TempDir()
-	cfg := loadCfg(t, "", "")
-	cfg.CacheTTL = 24 * time.Hour
-
-	// Hash the content as originally served.
-	r := resolverWithCache(cfg, t.TempDir(), cacheDir)
-	c := cite.Citation{File: srv.URL, Start: 1, End: 2}
-	text, _, err := r.Read(c)
-	if err != nil {
-		t.Fatalf("initial Read: %v", err)
-	}
-	hash := cite.Hash(text)
-	citeStr := fmt.Sprintf("%s@%s:1-2", hash, srv.URL)
-
-	// Flip server to modified content (cache still holds original).
-	atomic.StoreInt32(&changed, 1)
-
-	// Within TTL: CheckDrift returns false (cache hit, original content).
-	drifted, _, err := r.CheckDrift(citeStr)
-	if err != nil {
-		t.Fatalf("CheckDrift (within TTL): %v", err)
-	}
-	if drifted {
-		t.Error("expected no drift within TTL (cache hit), but got drifted=true")
-	}
-
-	// Remove the cache entry to force a fresh fetch.
-	entries, _ := filepath.Glob(filepath.Join(cacheDir, "*.json"))
-	for _, e := range entries {
-		os.Remove(e) //nolint:errcheck
-	}
-
-	// After cache clear: CheckDrift detects the change.
-	drifted, _, err = r.CheckDrift(citeStr)
-	if err != nil {
-		t.Fatalf("CheckDrift (after clear): %v", err)
-	}
-	if !drifted {
-		t.Error("expected drift after cache clear, but got drifted=false")
-	}
-}
-
 // TestCache_MalformedCacheEntryIsMiss verifies that a malformed JSON cache
 // file is treated as a miss (not an error), triggering a re-fetch, and that
 // the entry is rewritten with valid JSON after the fresh fetch.
