@@ -55,6 +55,10 @@ type Meta struct {
 	// ResolvedLocator is the SHA-pinned locator for git: citations.
 	// Set by readGit; used by HashCitation to store the pinned form; not logged.
 	ResolvedLocator string
+	// SrcText is the normalized, range-sliced text that was hashed. Set by
+	// HashCitation for callers that need to measure the cited text (§7 question
+	// cap). ApplyMeta does not copy it, so it never reaches the event log.
+	SrcText string
 }
 
 // Resolver resolves citations through converters, URIs, and git HEAD.
@@ -184,6 +188,9 @@ func (r *Resolver) HashCitation(citeStr string) (string, Meta, error) {
 	}
 
 	c.Hash = computed
+	// Carry the hashed text so callers can measure it (§7 question cap).
+	// ApplyMeta ignores this field, so it never reaches the event log.
+	meta.SrcText = text
 	// For git: locators, replace the locator with the SHA-pinned form so that
 	// every ref is resolved to a 12-hex SHA on write (§4.4, §13.1).
 	if cite.IsGit(c.File) && meta.ResolvedLocator != "" {

@@ -1,6 +1,6 @@
 package cli
 
-// Bounds for prompt-shaped output (spec §1). These are constants, not
+// Bounds for prompt-shaped output (spec §1, §7). These are constants, not
 // configuration: the spec fixes the numbers so tm never depends on a harness
 // output cap that keeps the tail and drops the head. Nothing here is exported.
 const (
@@ -9,6 +9,13 @@ const (
 	// characters, whichever comes first.
 	windowLineMax = 200
 	windowCharMax = 8000
+
+	// questionCiteLineMax and questionCiteCharMax cap the text a single
+	// question may cite (§7): tm q refuses a citation whose hashed text spans
+	// more than this many lines or characters. add/edit/reopen --src and recite
+	// are uncapped.
+	questionCiteLineMax = 120
+	questionCiteCharMax = 6000
 )
 
 // windowLines returns the leading whole lines of lines that fit within one

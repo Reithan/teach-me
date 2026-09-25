@@ -2,6 +2,7 @@ package report_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -279,6 +280,52 @@ func TestRender(t *testing.T) {
 			},
 			contains: []string{"Source unreadable: access denied"},
 			absent:   []string{"```"},
+		},
+		{
+			name: "fulltext window over by lines: cut with more: trailer",
+			setup: func() ([]report.ConceptInfo, report.Options, report.TextReader) {
+				g := buildGraph(nil, []string{"a"}, nil)
+				g.UntestedConcepts[0].Cites = []string{"abc123def456@src.txt:10-20"}
+				s := state.LoadFromGraph(g, state.Config{})
+				c, _ := report.Walk(g, s, "a", -1)
+				r := makeReader(readerResult{text: "R1\nR2\nR3\nR4\nR5"})
+				return c, report.Options{Fulltext: true, SrcRoot: "/any", WindowLineMax: 3, WindowCharMax: 8000}, r
+			},
+			contains: []string{"```\nR1\nR2\nR3\n```", "more: tm src src.txt 13-20"},
+			absent:   []string{"R4"},
+		},
+		{
+			name: "fulltext window over by chars: whole-line cut",
+			setup: func() ([]report.ConceptInfo, report.Options, report.TextReader) {
+				g := buildGraph(nil, []string{"a"}, nil)
+				g.UntestedConcepts[0].Cites = []string{"abc123def456@src.txt:1-3"}
+				s := state.LoadFromGraph(g, state.Config{})
+				c, _ := report.Walk(g, s, "a", -1)
+				r := makeReader(readerResult{text: "abcd\nabcd\nabcd"})
+				return c, report.Options{Fulltext: true, SrcRoot: "/any", WindowLineMax: 200, WindowCharMax: 5}, r
+			},
+			contains: []string{"```\nabcd\n```", "more: tm src src.txt 2-3"},
+		},
+		{
+			name: "fulltext window is one budget across a concept's citations",
+			setup: func() ([]report.ConceptInfo, report.Options, report.TextReader) {
+				g := buildGraph(nil, []string{"a"}, nil)
+				g.UntestedConcepts[0].Cites = []string{
+					"aaa111bbb222@src.txt:1-10",
+					"ccc333ddd444@src.txt:11-20",
+				}
+				s := state.LoadFromGraph(g, state.Config{})
+				c, _ := report.Walk(g, s, "a", -1)
+				ten := make([]string, 10)
+				for i := range ten {
+					ten[i] = fmt.Sprintf("M%d", i+1)
+				}
+				r := makeReader(readerResult{text: strings.Join(ten, "\n")})
+				// 10 lines from the first citation plus 5 from the second reach the
+				// 15-line budget; the window is cut inside the second citation.
+				return c, report.Options{Fulltext: true, SrcRoot: "/any", WindowLineMax: 15, WindowCharMax: 80000}, r
+			},
+			contains: []string{"Source: aaa111bbb222@src.txt:1-10", "more: tm src src.txt 16-20"},
 		},
 	}
 

@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
+	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
@@ -76,6 +78,28 @@ func qRun(ctx *Context) int {
 		return citeHashError(ctx, citeStr, aidRefusalWithID(hashErr, conceptID), usageLine)
 	}
 	citeStr = hashedCite
+
+	// §7 question citation cap: a single question may cite at most 120 lines or
+	// 6,000 characters. Enforced here — after the citation text resolves, before
+	// any lock is taken or event is logged — for every q form (probe, --re,
+	// --teach). add, edit --src, reopen --src, and recite are uncapped, and a
+	// question already in the graph above the cap keeps working.
+	if txt := citeMeta.SrcText; txt != "" {
+		nLines := strings.Count(txt, "\n") + 1
+		nChars := len(txt)
+		if nLines > questionCiteLineMax || nChars > questionCiteCharMax {
+			locator := citeStr
+			if c, perr := cite.Parse(citeStr); perr == nil {
+				locator = c.File
+			}
+			ctx.ErrMsg = fmt.Sprintf(
+				"citation spans %d lines/%d chars; a question cites at most %d lines or %d chars",
+				nLines, nChars, questionCiteLineMax, questionCiteCharMax)
+			ctx.FixMsg = fmt.Sprintf("narrow with tm src %s --find <regex>", locator)
+			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+			return 1
+		}
+	}
 
 	// ── Apply closure ─────────────────────────────────────────────────────────
 
