@@ -59,6 +59,7 @@ type Meta struct {
 type Resolver struct {
 	Cfg      *Config
 	SrcRoot  string
+	GraphDir string // graph file directory, used for aids-dir resolution
 	CacheDir string // empty disables the cache (e.g. when UserCacheDir errors)
 
 	mu       sync.Mutex
@@ -81,6 +82,7 @@ func NewResolver(graphDir string) (*Resolver, error) {
 	return &Resolver{
 		Cfg:      cfg,
 		SrcRoot:  cite.SrcRoot(graphDir),
+		GraphDir: graphDir,
 		CacheDir: cacheDir,
 		verified: make(map[string]versionEntry),
 	}, nil
@@ -320,6 +322,18 @@ func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
 
 func (r *Resolver) readPath(c cite.Citation) (string, Meta, error) {
 	path := cite.Resolve(c, r.SrcRoot)
+
+	// Refuse if the resolved path is inside the aids directory (§4.6 rule 5).
+	if r.GraphDir != "" {
+		aidsDir := AidsDir(r.Cfg, r.GraphDir)
+		absPath := filepath.Clean(path)
+		if isUnderDir(absPath, aidsDir) {
+			return "", Meta{}, &RefusalError{
+				Err: fmt.Sprintf("%s is an aid, not a source", c.File),
+				Fix: fmt.Sprintf("cite the primary source; link the aid with tm aid <id> %s", c.File),
+			}
+		}
+	}
 
 	// Determine MIME from extension (for converter lookup).
 	ext := strings.ToLower(filepath.Ext(path))
@@ -678,4 +692,14 @@ func firstLineOf(s string) string {
 		return strings.TrimSpace(s[:idx])
 	}
 	return s
+}
+
+// isUnderDir reports whether path is inside (or equal to) dir.
+// Both paths must be cleaned absolute paths. The comparison is case-sensitive.
+func isUnderDir(path, dir string) bool {
+	cleanDir := filepath.Clean(dir)
+	if path == cleanDir {
+		return true
+	}
+	return strings.HasPrefix(path, cleanDir+string(filepath.Separator))
 }

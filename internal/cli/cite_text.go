@@ -51,10 +51,17 @@ func checkCiteDrift(citeStr, srcRoot string) (bool, error) {
 // hashCiteText reads citeStr through the resolver and returns the canonical
 // hashed citation, refusing on a stored-hash mismatch.
 func hashCiteText(citeStr, srcRoot string) (string, error) {
+	return hashCiteTextInDir(citeStr, srcRoot, "")
+}
+
+// hashCiteTextInDir is hashCiteText with an explicit graph directory for
+// aids-dir refusal checking (§4.6). Pass an empty graphDir to skip the check.
+func hashCiteTextInDir(citeStr, srcRoot, graphDir string) (string, error) {
 	r, err := citeResolver(srcRoot)
 	if err != nil {
 		return "", err
 	}
+	r.GraphDir = graphDir
 	hashed, _, err := r.HashCitation(citeStr)
 	return hashed, err
 }

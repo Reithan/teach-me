@@ -150,8 +150,12 @@ func lintDrift(ctx *Context, data []byte, file string) int {
 // mirroring state.ConfigFromEnv() for the subset of fields lint.Config needs.
 func buildLintConfig(file string) lint.Config {
 	sc := state.ConfigFromEnv()
+	graphDir := filepath.Dir(file)
+	// Load source config to get aids-dir for check 16.
+	srcCfg, _ := source.LoadConfig()
 	return lint.Config{
-		SrcRoot:  cite.SrcRoot(filepath.Dir(file)),
+		SrcRoot:  cite.SrcRoot(graphDir),
+		AidsDir:  source.AidsDir(srcCfg, graphDir),
 		ProbeMin: sc.ProbeMin,
 		ProbeMax: sc.ProbeMax,
 		TeachMin: sc.TeachMin,

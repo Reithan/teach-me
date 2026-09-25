@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,6 +42,10 @@ type Config struct {
 	// Use effectiveCacheTTL() on the Resolver for the resolved value.
 	CacheTTL    time.Duration
 	CacheTTLSet bool
+	// AidsDir is the directory holding aid files (§4.6).
+	// Relative paths are resolved against the graph directory at runtime.
+	// Empty means "use the default", which is <graphDir>/aids.
+	AidsDir string
 	// ConfigPath is the user config file path used in error messages.
 	ConfigPath string
 }
@@ -180,6 +185,9 @@ func applyKey(key, val string, cfg *Config) {
 			cfg.CacheTTLSet = true
 		}
 
+	case key == "aids-dir":
+		cfg.AidsDir = val
+
 		// Unknown keys (file=, doc=, TM_* env keys, etc.) are silently ignored.
 	}
 }
@@ -226,4 +234,17 @@ func stripMIMEParams(mime string) string {
 		return strings.TrimSpace(mime[:i])
 	}
 	return strings.TrimSpace(mime)
+}
+
+// AidsDir returns the absolute path to the aids directory.
+// If cfg.AidsDir is set, it is resolved against graphDir when relative.
+// Otherwise the default is filepath.Join(graphDir, "aids").
+func AidsDir(cfg *Config, graphDir string) string {
+	if cfg != nil && cfg.AidsDir != "" {
+		if filepath.IsAbs(cfg.AidsDir) {
+			return filepath.Clean(cfg.AidsDir)
+		}
+		return filepath.Clean(filepath.Join(graphDir, cfg.AidsDir))
+	}
+	return filepath.Join(graphDir, "aids")
 }

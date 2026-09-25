@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/eventlog"
@@ -77,7 +78,9 @@ func reciteRun(ctx *Context) int {
 
 		// Hash the new range to find which existing citation it matches.
 		// HashCitation reads the text and computes a 12-hex-char hash.
-		newHashed, hashErr := hashCiteText(newRangeStr, srcRoot)
+		// graphDir enables aids-dir refusal for plain-path locators (§4.6).
+		graphDir := filepath.Dir(ctx.GraphFile)
+		newHashed, hashErr := hashCiteTextInDir(newRangeStr, srcRoot, graphDir)
 		if hashErr != nil {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("cannot hash %q: %v", newRangeStr, hashErr),

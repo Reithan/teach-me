@@ -3,6 +3,7 @@ package lint
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -21,6 +22,7 @@ type Violation struct {
 // Config holds the runtime configuration for lint size checks.
 type Config struct {
 	SrcRoot  string
+	AidsDir  string
 	ProbeMin int
 	ProbeMax int
 	TeachMin int
@@ -65,6 +67,7 @@ func Check(data []byte, cfg Config) []Violation {
 		check11(g, cfg),
 		check12(g, allConcepts, inEdges, qByID, aByID),
 		check15(g),
+		check16(g, cfg),
 		check17(g),
 	}
 	total := 0
@@ -954,4 +957,55 @@ func check17(g *graph.Graph) []Violation {
 		}}
 	}
 	return nil
+}
+
+// check16 verifies that no concept or question cites a file that resolves
+// inside the aids directory (§11 check 16, §4.6 rule 5). No file reads are
+// performed; the check is purely path-based.
+func check16(g *graph.Graph, cfg Config) []Violation {
+	if cfg.AidsDir == "" {
+		return nil
+	}
+	aidsDir := filepath.Clean(cfg.AidsDir)
+
+	checkCite := func(nodeID, citeStr string, violations *[]Violation) {
+		c, err := cite.Parse(citeStr)
+		if err != nil {
+			return
+		}
+		if cite.IsURI(c.File) || cite.IsGit(c.File) {
+			return
+		}
+		path := filepath.Clean(cite.Resolve(c, cfg.SrcRoot))
+		inAids := path == aidsDir || strings.HasPrefix(path, aidsDir+string(filepath.Separator))
+		if inAids {
+			*violations = append(*violations, Violation{Msg: fmt.Sprintf(
+				"%s cites aid %s; fix: cite the primary source; link the aid with tm aid %s %s",
+				nodeID, c.File, nodeID, c.File,
+			)})
+		}
+	}
+
+	var viols []Violation
+	for _, cn := range g.PassedConcepts {
+		for _, cite := range cn.Cites {
+			checkCite(cn.ID, cite, &viols)
+		}
+	}
+	for _, cn := range g.UntestedConcepts {
+		for _, c := range cn.Cites {
+			checkCite(cn.ID, c, &viols)
+		}
+	}
+	for _, cn := range g.ReserveConcepts {
+		for _, c := range cn.Cites {
+			checkCite(cn.ID, c, &viols)
+		}
+	}
+	for _, item := range g.TestingItems {
+		if item.Q != nil {
+			checkCite(item.Q.ID, item.Q.Cite, &viols)
+		}
+	}
+	return viols
 }
