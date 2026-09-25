@@ -100,6 +100,7 @@ var Table = []Command{
 		},
 		Flags: []FlagSpec{
 			{Name: "src", TakesValue: true, ValueName: "<cite>"},
+			{Name: "errata", TakesValue: true, ValueName: `"<reason>"`},
 		},
 		ForbidGrader: true,
 		Run:          editRun,
@@ -221,6 +222,7 @@ var Table = []Command{
 		},
 		Flags: []FlagSpec{
 			{Name: "drift"},
+			{Name: "errata"},
 		},
 		ForbidGrader: false,
 		Run:          checkRun,
@@ -242,6 +244,7 @@ var Table = []Command{
 			{Name: "guided"},
 			{Name: "oos"},
 			{Name: "drift"},
+			{Name: "errata"},
 		},
 		ForbidGrader:  false,
 		ForbidTeacher: true,
