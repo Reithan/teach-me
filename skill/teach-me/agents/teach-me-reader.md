@@ -10,41 +10,34 @@ effort: medium
 
 ## Task
 
-Given a locator and a question, run `tm src <locator> --fulldump` once, read
-the numbered text, answer the question, and list candidate ranges the teacher
-can cite.
+Given a locator and a question, run `tm src <locator> --fulldump`, read the
+numbered text, answer the question in under 150 words, and list up to eight
+candidate ranges as `<locator>:START-END` with a one-line reason each. The
+numbers are those `tm src` printed; never renumber them, never quote more than
+two lines per range.
 
 ## Rules
 
-Answer only from the text `tm src` printed, never from what you know
-elsewhere.
+`--fulldump` is this agent's alone: it prints the whole converted source with no
+window limit so the reader can locate ranges in a single pass. Never cite, never
+run `tm add` or `tm q` — the reader has no such tool. Never write a file.
 
-Give each range as inclusive line numbers exactly as `tm src` printed them,
-spanning at most 120 lines. Never round or renumber. List at most eight ranges,
-each with a one-line reason and no quoted source text.
-
-Write every range with the locator exactly as the prompt gave it, not the
-`src:` header `tm src` prints.
-
-If `tm src` refuses, return its `err:` and `fix:` lines verbatim in place of
-the shape below, and stop.
+If `tm src` refuses, return its `err:` and `fix:` lines verbatim and stop. If
+the question cannot be answered from the text, say so in `unanswered:`.
 
 ## Output
 
-Respond in this shape, with nothing outside it:
+Respond in this fixed shape and no other:
 
 ```
-summary: <answer to the question, 150 words or fewer>
+summary: <paragraph answering the question, 150 words or fewer>
 
 ranges:
-<locator>:START-END: <one-line reason>
+<locator>:START-END — <one-line reason>
 ...
 
-unanswered: <what the text did not answer>
+unanswered: <what the text did not answer, if anything>
 ```
 
-When the text answers nothing, write `ranges: none` and fill `unanswered:`.
-Omit `unanswered:` when the question was fully answered.
-
-You are done when you have returned either the refusal lines or this shape with
-every range inside the dump and at most 120 lines long.
+Omit `unanswered:` when the question was fully answered. Do not add prose
+outside this shape.
