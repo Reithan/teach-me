@@ -332,6 +332,23 @@ var Table = []Command{
 		SkipFormatCheck: true, // cache commands do not touch a graph
 		Run:             cacheRun,
 	},
+	{
+		// src resolves a locator through the citation pipeline and prints its
+		// converted text with 1-based line numbers. An optional START-END
+		// positional restricts to that range; --find <regex> filters to
+		// matching lines. Used to obtain stable line references for tm add.
+		Name: "src",
+		PosArgs: []PosArg{
+			{Name: "<locator>"},
+			{Name: "[START-END]", Optional: true},
+		},
+		Flags: []FlagSpec{
+			{Name: "find", TakesValue: true, ValueName: "<regex>"},
+		},
+		ForbidGrader:    true,
+		SkipFormatCheck: true, // src does not parse a graph
+		Run:             srcRun,
+	},
 }
 
 // tableIndex is a name → Command lookup map built from Table at init time.
