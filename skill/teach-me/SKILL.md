@@ -11,8 +11,8 @@ metadata:
 
 Drive a human learner toward mastery of a body of concepts with the `tm` CLI:
 diagnose what they already understand, test the frontier of what they do not, and
-teach each gap a wrong answer reveals. This file is the teacher adapter of spec
-§2.1 (`docs/spec.md`); it carries the procedure the CLI cannot enforce.
+teach each gap a wrong answer reveals. This file is the teacher adapter; it carries
+the procedure the CLI cannot enforce.
 
 ## Goal
 
@@ -85,7 +85,7 @@ be obtained, say so and stop.
 ## Workflow
 
 `tm status` is your dashboard, and the `fix:` line on any refusal names your next
-move. The full state machine is spec §12; the phases:
+move. The phases:
 
 1. **Source.** On `tm new` (fresh session only):
    - Ask the learner for their learning goal in their own words and what they
@@ -121,34 +121,18 @@ move. The full state machine is spec §12; the phases:
    blocked, and the frontier (untested concepts whose prerequisites are all
    passed).
 
-3. **Map**, when the frontier is thin or a prerequisite is missing. Spawn the
-   `teach-me-planner` sub-agent with: the learning goal as the learner stated it,
-   what the learner says they already know, the source locations, and the request
-   scope — `initial` for a fresh map, `extend around <concept>` when the frontier
-   is thin, or `errata for <concepts>` when sources or prerequisites have changed.
-   For extend or errata, also include the output of `tm report <concept>` so the
-   planner sees the existing foundations. Read the planner's results through
-   `tm status` and `tm show`; ignore its prose summary.
-
-   After every planner run, spawn `teach-me-pruner` with: the goal concept ID,
-   the goal in the learner's words, what the learner says they already know, the
-   output of `tm report <goal> --hops 99`, and a budget (default: 3 active
-   concepts beyond the goal). Read the pruner's result through `tm status`; the
-   `reserve` count and the frontier show whether the prune did its job.
-
-   Expect the pruner to park more than you would. That is its job: a parked
-   concept costs nothing until a probe fails, and `tm activate` restores it in
-   one command, while an unneeded active concept costs the learner a full probe
-   batch. Do not activate concepts after a prune on your own read of the map.
-   Activate only from a gate's `fix:` line, or when the learner asks. If the
-   frontier is empty after a prune, the goal is blocked by a kept foundation;
-   probe that foundation, do not un-park others.
+3. **Map**, when a fresh map is needed, the frontier is thin, a prerequisite is
+   missing, or errata applies. Read `skill/teach-me/reference/map.md` before
+   spawning either sub-agent; it is loaded only then. Spawn the
+   `teach-me-planner` sub-agent, then spawn the `teach-me-pruner` sub-agent
+   after it.
 
 4. **Pick** a frontier concept.
 
 5. **Probe.** Draft between `TM_PROBE_MIN` and `TM_PROBE_MAX` narrow probe
    questions with `tm q`, then emit the batch with `tm ask <concept>`. A question
-   is immutable once written.
+   is immutable once written. See `skill/teach-me/reference/setup.md` for session
+   limit defaults.
 
 6. **Answer.** Present the emitted questions to the learner through the harness's
    built-in question tool (`tm ask --format json` maps onto it), then record each
@@ -160,7 +144,7 @@ move. The full state machine is spec §12; the phases:
    opus when the judgment is fine-grained). Then read the verdicts with
    `tm status --concept <id>`.
 
-8. **Act on the verdict** (`tm` runs the transitions of spec §8):
+8. **Act on the verdict** (`tm` runs the transitions):
    - all pass → the concept passes automatically; its tests clear and it moves to
      the passed block.
    - no fail, some unclear → add one `tm q --re <qid>` replacement per unclear
@@ -209,7 +193,8 @@ cycle.
   `keep` or `reopen`. The teacher never decides whether a pass survives a source
   change. Descendants stay passed either way.
 - **Replaced source or revealed missing prerequisite**: spawn the
-  `teach-me-planner` in `errata for <concepts>` mode.
+  `teach-me-planner` in `errata for <concepts>` mode; read
+  `skill/teach-me/reference/map.md` before spawning.
 - **Disputed verdict**: not errata. Re-probe with `--re`; the grader decides.
 - **After any hand edit to the graph**: run `tm lint`.
 
@@ -218,11 +203,3 @@ cycle.
 Generated from the CLI; for one command or flag, run `tm <command> --help`:
 
 !`tm --help --all`
-
-## Reference
-
-Read `docs/spec.md` for full command semantics, invariants, and edge cases. Key
-sections: §5 derived state (including reserve parents), §8 transitions, §9 grader
-protocol, §9.1 recheck payload, §12 intended usage and Prune phase, and §13
-configuration (batch sizes and gate limits: `TM_PROBE_MIN`/`MAX`,
-`TM_TEACH_MIN`/`MAX`, `TM_MAX_FAILS`, `TM_MAX_TEACH`, `TM_MAX_STALL`).
