@@ -25,12 +25,12 @@ func srcMakeGraph(t *testing.T, dir string) string {
 	return mmdFile
 }
 
-// srcWriteFile writes content to filepath.Join(dir, name) and returns the path.
-func srcWriteFile(t *testing.T, dir, name, content string) string {
+// srcWriteFile writes content to filepath.Join(dir, "src.txt") and returns the path.
+func srcWriteFile(t *testing.T, dir, content string) string {
 	t.Helper()
-	p := filepath.Join(dir, name)
+	p := filepath.Join(dir, "src.txt")
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-		t.Fatalf("srcWriteFile %s: %v", name, err)
+		t.Fatalf("srcWriteFile: %v", err)
 	}
 	return p
 }
@@ -44,7 +44,7 @@ func TestTmSrc_NumberedOutput(t *testing.T) {
 	srcMakeGraph(t, dir)
 	srcSetupXDG(t, "")
 
-	f := srcWriteFile(t, dir, "src.txt", "alpha\nbeta\ngamma\n")
+	f := srcWriteFile(t, dir, "alpha\nbeta\ngamma\n")
 
 	out, errOut, code := run(t, "src", f)
 	if code != 0 {
@@ -71,7 +71,7 @@ func TestTmSrc_RangeOutput(t *testing.T) {
 	srcMakeGraph(t, dir)
 	srcSetupXDG(t, "")
 
-	f := srcWriteFile(t, dir, "src.txt", "one\ntwo\nthree\nfour\n")
+	f := srcWriteFile(t, dir, "one\ntwo\nthree\nfour\n")
 
 	tests := []struct {
 		name      string
@@ -140,7 +140,7 @@ func TestTmSrc_Find(t *testing.T) {
 	srcMakeGraph(t, dir)
 	srcSetupXDG(t, "")
 
-	f := srcWriteFile(t, dir, "src.txt", "foo bar\nbaz\nfoo baz\n")
+	f := srcWriteFile(t, dir, "foo bar\nbaz\nfoo baz\n")
 
 	tests := []struct {
 		name      string
@@ -269,7 +269,7 @@ func TestTmSrc_GitLocatorHeader(t *testing.T) {
 // from cache when tm add follows within the same TTL (request count stays 1).
 func TestTmSrc_URICacheSharing(t *testing.T) {
 	fetches := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fetches++
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = fmt.Fprint(w, "line one\nline two\n")
@@ -312,7 +312,7 @@ func TestTmSrc_GraderRefused(t *testing.T) {
 	srcMakeGraph(t, dir)
 
 	t.Setenv("TM_ROLE", "grader")
-	f := srcWriteFile(t, dir, "src.txt", "content\n")
+	f := srcWriteFile(t, dir, "content\n")
 
 	_, errOut, code := run(t, "src", f)
 	if code != 1 {
