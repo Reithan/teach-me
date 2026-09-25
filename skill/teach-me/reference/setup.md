@@ -76,6 +76,118 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 Update the `version` line to match the installed version. Citations made under
 the old version may have drifted; verify them after upgrading.
 
+## Repo names
+
+Register a repo alias for any source that lives in a git repository:
+
+```
+tm repo add <name> <path>
+```
+
+This writes a `repo` key into machine config (`key = value` format):
+
+```
+repo myrepo = /path/to/checkout
+```
+
+The alias lives in machine config; the graph stores only the alias, making it
+portable across machines. When the graph moves to another machine, register the
+same alias name pointing at wherever the repo is checked out there:
+
+```
+tm repo add <name> /path/on/other/machine
+```
+
+`tm repo rm <name>` removes an alias. `tm repo list` shows all registered
+aliases. Pass `--local` to write into `.tmconfig` instead of the user config,
+for a per-project override.
+
+The alias must match `[A-Za-z0-9_-]+`; it cannot contain `@` or `:`.
+
+## Cache
+
+The conversion and fetch cache lives in the user cache dir
+(`$XDG_CACHE_HOME/tm` on Linux, `~/Library/Caches/tm` on macOS,
+`%LocalAppData%\tm` on Windows). It holds converted text keyed by locator,
+converter command, and converter version. It is regenerable: deleting it costs
+only time.
+
+TTL is controlled by `cache-ttl` in config (Go duration; default `24h`):
+
+```
+cache-ttl = 24h
+```
+
+`TM_CACHE_TTL` overrides the key for one call. Set to `0` to disable the
+cache entirely (every read re-fetches and re-converts).
+
+Useful commands:
+
+- `tm cache list` — show cache entries.
+- `tm cache clear` — empty the cache; use this when a learner reports that a
+  live page has changed and you want an immediate re-fetch rather than waiting
+  for the TTL to expire.
+
+**TTL-late drift trade.** Drift on a live URL is detected at most one TTL
+late. Prefer immutable or versioned URLs to avoid the trade entirely.
+
+## Aids
+
+Everything the teacher writes — study guides, generated diffs, summaries,
+copies fetched for itself — is an aid, not a source. Aids live in aids-dir:
+
+```
+aids-dir = <lesson dir>/aids
+```
+
+The default is `<graph dir>/aids`; override the `aids-dir` key in config.
+
+Link an aid to a concept or question with `tm aid <id> <path>`. Aids are
+listed by `tm show <id>` and `tm report`.
+
+`tm add`, `tm q`, `tm recite`, and lint refuse a citation that resolves under
+aids-dir:
+
+```
+err: <path> is an aid, not a source
+fix: cite the primary source; link the aid with tm aid <id> <path>
+```
+
+`tm src` gives the same `err:` line with only `fix: cite the primary source`
+(no concept or question id, since `src` is read-only).
+
+**aids-dir must not sit under src-root.** The deny rule on writes under
+src-root (see Harness permissions below) cannot carve an exception for
+aids-dir; the two trees must be separate.
+
+## Migrating an older graph
+
+A graph written before format 2 refuses every command (except `migrate`,
+`lint`, and help) with `fix: tm migrate`. To upgrade:
+
+```
+tm migrate --dry-run [<file>]
+```
+
+`<file>` defaults to the configured graph when omitted. Read the output: each
+line shows what would be rewritten and what stays. Then:
+
+```
+tm migrate [<file>]
+```
+
+`tm migrate` rewrites citations in two passes:
+
+1. A plain-path citation whose `add`/`q` event logged a `commit` and whose
+   file is inside a registered repo alias is rewritten to the
+   `git:<alias>@<commit>:<path>` form.
+2. A plain-path citation whose event logged a `url` (a saved copy of a fetched
+   page) is rewritten to cite the URL directly.
+
+Citations that neither rule can convert stay as plain paths; they still resolve
+as long as the file exists on disk, and carry no git pinning. After migration,
+use `tm recite` to re-point any concept whose source is now registered.
+
 ## Test conversion
 
 Before writing a converter line to the config, pipe a test file through the
@@ -99,6 +211,11 @@ three graph files so the model cannot bypass the CLI's invariants:
 
 Scope the deny rules to the lesson directory.
 
+Also deny writes under src-root so the model cannot author a file there and
+cite it as a learner-supplied source. `Read` under src-root stays allowed so the
+model can inspect what the learner has placed there. Use the absolute src-root
+path for the rule.
+
 **Claude Code example** (`~/.claude/settings.json` or the project's settings file):
 
 ```json
@@ -110,7 +227,8 @@ Scope the deny rules to the lesson directory.
       "Read(**/*.mmd.jsonl)",
       "Edit(**/*.mmd.jsonl)",
       "Read(**/*.mmd.lock)",
-      "Edit(**/*.mmd.lock)"
+      "Edit(**/*.mmd.lock)",
+      "Edit(/absolute/src-root/**)"
     ]
   },
   "sandbox": {
@@ -119,15 +237,17 @@ Scope the deny rules to the lesson directory.
 }
 ```
 
-`Edit` rules cover file creation as well; Claude Code accepts `Write(...)` path
-rules but never consults them, so do not add them.
+Replace `/absolute/src-root` with the real path. `Edit` rules cover file
+creation as well; Claude Code accepts `Write(...)` path rules but never
+consults them, so do not add them.
 
 With the bash sandbox enabled, `Read` and `Edit` deny rules are also enforced on
 file operations inside shell commands, which would block `tm` itself from its own
 files. The `excludedCommands` entry runs `tm` outside the sandbox so it can read
 and write the graph while the model's tools and other shell commands still
-cannot. Sub-agents inherit both the deny rules and the sandbox, so the grader and
-planner are covered by the same settings.
+cannot. `tm src` runs outside the sandbox with the rest of `tm`. Sub-agents
+inherit both the deny rules and the sandbox, so the grader and planner are
+covered by the same settings.
 
 Without the sandbox, the deny rules cover only the harness's file tools, not
 shell reads, which is why the file-access rule in the skill also binds the
