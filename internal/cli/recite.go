@@ -82,6 +82,7 @@ func reciteRun(ctx *Context) int {
 		graphDir := filepath.Dir(ctx.GraphFile)
 		newHashed, hashErr := hashCiteTextInDir(newRangeStr, srcRoot, graphDir)
 		if hashErr != nil {
+			hashErr = aidRefusalWithID(hashErr, concept)
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("cannot hash %q: %v", newRangeStr, hashErr),
 				Fix:  usageLine,

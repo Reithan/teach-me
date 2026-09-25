@@ -46,8 +46,8 @@ func TestAidsDir_AddRefusesInsideAidsDir(t *testing.T) {
 	if !strings.Contains(errOut, "is an aid, not a source") {
 		t.Errorf("want 'is an aid, not a source' in stderr; got %q", errOut)
 	}
-	if !strings.Contains(errOut, "tm aid") {
-		t.Errorf("want 'tm aid' in fix text; got %q", errOut)
+	if !strings.Contains(errOut, "tm aid mycon") {
+		t.Errorf("want 'tm aid mycon' with real id in fix text; got %q", errOut)
 	}
 }
 
@@ -90,6 +90,9 @@ func TestAidsDir_QRefusesInsideAidsDir(t *testing.T) {
 	if !strings.Contains(errOut, "is an aid, not a source") {
 		t.Errorf("want 'is an aid, not a source' in stderr; got %q", errOut)
 	}
+	if !strings.Contains(errOut, "tm aid mycon") {
+		t.Errorf("want 'tm aid mycon' with real id in fix; got %q", errOut)
+	}
 }
 
 // TestAidsDir_ReciteRefusesInsideAidsDir verifies that tm recite refuses when
@@ -108,6 +111,9 @@ func TestAidsDir_ReciteRefusesInsideAidsDir(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "is an aid") {
 		t.Errorf("want 'is an aid' in stderr; got %q", errOut)
+	}
+	if !strings.Contains(errOut, "mycon") {
+		t.Errorf("want concept id 'mycon' in stderr; got %q", errOut)
 	}
 }
 

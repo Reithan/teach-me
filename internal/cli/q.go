@@ -73,7 +73,7 @@ func qRun(ctx *Context) int {
 	}
 	hashedCite, citeMeta, hashErr := resolver.HashCitation(citeStr)
 	if hashErr != nil {
-		return citeHashError(ctx, citeStr, hashErr, usageLine)
+		return citeHashError(ctx, citeStr, aidRefusalWithID(hashErr, conceptID), usageLine)
 	}
 	citeStr = hashedCite
 
