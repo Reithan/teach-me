@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/reithan/teach-me/internal/errlog"
+	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/state"
 	"github.com/reithan/teach-me/internal/version"
 )
@@ -142,6 +143,17 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 		return 3
 	}
 
+	// ── Format check (§4.6, §3) ─────────────────────────────────────────────
+	// For commands that do not skip this check, resolve the active graph file
+	// and refuse if its format is below or above the binary's CurrentFormat.
+	// On resolution failure, fall through and let the command handle its own
+	// error (e.g. load before any file is configured).
+	if !cmd.SkipFormatCheck {
+		if code := checkFormat(cmd, fileFlag, args, role, errOut); code != 0 {
+			return code
+		}
+	}
+
 	// ── Nil-Run placeholder ──────────────────────────────────────────────────
 	if cmd.Run == nil {
 		errMsg := fmt.Sprintf("%s is not implemented in this build", cmd.Name)
@@ -181,6 +193,48 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 	}
 
 	return code
+}
+
+// checkFormat enforces the §4.6 format guard: refuses a graph whose format
+// differs from CurrentFormat. Returns 0 when the command may run or when the
+// active graph file cannot be resolved (fall-through; let the command report
+// its own error). Returns 1 on invariant refusal.
+func checkFormat(_ *Command, fileFlag string, argv []string, role string, errOut io.Writer) int {
+	file, err := state.ResolveFile(fileFlag)
+	if err != nil || file == "" {
+		// No configured file; fall through and let the command report its error.
+		return 0
+	}
+
+	data, readErr := os.ReadFile(file)
+	if readErr != nil {
+		// Unreadable file; fall through and let the command report its error.
+		return 0
+	}
+
+	g, parseErr := graph.Parse(data)
+	if parseErr != nil {
+		// Unparseable file; fall through and let the command (or lint) report it.
+		return 0
+	}
+
+	base := filepath.Base(file)
+	n := g.FormatN()
+	if n == graph.CurrentFormat {
+		return 0
+	}
+
+	var errMsg, fixMsg string
+	if n < graph.CurrentFormat {
+		errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
+		fixMsg = "tm migrate"
+	} else {
+		errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
+		fixMsg = "upgrade tm"
+	}
+	writeErrFix(errOut, errMsg, fixMsg)
+	appendErrLog(role, argv, 1, errMsg, &fixMsg)
+	return 1
 }
 
 // checkRole enforces the TM_ROLE guard (§7). Returns 0 when the command may

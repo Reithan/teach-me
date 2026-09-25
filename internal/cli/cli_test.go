@@ -1437,6 +1437,7 @@ func TestAsk_ReplacementBatch_ExemptFromProbeMin(t *testing.T) {
     subgraph passed["Passed"]
     end
     subgraph untested["Untested"]
+        %% tm:format 2
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Testing"]

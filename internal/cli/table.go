@@ -18,8 +18,9 @@ var Table = []Command{
 			{Name: "src-root", TakesValue: true, ValueName: "<dir>"},
 			{Name: "local"},
 		},
-		ForbidGrader: true,
-		Run:          newRun,
+		ForbidGrader:    true,
+		SkipFormatCheck: true, // new creates the file; no existing graph to check
+		Run:             newRun,
 	},
 	{
 		Name: "load",
@@ -30,8 +31,9 @@ var Table = []Command{
 			{Name: "src-root", TakesValue: true, ValueName: "<dir>"},
 			{Name: "local"},
 		},
-		ForbidGrader: true,
-		Run:          loadRun,
+		ForbidGrader:    true,
+		SkipFormatCheck: true, // load checks its positional file in loadRun; central check would wrongly test the currently configured file
+		Run:             loadRun,
 	},
 	{
 		Name:    "status",
@@ -243,8 +245,9 @@ var Table = []Command{
 		Flags: []FlagSpec{
 			{Name: "drift"},
 		},
-		ForbidGrader: true,
-		Run:          lintRun,
+		ForbidGrader:    true,
+		SkipFormatCheck: true, // lint diagnoses the graph; must accept any format
+		Run:             lintRun,
 	},
 	{
 		Name: "report",
@@ -288,8 +291,9 @@ var Table = []Command{
 		Flags: []FlagSpec{
 			{Name: "dry-run"},
 		},
-		ForbidGrader: true,
-		Run:          migrateRun,
+		ForbidGrader:    true,
+		SkipFormatCheck: true, // migrate upgrades the format; must accept old format
+		Run:             migrateRun,
 	},
 }
 

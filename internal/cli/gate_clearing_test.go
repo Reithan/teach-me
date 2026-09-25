@@ -26,6 +26,7 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -59,6 +60,7 @@ flowchart TB
         parent["Parent scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         child["Child scope<br/>f5ca3875b379@src.txt:1-5"]
         parent --"requires"--> child
     end
@@ -393,6 +395,7 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -641,6 +644,7 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
         %% tm:gate con base=4
     end
@@ -718,6 +722,7 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -791,6 +796,7 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -868,6 +874,7 @@ flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]

@@ -272,6 +272,7 @@ flowchart TB
         alpha["Alpha concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         beta["Beta concept<br/>6aa0757910fd@src.txt:6-10"]
         alpha --"requires"--> beta
     end

@@ -165,7 +165,7 @@ func TestFind_TruncatesLongScope(t *testing.T) {
 	longScope := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz01234567"
 	// 70 chars
 
-	content := "---\nconfig:\n  look: classic\n---\nflowchart TB\n    subgraph passed[\"Concepts\"]\n    end\n    subgraph untested[\"Untested\"]\n        longcon[\"" + longScope + "<br/>f5ca3875b379@src.txt:1-5\"]\n    end\n    subgraph testing[\"Testing\"]\n    end\n"
+	content := "---\nconfig:\n  look: classic\n---\nflowchart TB\n    subgraph passed[\"Concepts\"]\n    end\n    subgraph untested[\"Untested\"]\n        %% tm:format 2\n        longcon[\"" + longScope + "<br/>f5ca3875b379@src.txt:1-5\"]\n    end\n    subgraph testing[\"Testing\"]\n    end\n"
 	mmdPath := filepath.Join(dir, "long.mmd")
 	if err := os.WriteFile(mmdPath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)

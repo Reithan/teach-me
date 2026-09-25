@@ -17,6 +17,7 @@ func answerProbeGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -36,6 +37,7 @@ func answerAlreadyAnsweredGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -59,6 +61,7 @@ func answerBlockedParentGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         parent_con["Parent concept<br/>f5ca3875b379@src.txt:1-5"]
         child_con["Child concept<br/>f5ca3875b379@src.txt:1-5"]
         parent_con --"requires"--> child_con
@@ -180,6 +183,7 @@ func TestAnswer_Gated_Exit1(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -268,6 +272,7 @@ func TestAnswer_ProbeMinCount_Exit1(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -517,6 +522,7 @@ func TestAnswer_ReplacementBatch_MinExempt(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -562,6 +568,7 @@ func TestAsk_ReplacementBatch_Emitted(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -608,6 +615,7 @@ func TestCheck_AskedLine_Present(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         mycon["My concept scope<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]

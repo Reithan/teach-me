@@ -19,6 +19,7 @@ const reserveTestGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         ca["Concept A<br/>f5ca3875b379@src.txt:1-5"]
         cb["Concept B<br/>f5ca3875b379@src.txt:1-5"]
         cc["Concept C<br/>f5ca3875b379@src.txt:1-5"]
@@ -42,6 +43,7 @@ const activateTestGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         ca["Concept A<br/>f5ca3875b379@src.txt:1-5"]
         cb["Concept B<br/>f5ca3875b379@src.txt:1-5"]
     end
@@ -66,6 +68,7 @@ const pruneTestGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         gg["Goal G<br/>f5ca3875b379@src.txt:1-5"]
         pp["Parent P<br/>f5ca3875b379@src.txt:1-5"]
         xx["Unrelated X<br/>f5ca3875b379@src.txt:1-5"]
@@ -88,6 +91,7 @@ const gatedWithReserveParentGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         cc["Child C<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph reserve["Concepts held in reserve"]
@@ -112,6 +116,7 @@ const threeBlockTestGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         ca["Concept A<br/>f5ca3875b379@src.txt:1-5"]
         cb["Concept B<br/>f5ca3875b379@src.txt:1-5"]
         cb --"requires"--> ca
@@ -378,6 +383,7 @@ func TestPrune_GoalInReserve_FixMessage(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         ca["Concept A<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph reserve["Concepts held in reserve"]
@@ -474,6 +480,7 @@ func TestGateFixMsg_NoReserveParent(t *testing.T) {
         pp["Parent P<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         cc["Child C<br/>f5ca3875b379@src.txt:1-5"]
         pp --"requires"--> cc
     end
@@ -523,6 +530,7 @@ func TestPruneThenPassThroughReserveParent(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
         ga["Goal A<br/>f5ca3875b379@src.txt:1-5"]
         gb["Foundation B<br/>f5ca3875b379@src.txt:1-5"]
         gb --"requires"--> ga

@@ -487,7 +487,7 @@ func TestDrift_Recite(t *testing.T) {
 				}
 				t.Setenv("TM_SRC_ROOT", dir)
 				// Write a two-citation graph manually and rehash it.
-				mmd := "flowchart TB\n    subgraph passed[\"Passed\"]\n    end\n    subgraph untested[\"Untested\"]\n        mycon[\"My concept<br/>src.txt:1-2<br/>src.txt:3-4\"]\n    end\n    subgraph testing[\"Testing\"]\n    end\n    classDef pending stroke-dasharray:4 3\n"
+				mmd := "flowchart TB\n    subgraph passed[\"Passed\"]\n    end\n    subgraph untested[\"Untested\"]\n        %% tm:format 2\n        mycon[\"My concept<br/>src.txt:1-2<br/>src.txt:3-4\"]\n    end\n    subgraph testing[\"Testing\"]\n    end\n    classDef pending stroke-dasharray:4 3\n"
 				gfile := filepath.Join(dir, "g.mmd")
 				if err := os.WriteFile(gfile, []byte(mmd), 0o644); err != nil {
 					t.Fatal(err)
