@@ -91,13 +91,13 @@ bias to discount, never as evidence.
 
 1. Run `tm check --errata <concept>`. It prints the correction —
    `SCOPE_BEFORE`, `SCOPE_AFTER`, `REASON` — then one block per graded question:
-   `Q`, `CITE`, `SRC` (the graded text, verbatim), `A`, and `VERDICT`. The scope
-   is the target the answers were graded against, so a wrong detail in it could
-   have steered a verdict.
+   `Q`, `CITE`, `SRC` (the graded text, verbatim), `A`, and `VERDICT`. The
+   teacher drafts each question from the concept scope, so a wrong detail in it
+   can surface in a question and steer that verdict.
 2. Judge from those printed fields alone, using this rubric:
-   - `keep`: every logged answer still earns its verdict under the corrected
-     scope.
-   - `reopen`: at least one verdict depended on the wrong detail, or you cannot
+   - `keep`: no logged question or verdict turns on the detail that differs
+     between `SCOPE_BEFORE` and `SCOPE_AFTER`.
+   - `reopen`: a logged question or verdict turns on that detail, or you cannot
      tell.
 3. Run `tm grade --errata <concept> keep|reopen "<summary>"`, where `<summary>`
    is one sentence on why the verdicts survive the correction or do not.
