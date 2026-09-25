@@ -13,11 +13,11 @@ import (
 // ── Shared fixture ────────────────────────────────────────────────────────────
 
 // errataPassedFixture builds a session where mycon is passed with nProbes
-// graded-pass probe questions. It returns the graph file path and the src dir.
-// No errata edit is applied; callers add one when they need it.
+// graded-pass probe questions. It returns the graph file path. No errata edit
+// is applied; callers add one when they need it.
 //
 // Sets TM_FILE, TM_SRC_ROOT, TM_PROBE_MIN=nProbes.
-func errataPassedFixture(t *testing.T, nProbes int) (gfile, srcDir string) {
+func errataPassedFixture(t *testing.T, nProbes int) (gfile string) {
 	t.Helper()
 	dir := t.TempDir()
 	content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
@@ -65,7 +65,7 @@ func errataPassedFixture(t *testing.T, nProbes int) (gfile, srcDir string) {
 			t.Fatalf("grade %s: exit %d", qid, c)
 		}
 	}
-	return gfile, dir
+	return gfile
 }
 
 // conceptInPassed reports whether concept is in the passed block of gfile.
@@ -157,7 +157,7 @@ func TestEdit_ErrataHasQuestions(t *testing.T) {
 // scope, keeps it in passed, and logs before/after/errata.
 func TestEdit_ErrataPassedConcept(t *testing.T) {
 	tempErrlog(t)
-	gfile, _ := errataPassedFixture(t, 1)
+	gfile := errataPassedFixture(t, 1)
 
 	out, errOut, code := run(t, "edit", "mycon", "Corrected scope", "--errata", "old scope named the wrong line")
 	if code != 0 {
@@ -188,7 +188,7 @@ func TestEdit_ErrataPassedConcept(t *testing.T) {
 // TestEdit_ErrataEmptyReason verifies an empty --errata reason exits 3.
 func TestEdit_ErrataEmptyReason(t *testing.T) {
 	tempErrlog(t)
-	_, _ = errataPassedFixture(t, 1)
+	errataPassedFixture(t, 1)
 
 	_, errOut, code := run(t, "edit", "mycon", "Corrected scope", "--errata", "")
 	if code != 3 {
@@ -206,7 +206,7 @@ func TestEdit_ErrataEmptyReason(t *testing.T) {
 // a passed concept with the old message.
 func TestEdit_PlainPassedStillRefuses(t *testing.T) {
 	tempErrlog(t)
-	_, _ = errataPassedFixture(t, 1)
+	errataPassedFixture(t, 1)
 
 	_, errOut, code := run(t, "edit", "mycon", "Corrected scope")
 	if code != 1 {
@@ -224,7 +224,7 @@ func TestEdit_PlainPassedStillRefuses(t *testing.T) {
 // src_before/src_after.
 func TestEdit_ErrataSrc(t *testing.T) {
 	tempErrlog(t)
-	gfile, _ := errataPassedFixture(t, 1)
+	gfile := errataPassedFixture(t, 1)
 
 	_, errOut, code := run(t, "edit", "mycon", "Corrected scope", "--errata", "cite the right range", "--src", "src.txt:2-4")
 	if code != 0 {
@@ -264,7 +264,7 @@ func TestCheckErrata(t *testing.T) {
 		{
 			name: "payload shape on a passed concept with two graded questions",
 			setup: func(t *testing.T) string {
-				gfile, _ := errataPassedFixture(t, 2)
+				gfile := errataPassedFixture(t, 2)
 				if _, _, c := run(t, "edit", "mycon", "Corrected scope", "--errata", "old scope was wrong"); c != 0 {
 					t.Fatalf("edit --errata: exit %d", c)
 				}
@@ -282,8 +282,7 @@ func TestCheckErrata(t *testing.T) {
 		{
 			name: "untested concept refuses not-passed",
 			setup: func(t *testing.T) string {
-				gfile, dir := errataPassedFixture(t, 1)
-				_ = dir
+				gfile := errataPassedFixture(t, 1)
 				run(t, "reopen", "mycon", "reopened") //nolint:errcheck
 				return gfile
 			},
@@ -292,7 +291,7 @@ func TestCheckErrata(t *testing.T) {
 		{
 			name: "passed concept without an errata edit refuses",
 			setup: func(t *testing.T) string {
-				gfile, _ := errataPassedFixture(t, 1)
+				gfile := errataPassedFixture(t, 1)
 				return gfile
 			},
 			wantCode: 1, wantErr: "no errata edit for mycon since it passed",
@@ -300,7 +299,7 @@ func TestCheckErrata(t *testing.T) {
 		{
 			name: "unknown concept exits 3",
 			setup: func(t *testing.T) string {
-				gfile, _ := errataPassedFixture(t, 1)
+				gfile := errataPassedFixture(t, 1)
 				return gfile
 			},
 			wantCode: 3, wantErr: "unknown concept",
@@ -349,7 +348,7 @@ func TestGradeErrata(t *testing.T) {
 		{
 			name: "keep logs recheck kind=errata and leaves the pass",
 			setup: func(t *testing.T) string {
-				gfile, _ := errataPassedFixture(t, 1)
+				gfile := errataPassedFixture(t, 1)
 				run(t, "edit", "mycon", "Corrected scope", "--errata", "old scope wrong") //nolint:errcheck
 				return gfile
 			},
@@ -371,7 +370,7 @@ func TestGradeErrata(t *testing.T) {
 		{
 			name: "reopen moves concept to untested with summary as GAP",
 			setup: func(t *testing.T) string {
-				gfile, _ := errataPassedFixture(t, 1)
+				gfile := errataPassedFixture(t, 1)
 				run(t, "edit", "mycon", "Corrected scope", "--errata", "old scope wrong") //nolint:errcheck
 				return gfile
 			},
@@ -394,7 +393,7 @@ func TestGradeErrata(t *testing.T) {
 		{
 			name: "untested concept refuses not-passed",
 			setup: func(t *testing.T) string {
-				gfile, _ := errataPassedFixture(t, 1)
+				gfile := errataPassedFixture(t, 1)
 				run(t, "reopen", "mycon", "reopened") //nolint:errcheck
 				return gfile
 			},
@@ -404,7 +403,7 @@ func TestGradeErrata(t *testing.T) {
 		{
 			name: "passed concept without an errata edit refuses",
 			setup: func(t *testing.T) string {
-				gfile, _ := errataPassedFixture(t, 1)
+				gfile := errataPassedFixture(t, 1)
 				return gfile
 			},
 			args:     []string{"--errata", "mycon", "keep", "Summary"},
@@ -413,7 +412,7 @@ func TestGradeErrata(t *testing.T) {
 		{
 			name: "invalid verdict exits 3",
 			setup: func(t *testing.T) string {
-				gfile, _ := errataPassedFixture(t, 1)
+				gfile := errataPassedFixture(t, 1)
 				run(t, "edit", "mycon", "Corrected scope", "--errata", "old scope wrong") //nolint:errcheck
 				return gfile
 			},
