@@ -104,6 +104,36 @@ func TestTmSrc_RangeOutput(t *testing.T) {
 			wantCode:  3,
 			wantInErr: "START-END",
 		},
+		{
+			name:      "zero start rejects s<1",
+			rangeArg:  "0-3",
+			wantCode:  3,
+			wantInErr: "START <= END",
+		},
+		{
+			name:      "reversed range rejects e<s",
+			rangeArg:  "4-2",
+			wantCode:  3,
+			wantInErr: "START <= END",
+		},
+		{
+			name:      "empty end segment",
+			rangeArg:  "3-",
+			wantCode:  3,
+			wantInErr: "START-END",
+		},
+		{
+			name:      "non-numeric start",
+			rangeArg:  "abc-3",
+			wantCode:  3,
+			wantInErr: "START-END",
+		},
+		{
+			name:      "non-numeric end",
+			rangeArg:  "3-abc",
+			wantCode:  3,
+			wantInErr: "START-END",
+		},
 	}
 	for _, tc := range tests {
 		tc := tc
@@ -202,6 +232,26 @@ func TestTmSrc_Find(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTmSrc_HashPrefixRefused verifies that a locator with a hash@ prefix is
+// rejected with exit 3 — tm src expects a raw locator, not a hash-prefixed citation.
+func TestTmSrc_HashPrefixRefused(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	srcMakeGraph(t, dir)
+	srcSetupXDG(t, "")
+
+	// 12-char hex + '@' triggers the hash-prefix guard (locator[12] == '@').
+	locator := "abcdefabcdef@file.txt"
+	_, errOut, code := run(t, "src", locator)
+	if code != 3 {
+		t.Fatalf("exit %d, want 3; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(errOut, "hash prefix") {
+		t.Errorf("stderr=%q; want \"hash prefix\"", errOut)
 	}
 }
 
