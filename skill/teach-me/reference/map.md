@@ -18,6 +18,8 @@ Pass the following to the `teach-me-planner` sub-agent:
   through `git:<name>@<ref>:<path>` locators.
 - The aids-dir path, so the planner knows where aids land and never cites them
   as sources.
+- Any reader summaries and candidate ranges gathered in the Source step, so the
+  planner does not re-read long sources.
 
 Read the planner's results through `tm status` and `tm show`. Ignore its prose
 summary.
