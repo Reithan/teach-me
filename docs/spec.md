@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.22
+# tm: teaching-map CLI, draft spec v0.23
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.21: repo content has one citation form (`git:` locators with machine-local aliases) and plain paths lose git semantics; the conversion and fetch cache ships from §15 into §13; teacher aids get a home (`aids-dir`) and cannot be cited; a graph carries a `%% tm:format` marker and `tm migrate` upgrades a prior-version graph; §3, §4.4, §4.6, §6, §7, §10, §11, §12, §13, §14, §15, §16 updated.
+Changes from v0.22: `tm src` prints a source's converted, numbered text so agents cite the lines tm hashes; §2.1, §6, §12, §13.1, §14, §16.5 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -53,7 +53,7 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 |---|---|---|
 | Teacher prompt | the procedure the CLI cannot enforce (section 12); named by the `doc` config key, set when the adapter is installed | a skill file, an agent file, a section of the harness's instruction file |
 | Grader invocation | carries `check` output to a model and a verdict back to `grade` | a sub-agent the teacher spawns, on any harness with sub-agents and a shell. Automatic spawning is deferred (section 15) |
-| Planner invocation | reads sources and writes concepts with citations; called from Map and errata | `skill/teach-me/agents/teach-me-planner.md` |
+| Planner invocation | uses `tm src` to read sources (converted, numbered text) and writes concepts with citations; called from Map and errata | `skill/teach-me/agents/teach-me-planner.md` |
 | Pruner invocation | decides which mapped concepts the goal requires and parks the rest in `reserve`; called after every Map | `skill/teach-me/agents/teach-me-pruner.md` |
 | Question UI | maps `ask --format json` onto the harness's question tool | a small script or skill |
 | Role guard | replaces the `TM_ROLE` soft check | a pre-tool hook |
@@ -304,6 +304,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm repo list` | list registered aliases and their paths | one line per alias |
 | `tm cache clear` | empty the conversion and fetch cache (section 3) | `ok` |
 | `tm cache list` | list cache entries | one line per entry |
+| `tm src <locator> [START-END] [--find <regex>]` | read-only: resolve the locator exactly as `add` and `q` do (src-root, repo aliases, converters, cache, aids-dir refusal) and print its text with 1-based line numbers, restricted to the range or to lines matching the regex; a `git:` locator prints the resolved locator first | `src: <locator>` then `N\t<text>` lines |
 | `tm aid <id> <path>` | link an aid to a concept or question (section 4.6). Logged | `ok` |
 | `tm aid rm <id> <path>` | unlink an aid. Logged | `ok` |
 | Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when a doc is configured; otherwise one usage line per command |
@@ -608,6 +609,7 @@ Five behaviors the CLI cannot enforce belong in the teacher's prompt:
 3. The no-memory rule: model knowledge may draft questions and explain during teaching, but it never becomes source. When no real source can be obtained, the teacher says so and stops. Nothing model-authored is stored as source or cited, including summaries, examples, scripts, and study guides derived from real sources.
 4. The file-access rule: the model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on those file patterns; the CLI cannot. Alongside that deny, the adapter recommends a deny on writes under src-root with an allow for aids-dir; that pairing is the only enforcement against a teacher-authored file placed outside aids-dir and cited as a plain path.
 5. The aids rule: everything the teacher writes — examples, study guides, generated diffs, copies it fetches for itself — goes in aids-dir and is linked with `tm aid`; it is never cited. `tm add`, `tm q`, and `tm recite` refuse a citation resolving under aids-dir and lint refuses one in the graph, but a teacher-authored file placed elsewhere is undetectable by the CLI; the harness deny in rule 4 is the only guard.
+6. The line-range rule: line ranges come only from `tm src`. An agent never derives a range from Read, WebFetch, a search result, or its own memory of a document; it runs `tm src <locator>` (with `--find` or a range to narrow), then cites the numbers it printed. Read and WebFetch remain useful for deciding whether a source is worth citing.
 
 The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and records their root with `tm new --src-root <dir>`. It registers every repo the learner names with `tm repo add <alias> <path>`, so repo content cites through one portable `git:` form. It cites web docs by URL and lets the cache carry the fetch and conversion cost; drift on a live URL is caught at most one cache TTL late. Learner-supplied local files — corporate downloads, output of other programs or agents — are cited as plain paths. The teacher never saves a copy of anything: a copy it makes is an aid, and only a copy the learner supplies is a legitimate plain-path source. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and for writes under src-root outside aids-dir, and points at the setup reference.
 
@@ -689,7 +691,7 @@ err: fetch https://... failed: no converter for <mime>
 fix: add a convert <mime> line to <config>
 ```
 
-Fetch and conversion pass through the cache (section 3), keyed by SHA-256 over the final locator string, the converter command, and the converter version. A hit within the TTL skips the fetch and the conversion, and the hash check runs against the cached text; a miss or an expired entry fetches, converts, stores the text and `fetched_at`, then checks. The TTL is `TM_CACHE_TTL` or the `cache-ttl` key (Go duration, default `24h`; `0` disables the cache). The cache is stored under `<user cache dir>/tm` (XDG `$XDG_CACHE_HOME/tm` on Linux, `~/Library/Caches/tm` on macOS, `%LocalAppData%\tm` on Windows); `TM_CACHE_DIR` overrides the location for one call. Drift on a live URL is therefore detected at most one TTL late; that is the accepted trade for not re-fetching on every read.
+Fetch and conversion pass through the cache (section 3), keyed by SHA-256 over the final locator string, the converter command, and the converter version. A hit within the TTL skips the fetch and the conversion, and the hash check runs against the cached text; a miss or an expired entry fetches, converts, stores the text and `fetched_at`, then checks. The TTL is `TM_CACHE_TTL` or the `cache-ttl` key (Go duration, default `24h`; `0` disables the cache). `tm src` and the citing command share the entry, so an agent that runs `tm src` and then `tm add` within one TTL hashes the same text; if the entry expired between them and the page changed, `tm add` stores the new page's hash, so cite promptly or re-run `tm src`. The cache is stored under `<user cache dir>/tm` (XDG `$XDG_CACHE_HOME/tm` on Linux, `~/Library/Caches/tm` on macOS, `%LocalAppData%\tm` on Windows); `TM_CACHE_DIR` overrides the location for one call. Drift on a live URL is therefore detected at most one TTL late; that is the accepted trade for not re-fetching on every read.
 
 A failed fetch (no egress, timeout, non-2xx) refuses:
 
@@ -801,6 +803,7 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 66 | Plain paths lose git semantics: a plain-path locator is a file on disk read raw or through a converter, with no `HEAD` fallback and no `commit` field; a missing file refuses and points at the `git:` form | the silent HEAD fallback gave repo files two citation forms; splitting the kinds makes each locator mean one thing and keeps plain local non-repo files (downloads, program output) first-class | HEAD fallback for any path inside a repo (the v0.21 behavior, and the ref-reading of decision 54); dropping plain non-repo files | agreed, 2026-09-24 |
 | 67 | The conversion and fetch cache ships, in the user cache dir keyed by locator, converter, and version, with a `cache-ttl` (default 24h, `0` disables); it holds regenerable text and cost, never graph state | re-fetching and re-converting on every read is the cost the deferred cache was meant to remove; a TTL bounds live-URL staleness to one interval; scoping "no cache or side state" to graph state reconciles §3 | the OS temp directory (the v0.21 deferral); the graph directory or src-root; no TTL, which never notices live-URL drift | agreed, 2026-09-24 |
 | 68 | Teacher aids get a home (`aids-dir`, linked with `tm aid`) and cannot be cited: `add`, `q`, `recite`, and lint refuse a citation resolving under aids-dir, and the adapter recommends a harness deny on writes under src-root outside aids-dir | aids are useful but citing them defeats the source machinery; a mechanical refusal plus one deny rule is the enforceable part, and a file placed elsewhere is the harness's to block | a source registry the grader checks; the grader policing citations; the CLI detecting model authorship of a file | agreed, 2026-09-24 |
+| 69 | `tm src` is the only sanctioned way to obtain line numbers; it reuses the citation resolver end to end | harness readers (Read, WebFetch) render differently from tm's converters, so any range from them is unstable; a separate numbering path would drift from the hashing path | a `--dry-run` on `tm add` (needs a range to begin with); trusting harness readers with a converter-free mode; teaching converters to emit line maps | agreed, 2026-09-24 |
 
 ## 15. Deferred
 
@@ -908,6 +911,7 @@ docs/spec.md              this document
 | Git resolution | a fixture repo built in a temp dir by the test; each `git:` form (file at a ref, a commit, a diff, a diff for one path) resolves to the expected text and hash; `<ref>` is rewritten to a short SHA on write; an unknown alias, an unresolvable ref, and no `git` configured each refuse |
 | Cache | a fetch is served from the cache within the TTL and re-fetched after expiry; `cache-ttl=0` disables it; `tm cache clear` empties it |
 | Aids | `tm add`, `tm q`, and `tm recite` refuse a citation resolving under aids-dir and lint refuses one; `tm aid` and `tm aid rm` write and remove the meta line; a qid's aid is removed with its question and logged in the `gc` event |
+| Source text | `tm src` numbering equals the lines `tm add` hashes across plain, converted, git, and URI locators; `--find` and ranges narrow it |
 | Concurrency | 20 parallel `grade` calls on one graph all land, the file lints, and the event log has 20 `grade` rows |
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
 
