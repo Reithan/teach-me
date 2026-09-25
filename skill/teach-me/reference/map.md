@@ -28,9 +28,9 @@ concepts it found in reserve.
 
 ## Spawning the pruner
 
-Spawn the pruner after every planner run while the goal is still untested;
-`tm prune` refuses once the goal has questions or has passed, so skip the
-pruner then. Pass:
+Spawn the pruner after every planner run while the goal is still in
+`untested`; `tm prune` refuses once the goal has passed, so skip the pruner
+then. Pass:
 
 - The goal concept ID.
 - The learning goal in the learner's own words.

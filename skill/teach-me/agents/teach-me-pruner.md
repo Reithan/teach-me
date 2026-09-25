@@ -79,8 +79,7 @@ completion paragraph.
    it does not know which near foundations the goal really needs.
    - If it refuses because the goal is in reserve, run `tm activate <goal>`
      and rerun `tm prune`.
-   - If it refuses because the goal is not untested (passed, or it has
-     questions), stop and report the refusal.
+   - If it refuses because the goal has passed, stop and report the refusal.
 2. Run `tm status` and `tm report <goal> --hops 99 --reserve`, so parked
    concepts are visible too.
 3. Apply the defend-or-park rule to every active concept other than the goal.
