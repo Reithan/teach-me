@@ -1,17 +1,5 @@
 # teach-me map reference
 
-Load this file before spawning either the planner or the pruner. It documents
-the spawn prompts and the activation rules for the Map step.
-
-## When to map
-
-Trigger the Map step on any of these conditions:
-
-- Fresh session: no concepts are in the graph yet.
-- Thin frontier: fewer active, untested concepts than needed to continue probing.
-- Missing prerequisite: a gate's `fix:` line names a concept not in the graph.
-- Errata: a source has changed or a prerequisite has been revealed as wrong.
-
 ## Spawning the planner
 
 Pass the following to the `teach-me-planner` sub-agent:
