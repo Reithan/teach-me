@@ -85,7 +85,7 @@ anything under aids-dir. Never save a copy of a fetched page.
 **Citation forms.** Plain path for learner-supplied files under src-root or
 absolute; `git:<name>@<ref>:<path>` (or commit or diff form) for repo content,
 using the alias names from the spawn prompt; URL for web docs. If a plain-path
-citation refuses with `fix: cite it as git:<alias>@<ref>:<path>`, the file is
+citation refuses with `fix: cite it as git:<alias>@<ref>:<path> if it is committed`, the file is
 inside a registered repo: write the `git:` form instead.
 
 **Probe-sized scopes.** A concept's scope must be testable by two to five narrow
