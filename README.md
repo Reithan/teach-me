@@ -25,13 +25,30 @@ teach-me has two halves:
 - **The skill**, a set of prompt files that tell your agent harness how to drive `tm`. The reference skill targets [Claude Code](https://claude.com/claude-code).
 
 ```mermaid
+---
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---
 flowchart LR
     you(["You"]) <-->|questions, answers| teacher["Teacher"]
-    teacher -->|goal + sources| planner["Planner"]
-    teacher -->|goal| pruner["Pruner"]
-    teacher -->|question ID only| grader["Grader"]
-    teacher -->|long source + question| reader["Reader"]
-    planner & pruner & grader & teacher --> tm[("tm<br/>lesson graph")]
+    subgraph subagents["Sub-agents, each in a fresh context"]
+        planner["Planner"]
+        pruner["Pruner"]
+        grader["Grader"]
+        reader["Reader"]
+    end
+    teacher -->|goal + sources| planner
+    teacher -->|goal| pruner
+    teacher -->|question ID only| grader
+    teacher -->|long source + question| reader
+    teacher & planner & pruner & grader -->|writes| tm[("tm<br/>lesson graph")]
+    reader -.->|reads| tm
 ```
 
 1. **Teacher**: the agent you talk to. It picks the next concept, writes questions, and decides what to teach after a miss.
@@ -47,6 +64,16 @@ The full design lives in the [specification](docs/spec.md).
 The lesson file is a diagram you can open in any Mermaid viewer (GitHub renders it inline). Concepts move from **untested** to **passed** as you prove you understand them:
 
 ```mermaid
+---
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---
 flowchart TB
     subgraph passed["Concepts you understand"]
         terms["Terms and log indexes"]
