@@ -175,30 +175,10 @@ move. The phases:
 
 ## Errata
 
-Handle drift and disputes as they arise; these are not part of the main probe
-cycle.
+On a `DRIFT` marker, a drift refusal, a wrong detail in a concept's scope, or a
+replaced source, read `skill/teach-me/reference/errata.md` and follow it. You
+never decide whether a pass survives; a grader does.
 
-- **Drifted ungraded question** (`DRIFT` marker on an ungraded question, or
-  `answer` or a grader refusing with a drift error): `tm drop <qid>`, then
-  `tm q --re <qid>` with a fresh citation. Ask the learner again; nothing is
-  graded. Drift on a live URL surfaces at most one cache TTL late; if the
-  learner reports a page has changed, run `tm cache clear`, then
-  `tm show <concept>`; a `DRIFT` line marks the change.
-- **Drifted passed concept**: if the current text at a new range hashes the same,
-  run `tm recite`. Otherwise spawn a `teach-me-grader` with the concept ID and
-  the instruction to recheck it; the grader runs `tm check --drift` and decides
-  `keep` or `reopen`. The teacher never decides whether a pass survives a source
-  change. Descendants stay passed either way.
-- **Wrong detail in a concept's scope**: `tm errata <id> "<scope>" "<reason>"`.
-  `tm edit` refuses a concept that has questions or a pass; `tm errata` is the
-  teacher's command for it. The reason is logged and the
-  questions are untouched. If the concept is
-  passed, spawn a `teach-me-grader` with the concept ID and the instruction to run
-  `tm check --errata`; the grader decides `keep` or `reopen`. The teacher never
-  decides whether the pass survives the correction.
-- **Replaced source or revealed missing prerequisite**: spawn the
-  `teach-me-planner` in `errata for <concepts>` mode; read
-  `skill/teach-me/reference/map.md` before spawning.
 - **Disputed verdict**: not errata. Re-probe with `--re`; the grader decides.
 - **After any hand edit to the graph**: run `tm lint`.
 
