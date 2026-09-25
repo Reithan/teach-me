@@ -276,22 +276,19 @@ func gradeGCRow(rst ops.RemovedSubtree, reason string, qidAids map[string][]stri
 			"base":    m.Base,
 		}
 	}
-	// Collect aids for removed question nodes.
-	aids := make(map[string][]string)
+	// Append aid entries for removed question nodes (§4.6: one entry per %% tm:aid line).
 	for _, n := range rst.Nodes {
-		if paths, ok := qidAids[n.ID]; ok && len(paths) > 0 {
-			aids[n.ID] = paths
+		if paths, ok := qidAids[n.ID]; ok {
+			for _, p := range paths {
+				meta = append(meta, map[string]any{"aid": n.ID, "path": p})
+			}
 		}
 	}
-	payload := map[string]any{
+	return eventlog.NewRow("gc", map[string]any{
 		"concept": rst.Concept,
 		"reason":  reason,
 		"nodes":   nodes,
 		"edges":   edges,
 		"meta":    meta,
-	}
-	if len(aids) > 0 {
-		payload["aids"] = aids
-	}
-	return eventlog.NewRow("gc", payload)
+	})
 }

@@ -1,7 +1,6 @@
 package cli_test
 
 import (
-	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -291,13 +290,23 @@ func TestAid_GCCarriesAids(t *testing.T) {
 	if gcRow == nil {
 		t.Fatal("no gc event in event log")
 	}
-	aids, ok := gcRow["aids"].(map[string]any)
+	meta, ok := gcRow["meta"].([]interface{})
 	if !ok {
-		t.Fatalf("gc aids field missing or wrong type; row: %v", gcRow)
+		t.Fatalf("gc meta field missing or wrong type; row: %v", gcRow)
 	}
-	q1Aids, ok := aids["q1"].([]interface{})
-	if !ok || len(q1Aids) == 0 || q1Aids[0] != "aids/q1.pdf" {
-		t.Errorf("gc aids.q1: want [aids/q1.pdf], got %v", aids["q1"])
+	var foundAid bool
+	for _, entry := range meta {
+		e, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if e["aid"] == "q1" && e["path"] == "aids/q1.pdf" {
+			foundAid = true
+			break
+		}
+	}
+	if !foundAid {
+		t.Errorf("gc meta: missing aid entry {aid:q1, path:aids/q1.pdf}; meta=%v", meta)
 	}
 
 	// Aid line must be gone from graph.
@@ -405,12 +414,23 @@ func TestAid_GCEventAidsEncoding(t *testing.T) {
 		t.Fatal("no gc event")
 	}
 
-	// Re-encode to JSON and verify the aids field serializes correctly.
-	b, err := json.Marshal(gcRow["aids"])
-	if err != nil {
-		t.Fatalf("marshal aids: %v", err)
+	// Verify the meta list contains an aid entry for q1.
+	meta, ok := gcRow["meta"].([]interface{})
+	if !ok {
+		t.Fatalf("gc meta field missing or wrong type; row: %v", gcRow)
 	}
-	if !strings.Contains(string(b), `"q1"`) {
-		t.Errorf("aids JSON missing q1 key; got %s", b)
+	var foundAid bool
+	for _, entry := range meta {
+		e, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if e["aid"] == "q1" {
+			foundAid = true
+			break
+		}
+	}
+	if !foundAid {
+		t.Errorf("gc meta: no aid entry for q1; meta=%v", meta)
 	}
 }
