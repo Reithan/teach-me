@@ -145,7 +145,11 @@ move. The full state machine is spec §12; the phases:
 6. **Answer.** Present the emitted questions to the learner through the harness's
    built-in question tool (`tm ask --format json` maps onto it), then record each
    answer with `tm answer <qid>`, piping raw text via `-`. The first recorded
-   answer locks the batch.
+   answer locks the batch. Whenever the wording shown to the learner differs from
+   `Q` in any way, pass the exact shown wording with `--asked "<wording>"` on
+   `tm answer`; when it is identical, omit the flag. Pass the verbatim shown text,
+   never a summary: `tm check` prints it as `ASKED` and the grader judges scope
+   from it.
 
 7. **Grade.** Spawn one `teach-me-grader` per answer per the grader-isolation
    rule above, choosing its model by the answer's subtlety (sonnet by default,
