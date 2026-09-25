@@ -255,6 +255,24 @@ func TestTmSrc_HashPrefixRefused(t *testing.T) {
 	}
 }
 
+// TestTmSrc_HashPrefixGuardSkipsGit verifies that a git: locator whose alias
+// name is exactly 8 characters (making locator[12] == '@') is NOT refused by
+// the hash-prefix guard — the guard must skip git: locators entirely.
+func TestTmSrc_HashPrefixGuardSkipsGit(t *testing.T) {
+	tempErrlog(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	srcMakeGraph(t, dir)
+	srcSetupXDG(t, "")
+
+	// "git:myalias1@main:f.txt": alias "myalias1" is 8 chars, so locator[12]=='@'.
+	// The old guard would fire here; with the fix it must not.
+	_, errOut, code := run(t, "src", "git:myalias1@main:f.txt")
+	if code == 3 && strings.Contains(errOut, "hash prefix") {
+		t.Error("git: locator with 8-char alias was wrongly refused as hash-prefixed")
+	}
+}
+
 // TestTmSrc_GitLocatorHeader verifies that tm src on a git locator prints a
 // header line with the resolved SHA form that matches what tm add stores.
 func TestTmSrc_GitLocatorHeader(t *testing.T) {

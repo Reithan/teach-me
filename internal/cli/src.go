@@ -46,7 +46,7 @@ func srcRun(ctx *Context) int {
 
 	// Locators must not contain a hash@ prefix or :start-end range suffix;
 	// tm src operates on the whole file, with range as a separate positional.
-	if strings.Contains(locator, "@") && len(locator) > 13 && locator[12] == '@' {
+	if !cite.IsGit(locator) && strings.Contains(locator, "@") && len(locator) > 13 && locator[12] == '@' {
 		// Looks like it has a hash prefix — refuse with a usage hint.
 		ctx.ErrMsg = "locator must not include a hash prefix"
 		ctx.FixMsg = FindCommand("src").Usage()
