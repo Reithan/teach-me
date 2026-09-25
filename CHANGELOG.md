@@ -64,6 +64,9 @@ once to upgrade them (see Changed). Skill `tm-version` is `0.4`.
   Nothing under `skill/` points at the spec, which does not ship. (#48, #63,
   #67)
 - Grader agent gains the errata recheck alongside the drift recheck. (#68)
+- `SKILL.md` loads session start, gate exits, and errata handling on demand
+  from `reference/start.md`, `reference/gate.md`, and `reference/errata.md`;
+  the session ends when the goal concept passes. (#70)
 
 ### Fixed
 
