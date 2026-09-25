@@ -1210,3 +1210,83 @@ func TestCheck14_GitLocatorRawColon(t *testing.T) {
 		t.Errorf("expected git: structural error violation; got %v", viols)
 	}
 }
+
+// check16 ─────────────────────────────────────────────────────────────────────
+
+// makeConceptGraphWithCite returns a minimal graph where concept c1 cites the
+// given raw citation string, for testing check16 with a custom citation.
+func makeConceptGraphWithCite(rawCite string) []byte {
+	escaped := strings.ReplaceAll(rawCite, `"`, `#quot;`)
+	return []byte(`flowchart TB
+    subgraph passed["P"]
+    end
+    subgraph untested["U"]
+        %% tm:format 2
+        c1["Concept scope<br/>` + escaped + `"]
+    end
+    subgraph reserve["R"]
+    end
+    subgraph testing["T"]
+    end
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`)
+}
+
+// cfgWithAids returns a config with the given AidsDir and spec defaults.
+func cfgWithAids(aidsDir string) lint.Config {
+	c := defaultCfg()
+	c.AidsDir = aidsDir
+	return c
+}
+
+// TestCheck16_CitationInsideAidsDir verifies that a citation resolving inside
+// the configured aids dir produces a violation with the expected fix text.
+func TestCheck16_CitationInsideAidsDir(t *testing.T) {
+	data := makeConceptGraphWithCite("aids/doc.txt:1-3")
+	viols := lint.Check(data, cfgWithAids("aids"))
+	if !hasMsgContaining(viols, "cites aid") {
+		t.Errorf("expected check16 violation for aid citation; got %v", viols)
+	}
+	if !hasMsgContaining(viols, "tm aid") {
+		t.Errorf("expected 'tm aid' in fix text; got %v", viols)
+	}
+}
+
+// TestCheck16_SiblingPrefixNoViolation verifies that a citation inside aids2/
+// (a directory sharing a prefix with aids/) is not refused.
+func TestCheck16_SiblingPrefixNoViolation(t *testing.T) {
+	data := makeConceptGraphWithCite("aids2/doc.txt:1-3")
+	viols := lint.Check(data, cfgWithAids("aids"))
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "cites aid") {
+			t.Errorf("unexpected check16 violation for sibling-prefix path; got %v", v.Msg)
+		}
+	}
+}
+
+// TestCheck16_URINotRefused verifies that a URI citation is never treated as
+// an aid-dir citation regardless of the configured aids-dir.
+func TestCheck16_URINotRefused(t *testing.T) {
+	data := makeConceptGraphWithCite("3f9a1c2b7e0d@https://example.com/aids/doc.txt:1-3")
+	viols := lint.Check(data, cfgWithAids("aids"))
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "cites aid") {
+			t.Errorf("unexpected check16 violation for URI citation; got %v", v.Msg)
+		}
+	}
+}
+
+// TestCheck16_NoAidsDirSkipped verifies that check16 produces no violations
+// when cfg.AidsDir is empty (feature disabled).
+func TestCheck16_NoAidsDirSkipped(t *testing.T) {
+	data := makeConceptGraphWithCite("aids/doc.txt:1-3")
+	viols := lint.Check(data, defaultCfg()) // AidsDir == ""
+	for _, v := range viols {
+		if strings.Contains(v.Msg, "cites aid") {
+			t.Errorf("unexpected check16 violation when AidsDir is empty; got %v", v.Msg)
+		}
+	}
+}
