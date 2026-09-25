@@ -91,8 +91,12 @@ func TestAidsDir_RefusalInsideDefault(t *testing.T) {
 	if !strings.Contains(ref.Err, "is an aid, not a source") {
 		t.Errorf("want 'is an aid, not a source' in Err; got %q", ref.Err)
 	}
-	if !strings.Contains(ref.Fix, "tm aid") {
-		t.Errorf("want 'tm aid' in Fix; got %q", ref.Fix)
+	// Fix carries only the short form; the CLI layer appends the full hint via aidRefusalWithID.
+	if ref.Fix != "cite the primary source" {
+		t.Errorf("Fix = %q, want \"cite the primary source\"", ref.Fix)
+	}
+	if ref.AidPath == "" {
+		t.Error("AidPath must be non-empty for aids-dir refusal")
 	}
 }
 

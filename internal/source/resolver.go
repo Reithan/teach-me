@@ -19,9 +19,12 @@ import (
 // RefusalError is a structured err:/fix: refusal from the resolver.
 // CLI handlers should detect this type and call writeErrFix(e.Err, e.Fix)
 // directly, without wrapping the message in "citation <cite>: ...".
+// AidPath is non-empty for aids-dir refusals; CLI callers that have a concept
+// ID available pass it to aidRefusalWithID to append the full §7 fix hint.
 type RefusalError struct {
-	Err string
-	Fix string
+	Err     string
+	Fix     string
+	AidPath string // set when the refusal is an aids-dir violation
 }
 
 func (e *RefusalError) Error() string {
@@ -127,6 +130,37 @@ func (r *Resolver) Read(c cite.Citation) (string, Meta, error) {
 	return r.readPath(c)
 }
 
+// ReadAll resolves locator through the same pipeline as Read (converters, git,
+// cache, aids-dir refusal) but returns the full converted text instead of a
+// line slice. The returned string has CRLF normalised and any single trailing
+// newline trimmed, matching the normalisation that sliceLines applies.
+//
+// ReadAll on a plain path under the aids directory refuses the same way Read
+// does (§7 row), so tm src cannot be used to line-reference an aid.
+func (r *Resolver) ReadAll(locator string) (string, Meta, error) {
+	c := cite.Citation{File: locator}
+	var content []byte
+	var meta Meta
+	var err error
+
+	switch {
+	case cite.IsGit(locator):
+		content, meta, err = r.readGitContent(c)
+	case cite.IsURI(locator):
+		content, meta, err = r.readURIContent(c)
+	default:
+		content, meta, err = r.readPathContent(c)
+	}
+	if err != nil {
+		return "", meta, err
+	}
+
+	// Normalize: same as sliceLines (CRLF → LF, trailing newline trimmed).
+	s := strings.TrimSuffix(string(content), "\n")
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return s, meta, nil
+}
+
 // HashCitation is the source-aware replacement for cite.HashCitation.
 // It routes through Read so that converters, URIs, and git HEAD are applied.
 // Returns the canonical hashed citation string and metadata.
@@ -183,18 +217,18 @@ func (r *Resolver) CheckDrift(citeStr string) (bool, Meta, error) {
 // git: locator resolution
 // ──────────────────────────────────────────────────────────────────────────────
 
-// readGit resolves a git: locator. It runs the appropriate git command and
-// slices the output to the line range in c.
-func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
+// readGitContent resolves a git: locator and returns the full converted content
+// (without slicing to a range). It is the content step shared by readGit and ReadAll.
+func (r *Resolver) readGitContent(c cite.Citation) ([]byte, Meta, error) {
 	gl, parseErr := cite.ParseGit(c.File)
 	if parseErr != nil {
-		return "", Meta{}, &RefusalError{Err: parseErr.Error()}
+		return nil, Meta{}, &RefusalError{Err: parseErr.Error()}
 	}
 
 	// Alias lookup.
 	repoPath, ok := r.Cfg.Repos[gl.Alias]
 	if !ok {
-		return "", Meta{}, &RefusalError{
+		return nil, Meta{}, &RefusalError{
 			Err: fmt.Sprintf("unknown repo alias %s", gl.Alias),
 			Fix: fmt.Sprintf("tm repo add %s <path>", gl.Alias),
 		}
@@ -202,7 +236,7 @@ func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
 
 	// git executable required.
 	if r.Cfg.Git == "" {
-		return "", Meta{}, &RefusalError{
+		return nil, Meta{}, &RefusalError{
 			Err: "git: locator needs git",
 			Fix: fmt.Sprintf("set git in %s", r.Cfg.ConfigPath),
 		}
@@ -230,13 +264,13 @@ func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
 
 	sha, err := resolveRef(gl.Ref)
 	if err != nil {
-		return "", Meta{}, err
+		return nil, Meta{}, err
 	}
 	var shaB string
 	if gl.RefB != "" {
 		shaB, err = resolveRef(gl.RefB)
 		if err != nil {
-			return "", Meta{}, err
+			return nil, Meta{}, err
 		}
 	}
 
@@ -283,33 +317,42 @@ func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
 	}
 
 	if runErr != nil {
-		return "", meta, &RefusalError{
+		return nil, meta, &RefusalError{
 			Err: fmt.Sprintf("git command failed for %s: %v", c.File, runErr),
 		}
 	}
 	if int64(len(raw)) > fetchSizeMax {
-		return "", meta, &RefusalError{
+		return nil, meta, &RefusalError{
 			Err: fmt.Sprintf("git output for %s exceeds 16 MiB size cap", c.File),
 		}
 	}
 
-	// File-at-ref: apply converter for the path extension, then slice.
+	// File-at-ref: apply converter for the path extension.
 	if gl.RefB == "" && gl.Path != "" {
 		ext := strings.ToLower(filepath.Ext(gl.Path))
 		mime := r.Cfg.ExtToMIME(ext)
-		text, convMeta, convErr := r.convertAndSlice(c, raw, mime, "")
+		content, convMeta, convErr := r.convertContent(raw, mime)
 		if convErr != nil {
-			return "", meta, convErr
+			return nil, meta, convErr
 		}
 		// Merge converter-specific fields from convMeta into meta.
 		meta.MIME = convMeta.MIME
 		meta.Converter = convMeta.Converter
 		meta.ConverterVersion = convMeta.ConverterVersion
-		return text, meta, nil
+		return content, meta, nil
 	}
 
-	// Commit/diff/diff-for-path: slice raw.
-	text, sliceErr := sliceLines(raw, c)
+	// Commit/diff/diff-for-path: return raw bytes.
+	return raw, meta, nil
+}
+
+// readGit resolves a git: locator and slices the output to the line range in c.
+func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
+	content, meta, err := r.readGitContent(c)
+	if err != nil {
+		return "", meta, err
+	}
+	text, sliceErr := sliceLines(content, c)
 	if sliceErr != nil {
 		return "", meta, fmt.Errorf("citation %q: %w", c.File, sliceErr)
 	}
@@ -320,7 +363,10 @@ func (r *Resolver) readGit(c cite.Citation) (string, Meta, error) {
 // Path resolution
 // ──────────────────────────────────────────────────────────────────────────────
 
-func (r *Resolver) readPath(c cite.Citation) (string, Meta, error) {
+// readPathContent reads a plain-path locator, applies any converter, and
+// returns the full converted content without slicing. It is the content step
+// shared by readPath and ReadAll.
+func (r *Resolver) readPathContent(c cite.Citation) ([]byte, Meta, error) {
 	path := cite.Resolve(c, r.SrcRoot)
 
 	// Refuse if the resolved path is inside the aids directory (§4.6 rule 5).
@@ -328,9 +374,10 @@ func (r *Resolver) readPath(c cite.Citation) (string, Meta, error) {
 		aidsDir := AidsDir(r.Cfg, r.GraphDir)
 		absPath := filepath.Clean(path)
 		if isUnderDir(absPath, aidsDir) {
-			return "", Meta{}, &RefusalError{
-				Err: fmt.Sprintf("%s is an aid, not a source", c.File),
-				Fix: fmt.Sprintf("cite the primary source; link the aid with tm aid <id> %s", c.File),
+			return nil, Meta{}, &RefusalError{
+				Err:     fmt.Sprintf("%s is an aid, not a source", c.File),
+				Fix:     "cite the primary source",
+				AidPath: c.File,
 			}
 		}
 	}
@@ -342,22 +389,37 @@ func (r *Resolver) readPath(c cite.Citation) (string, Meta, error) {
 	raw, readErr := os.ReadFile(path)
 	if readErr != nil {
 		if os.IsNotExist(readErr) {
-			return "", Meta{}, &RefusalError{
+			return nil, Meta{}, &RefusalError{
 				Err: fmt.Sprintf("%s is not in the working tree", c.File),
 				Fix: "cite it as git:<alias>@<ref>:<path> if it is committed",
 			}
 		}
-		return "", Meta{}, fmt.Errorf("citation %q: %w", c.File, readErr)
+		return nil, Meta{}, fmt.Errorf("citation %q: %w", c.File, readErr)
 	}
 
-	return r.convertAndSlice(c, raw, mime, "")
+	return r.convertContent(raw, mime)
+}
+
+func (r *Resolver) readPath(c cite.Citation) (string, Meta, error) {
+	content, meta, err := r.readPathContent(c)
+	if err != nil {
+		return "", meta, err
+	}
+	text, sliceErr := sliceLines(content, c)
+	if sliceErr != nil {
+		return "", meta, fmt.Errorf("citation %q: %w", c.File, sliceErr)
+	}
+	return text, meta, nil
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // URI resolution
 // ──────────────────────────────────────────────────────────────────────────────
 
-func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
+// readURIContent fetches or loads from cache a URI locator and returns the
+// full converted content without slicing. It is the content step shared by
+// readURI and ReadAll.
+func (r *Resolver) readURIContent(c cite.Citation) ([]byte, Meta, error) {
 	ttl := r.effectiveCacheTTL()
 
 	// ── Cache read ────────────────────────────────────────────────────────────
@@ -376,10 +438,6 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 				// verErr != nil → version changed or converter missing → miss
 			}
 			if isCacheHit(entry, time.Now().UTC(), ttl, converterCmds, converterVer) {
-				text, sliceErr := sliceLines([]byte(entry.Text), c)
-				if sliceErr != nil {
-					return "", Meta{}, fmt.Errorf("citation %q: %w", c.File, sliceErr)
-				}
 				meta := Meta{
 					URL:       entry.FinalURL,
 					MIME:      entry.MIME,
@@ -389,7 +447,7 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 					meta.Converter = converterCmds[0]
 					meta.ConverterVersion = converterVer
 				}
-				return text, meta, nil
+				return []byte(entry.Text), meta, nil
 			}
 		}
 	}
@@ -402,17 +460,17 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.File, nil)
 	if err != nil {
-		return "", Meta{}, r.fetchFailure(c.File, err.Error())
+		return nil, Meta{}, r.fetchFailure(c.File, err.Error())
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", Meta{}, r.fetchFailure(c.File, err.Error())
+		return nil, Meta{}, r.fetchFailure(c.File, err.Error())
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", Meta{}, r.fetchFailure(c.File, resp.Status)
+		return nil, Meta{}, r.fetchFailure(c.File, resp.Status)
 	}
 
 	// Record the final URL after redirects.
@@ -447,11 +505,11 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 			if cmds := r.Cfg.ConverterFor(extMIME); len(cmds) > 0 {
 				mime, convCmds = extMIME, cmds
 			} else {
-				return "", Meta{URL: finalURL, MIME: ctMIME, FetchedAt: fetchedAt},
+				return nil, Meta{URL: finalURL, MIME: ctMIME, FetchedAt: fetchedAt},
 					r.noConverterErr(c.File, ctMIME)
 			}
 		default:
-			return "", Meta{URL: finalURL, MIME: ctMIME, FetchedAt: fetchedAt},
+			return nil, Meta{URL: finalURL, MIME: ctMIME, FetchedAt: fetchedAt},
 				r.noConverterErr(c.File, ctMIME)
 		}
 	default:
@@ -476,10 +534,10 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 	lr := io.LimitReader(resp.Body, fetchSizeMax+1)
 	raw, readErr := io.ReadAll(lr)
 	if readErr != nil {
-		return "", Meta{}, r.fetchFailure(c.File, readErr.Error())
+		return nil, Meta{}, r.fetchFailure(c.File, readErr.Error())
 	}
 	if int64(len(raw)) > fetchSizeMax {
-		return "", Meta{}, r.fetchFailure(c.File, "response exceeds 16 MiB size cap")
+		return nil, Meta{}, r.fetchFailure(c.File, "response exceeds 16 MiB size cap")
 	}
 
 	var converted []byte
@@ -488,7 +546,7 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 	if !isRaw {
 		cv, verLine, convErr := r.runConverter(convCmds, raw)
 		if convErr != nil {
-			return "", Meta{URL: finalURL, MIME: mime, FetchedAt: fetchedAt}, convErr
+			return nil, Meta{URL: finalURL, MIME: mime, FetchedAt: fetchedAt}, convErr
 		}
 		converted = cv
 		converterName = convCmds[0]
@@ -528,7 +586,15 @@ func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
 		_ = writeCacheEntry(entryPath, entry) // ignore write error
 	}
 
-	text, sliceErr := sliceLines(converted, c)
+	return converted, meta, nil
+}
+
+func (r *Resolver) readURI(c cite.Citation) (string, Meta, error) {
+	content, meta, err := r.readURIContent(c)
+	if err != nil {
+		return "", meta, err
+	}
+	text, sliceErr := sliceLines(content, c)
 	if sliceErr != nil {
 		return "", meta, fmt.Errorf("citation %q: %w", c.File, sliceErr)
 	}
@@ -627,42 +693,32 @@ func (r *Resolver) checkVersion(program string) (string, error) {
 	return entry.firstLine, entry.err
 }
 
-// convertAndSlice converts raw bytes with the appropriate converter for mime
-// (or reads raw if mime is empty/"text/plain"/"text/markdown"), then slices
-// to the line range in c. Returns the text and metadata.
-func (r *Resolver) convertAndSlice(c cite.Citation, raw []byte, mime string, commit string) (string, Meta, error) {
-	meta := Meta{Commit: commit}
-
+// convertContent converts raw bytes with the appropriate converter for mime
+// (or passes raw through if mime is empty/"text/plain"/"text/markdown").
+// Returns the converted bytes and metadata (MIME, Converter, ConverterVersion).
+// It is the content step shared by readGitContent and readPathContent.
+func (r *Resolver) convertContent(raw []byte, mime string) ([]byte, Meta, error) {
+	meta := Meta{}
 	isRaw := mime == "" || mime == mimeTextPlain || mime == mimeTextMarkdown
-
-	var content []byte
 	if !isRaw {
 		cmds := r.Cfg.ConverterFor(mime)
 		if len(cmds) == 0 {
 			// No converter for this extension — read as plain text.
-			content = raw
-		} else {
-			cv, verLine, convErr := r.runConverter(cmds, raw)
-			if convErr != nil {
-				return "", meta, convErr
-			}
-			content = cv
-			meta.MIME = mime
-			meta.Converter = cmds[0]
-			meta.ConverterVersion = verLine
+			return raw, meta, nil
 		}
-	} else {
-		content = raw
-		if mime != "" {
-			meta.MIME = mime
+		cv, verLine, convErr := r.runConverter(cmds, raw)
+		if convErr != nil {
+			return nil, meta, convErr
 		}
+		meta.MIME = mime
+		meta.Converter = cmds[0]
+		meta.ConverterVersion = verLine
+		return cv, meta, nil
 	}
-
-	text, sliceErr := sliceLines(content, c)
-	if sliceErr != nil {
-		return "", meta, fmt.Errorf("citation %q: %w", c.File, sliceErr)
+	if mime != "" {
+		meta.MIME = mime
 	}
-	return text, meta, nil
+	return raw, meta, nil
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
