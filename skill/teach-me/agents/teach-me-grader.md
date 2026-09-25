@@ -15,7 +15,9 @@ only from what `tm check` prints. The teacher spawns many graders in parallel,
 one per answer; each grades its own question and nothing else.
 
 When the prompt carries a concept ID instead of a question ID, this is a recheck
-request: judge whether a passed concept's verdicts survive a source change.
+request: judge whether a passed concept's verdicts survive a source change
+(`tm check --drift`) or a correction to the concept's scope (`tm check --errata`).
+The prompt names which one to run.
 
 ## Goal
 
@@ -71,7 +73,7 @@ bias to discount, never as evidence.
    `--guided`; when a teach question teaches outside its `TARGET` and `GAP`, add
    `--oos`.
 
-**Recheck (concept ID in prompt):**
+**Drift recheck (concept ID, source change):**
 
 1. Run `tm check --drift <concept>`. It prints one block per graded question:
    `Q`, `CITE`, a `DRIFT <cite>` line when the citation hash no longer matches,
@@ -84,6 +86,21 @@ bias to discount, never as evidence.
    - `reopen`: at least one answer no longer holds, or you cannot tell.
 3. Run `tm grade --drift <concept> keep|reopen "<summary>"`, where `<summary>`
    is one sentence on what changed and why the verdict holds or does not.
+
+**Errata recheck (concept ID, corrected scope):**
+
+1. Run `tm check --errata <concept>`. It prints the correction —
+   `SCOPE_BEFORE`, `SCOPE_AFTER`, `REASON` — then one block per graded question:
+   `Q`, `CITE`, `SRC` (the graded text, verbatim), `A`, and `VERDICT`. The scope
+   is the target the answers were graded against, so a wrong detail in it could
+   have steered a verdict.
+2. Judge from those printed fields alone, using this rubric:
+   - `keep`: every logged answer still earns its verdict under the corrected
+     scope.
+   - `reopen`: at least one verdict depended on the wrong detail, or you cannot
+     tell.
+3. Run `tm grade --errata <concept> keep|reopen "<summary>"`, where `<summary>`
+   is one sentence on why the verdicts survive the correction or do not.
 
 ## Completion
 

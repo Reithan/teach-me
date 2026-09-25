@@ -2,7 +2,7 @@
 name: teach-me
 description: "Drive a teaching session with the tm CLI: diagnose what a learner understands over a Mermaid concept graph, probe and grade their answers via grader sub-agents, and teach each diagnosed gap."
 metadata:
-  tm-version: "0.3"
+  tm-version: "0.4"
 ---
 
 # teach-me skill
@@ -259,6 +259,12 @@ cycle.
   the instruction to recheck it; the grader runs `tm check --drift` and decides
   `keep` or `reopen`. The teacher never decides whether a pass survives a source
   change. Descendants stay passed either way.
+- **Wrong detail in a concept's scope**: `tm edit <id> "<scope>" --errata "<reason>"`.
+  This is the only way to rewrite the scope of a concept that has questions or a
+  pass; the reason is logged and the questions are untouched. If the concept is
+  passed, spawn a `teach-me-grader` with the concept ID and the instruction to run
+  `tm check --errata`; the grader decides `keep` or `reopen`. The teacher never
+  decides whether the pass survives the correction.
 - **Replaced source or revealed missing prerequisite**: spawn the
   `teach-me-planner` in `errata for <concepts>` mode; read
   `skill/teach-me/reference/map.md` before spawning.
