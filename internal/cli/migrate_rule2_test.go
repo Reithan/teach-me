@@ -103,29 +103,17 @@ func TestMigrateRule2_Match(t *testing.T) {
 		t.Errorf("migrated graph should contain format marker; graph:\n%s", after)
 	}
 
-	// Read the event log and assert exactly one migrate event with rewritten=1.
-	logData, logErr := os.ReadFile(graphFile + ".jsonl")
-	if logErr != nil {
-		t.Fatalf("read .jsonl: %v", logErr)
+	// Assert exactly one migrate event exists and it names the rewritten citation.
+	evRows := readMigrateEvent(t, graphFile)
+	if len(evRows) != 1 {
+		t.Fatalf("want 1 migrate event, got %d", len(evRows))
 	}
-	var migrateCount int
-	for _, line := range strings.Split(strings.TrimSpace(string(logData)), "\n") {
-		if line == "" {
-			continue
-		}
-		var ev map[string]any
-		if jsonErr := json.Unmarshal([]byte(line), &ev); jsonErr != nil {
-			continue
-		}
-		if ev["ev"] == "migrate" {
-			migrateCount++
-			if got, _ := ev["rewritten"].(float64); int(got) != 1 {
-				t.Errorf("migrate event rewritten = %v, want 1", ev["rewritten"])
-			}
-		}
+	ev := evRows[0]
+	if ev["rewritten"] != float64(1) {
+		t.Errorf("migrate event rewritten = %v, want 1", ev["rewritten"])
 	}
-	if migrateCount != 1 {
-		t.Errorf("want 1 migrate event in .jsonl, got %d", migrateCount)
+	if ev["left"] != float64(0) {
+		t.Errorf("migrate event left = %v, want 0", ev["left"])
 	}
 
 	// tm lint must pass on the rewritten graph.
