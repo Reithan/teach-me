@@ -70,7 +70,7 @@ func baselineHelp(out io.Writer) string {
 // the command reference regardless of the doc setting.
 func commandList(out io.Writer) {
 	for _, cmd := range Table {
-		_, _ = fmt.Fprintln(out, cmd.Usage())
+		writeUsageLines(cmd, out)
 	}
 }
 
@@ -83,7 +83,14 @@ func specificHelp(cmd *Command, flagName string, out io.Writer) {
 		flagHelpLine(cmd, flagName, out)
 		return
 	}
-	_, _ = fmt.Fprintln(out, cmd.Usage())
+	writeUsageLines(*cmd, out)
+}
+
+// writeUsageLines writes cmd's usage line and one line per alternate form.
+func writeUsageLines(cmd Command, out io.Writer) {
+	for _, l := range cmd.UsageLines() {
+		_, _ = fmt.Fprintln(out, l)
+	}
 }
 
 // flagHelpLine writes one line describing flagName within cmd, or an

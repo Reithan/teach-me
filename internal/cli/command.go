@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 	"strings"
 )
@@ -20,6 +21,15 @@ type PosArg struct {
 	Stdin bool
 	// Values lists the allowed enum values. Empty means unrestricted.
 	Values []string
+}
+
+// Form describes an alternate invocation of a command selected by Flag, with
+// its own positional display tokens.
+type Form struct {
+	// Flag is the selecting flag name without leading --, e.g. "drift".
+	Flag string
+	// PosArgs are the display tokens that follow the flag.
+	PosArgs []string
 }
 
 // FlagSpec describes one optional flag in a command's signature.
@@ -95,6 +105,12 @@ type Command struct {
 	// load is left false so the loadRun handler can check the positional file.
 	SkipFormatCheck bool
 
+	// Forms lists alternate invocations selected by a flag, each with its own
+	// positionals (e.g. `tm grade --drift <concept> keep|reopen "<summary>"`).
+	// A form's flag is left out of the main usage line and gets its own line
+	// in help output. Parsing still uses PosArgs and Flags.
+	Forms []Form
+
 	// Run is the command handler. A nil Run means the command is declared with
 	// full usage metadata but is not yet implemented in this build. The
 	// dispatcher emits "err: <name> is not implemented in this build" (exit 3)
@@ -117,6 +133,9 @@ func (c Command) Usage() string {
 		b.WriteString(p.Name)
 	}
 	for _, f := range c.Flags {
+		if c.isFormFlag(f.Name) {
+			continue
+		}
 		b.WriteString(" [--")
 		b.WriteString(f.Name)
 		if f.TakesValue {
@@ -126,4 +145,26 @@ func (c Command) Usage() string {
 		b.WriteByte(']')
 	}
 	return b.String()
+}
+
+// UsageLines returns the main usage line followed by one line per Form, for
+// example `tm grade --drift <concept> keep|reopen "<summary>"`. Help output
+// prints these; error fix lines use the single Usage line.
+func (c Command) UsageLines() []string {
+	lines := make([]string, 0, 1+len(c.Forms))
+	lines = append(lines, c.Usage())
+	for _, f := range c.Forms {
+		lines = append(lines, fmt.Sprintf("tm %s --%s %s", c.Name, f.Flag, strings.Join(f.PosArgs, " ")))
+	}
+	return lines
+}
+
+// isFormFlag reports whether name selects one of c's Forms.
+func (c Command) isFormFlag(name string) bool {
+	for _, f := range c.Forms {
+		if f.Flag == name {
+			return true
+		}
+	}
+	return false
 }

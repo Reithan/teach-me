@@ -7,7 +7,7 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [0.4.0-beta.1] - 2026-09-25
 
-Spec v0.25. Graphs written by earlier versions carry format 1; run `tm migrate`
+Spec v0.26. Graphs written by earlier versions carry format 1; run `tm migrate`
 once to upgrade them (see Changed). Skill `tm-version` is `0.4`.
 
 ### Added
@@ -18,6 +18,10 @@ once to upgrade them (see Changed). Skill `tm-version` is `0.4`.
   before/after text are logged in an `errata` event. A passed concept then goes to a grader recheck
   through `tm check --errata` and `tm grade --errata keep|reopen`, mirroring the
   drift recheck. (#68)
+- `tm check <qid>` prints the question's concept scope as its first line,
+  `CONCEPT <id>: <scope>`, and the rubric grades a question outside that scope
+  `unclear` with a summary starting `out of scope:`, so the teacher replaces
+  it with `tm q --re`. (#69)
 - `tm src <locator> [START-END] [--find <regex>] [--fulldump]` prints converted
   source text with line numbers through the same resolution pipeline as `add`
   and `q`. Output is a bounded window with a `more:` trailer; `--fulldump`
@@ -60,6 +64,12 @@ once to upgrade them (see Changed). Skill `tm-version` is `0.4`.
   Nothing under `skill/` points at the spec, which does not ship. (#48, #63,
   #67)
 - Grader agent gains the errata recheck alongside the drift recheck. (#68)
+
+### Fixed
+
+- `tm drop --help` names its argument `<id>`, since it also takes a drifted
+  question ID; `tm grade --help` and `tm check --help` print the `--drift` and
+  `--errata` forms that take a `<concept>`. (#69)
 
 ## [0.3.0-beta.1] - 2026-09-24
 

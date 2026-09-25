@@ -107,7 +107,8 @@ var Table = []Command{
 	{
 		Name: "drop",
 		PosArgs: []PosArg{
-			{Name: "<concept>"},
+			// A concept id, or the qid of a drifted ungraded question.
+			{Name: "<id>"},
 		},
 		ForbidGrader: true,
 		Run:          dropRun,
@@ -236,6 +237,10 @@ var Table = []Command{
 			{Name: "drift"},
 			{Name: "errata"},
 		},
+		Forms: []Form{
+			{Flag: "drift", PosArgs: []string{"<concept>"}},
+			{Flag: "errata", PosArgs: []string{"<concept>"}},
+		},
 		ForbidGrader: false,
 		Run:          checkRun,
 	},
@@ -257,6 +262,10 @@ var Table = []Command{
 			{Name: "oos"},
 			{Name: "drift"},
 			{Name: "errata"},
+		},
+		Forms: []Form{
+			{Flag: "drift", PosArgs: []string{"<concept>", "keep|reopen", `"<summary>"`}},
+			{Flag: "errata", PosArgs: []string{"<concept>", "keep|reopen", `"<summary>"`}},
 		},
 		ForbidGrader:  false,
 		ForbidTeacher: true,

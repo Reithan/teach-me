@@ -9,7 +9,8 @@ import (
 	"github.com/reithan/teach-me/internal/state"
 )
 
-// dropRun is the Run handler for `tm drop <concept>`.
+// dropRun is the Run handler for `tm drop <id>`, where <id> is a concept or
+// the qid of a drifted ungraded question.
 //
 // Removes an untested leaf concept that has no questions. Outputs "ok".
 //
