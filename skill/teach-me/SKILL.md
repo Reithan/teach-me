@@ -11,47 +11,48 @@ metadata:
 
 Drive a human learner toward mastery of a body of concepts with the `tm` CLI:
 diagnose what they already understand, test the frontier of what they do not, and
-teach each gap a wrong answer reveals. This file is the teacher adapter; it carries
-the procedure the CLI cannot enforce.
+teach each gap a wrong answer reveals.
 
 ## Goal
 
 Move every in-scope concept into the graph's passed block, each pass earned by
 probe answers a grader scored against the source, never by your own read of the
-learner. The session is done when `untested` holds no concept you intend to test.
+learner. The session is done when `tm status` shows the goal concept passed.
 
 ## File-access rule
 
-The model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or
-`<name>.mmd.lock` by any tool, including shell reads. All reads go through
-`tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; all
-writes go through a `tm` command.
+Read the graph through `tm status`, `tm show`, `tm find`, `tm report`, and
+`tm show --history`; write it through a `tm` command. Never read or write
+`<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` by any tool, including
+shell reads.
 
 On every `tm new`, before the first `tm add`, tell the user to configure harness
-deny rules for those three files and for writes under src-root outside aids-dir,
-and point at `skill/teach-me/reference/setup.md`. Continue once the user confirms
-or declines. Declining is allowed; this rule still binds.
+deny rules for those three files and for writes under src-root, and point at
+`skill/teach-me/reference/setup.md`. Continue once the user confirms or
+declines. Declining is allowed; this rule still binds.
 
-If the model finds it has read or written one of those files — by accident or by a
-tool it did not expect to reach them — say so immediately, remind the user that the
-deny rules are not in place, and point at `skill/teach-me/reference/setup.md`.
-No silent recovery; an accidental write may already have broken a lint invariant.
+If you find you have read or written one of those files, by accident or through
+a tool you did not expect to reach them, say so at once, remind the user that
+the deny rules are not in place, and point at
+`skill/teach-me/reference/setup.md`. Never recover silently; an accidental
+write may already have broken a lint invariant.
 
 ## Context
 
 `tm` reads and edits one Mermaid flowchart that records what the learner has shown
 they understand. That file is the entire session state; every command re-parses
-it. Read the graph only through `tm` output, which is terse and built for an agent
-(a bare `ok`, an allocated ID, or a few lines); never open the raw `.mmd`.
+it. `tm` output is terse and built for an agent: a bare `ok`, an allocated ID,
+or a few lines.
 
-Three parties share the file:
+Who reads and writes the file:
 
 | Who | Reads | Writes |
 |---|---|---|
 | You (teacher) | `tm` output, cited source files | every command except `check` and `grade` |
 | Grader sub-agent | `tm check` output only | `tm grade` |
-| Planner sub-agent | source files, `tm status`, `tm show`, `tm find` | `tm add`, `tm link`, `tm edit`, `tm drop` |
+| Planner sub-agent | `tm src`, `tm status`, `tm show`, `tm find` | `tm add`, `tm link`, `tm edit`, `tm drop` |
 | Pruner sub-agent | `tm status`, `tm show`, `tm find`, `tm report` | `tm prune`, `tm reserve`, `tm activate`, `tm edit` |
+| Reader sub-agent | `tm src --fulldump` | nothing |
 | Human learner | the rendered graph, your questions | answers; hand-edits |
 
 Citations are `hash@locator:START-END`. Relative locators resolve against the
@@ -62,9 +63,8 @@ source root recorded by `tm new --src-root` (defaults to the graph's directory).
 `tm`'s baseline help must point back here: `tm --help` should print `see <path>`
 naming this file. If it prints the command list instead, the `doc` key is not
 set; advise the user on the line for `~/.config/tm/config` (see
-`skill/teach-me/reference/setup.md`) and confirm before writing it. Do not rely
-on environment variables for anything that must outlast one shell call; the
-harness runs each call fresh, and `tm` reads its config file instead.
+`skill/teach-me/reference/setup.md`) and confirm before writing it. Keep every
+session setting in `~/.config/tm/config`; env vars die with each shell call.
 
 Delegate every verdict to a grader sub-agent; never grade an answer yourself. The
 grader's isolation is what keeps your pass-bias out of the score, so spawn one
@@ -127,25 +127,22 @@ move. The phases:
 
 4. **Pick** a frontier concept.
 
-5. **Probe.** Draft between `TM_PROBE_MIN` and `TM_PROBE_MAX` narrow probe
-   questions with `tm q`, then emit the batch with `tm ask <concept>`. A question
-   is immutable once written. `tm q` refuses a citation over 120 lines or
-   6,000 characters; narrow with `tm src <locator> --find <regex>` or a tighter
-   range. A question needing two passages is two questions or a concept drawn
-   too wide. See `skill/teach-me/reference/setup.md` for session limit defaults.
+5. **Probe.** Draft at least the minimum batch of narrow probe questions with
+   `tm q`, then emit the batch with `tm ask <concept>`; `tm ask` refuses a
+   short batch. A question is immutable once written. `tm q` refuses a citation
+   over 120 lines or 6,000 characters; narrow with
+   `tm src <locator> --find <regex>` or a tighter range. A question needing two
+   passages is two questions or a concept drawn too wide.
 
-6. **Answer.** Present the emitted questions to the learner through the harness's
-   built-in question tool (`tm ask --format json` maps onto it), offering an
-   explicit "I don't know" choice on every question, then record each answer
-   with `tm answer <qid>`, piping raw text via `-`. The first recorded answer
-   locks the batch. Whenever the wording shown to the learner differs from
-   `Q` in any way, pass the exact shown wording with `--asked "<wording>"` on
-   `tm answer`; when it is identical, omit the flag. Pass the verbatim shown text,
-   never a summary: `tm check` prints it as `ASKED` and the grader judges scope
-   from it. If the learner picks "I don't know", record the concession with
-   `tm answer <qid> "I don't know" --concede`; the fail grade is written in the
-   same mutation and no grader is spawned for that question. Any typed answer,
-   however weak, goes to a grader.
+6. **Answer.** Present the emitted questions through the harness's built-in
+   question tool (`tm ask --format json` maps onto it), with an explicit
+   "I don't know" choice on every question. Record each answer with
+   `tm answer <qid>`, piping raw text via `-`; the first recorded answer locks
+   the batch. When the wording shown differs from `Q` in any way, pass the
+   verbatim shown text with `--asked "<wording>"`, never a summary: `tm check`
+   prints it as `ASKED` and the grader judges scope from it. Record "I don't
+   know" with `tm answer <qid> "I don't know" --concede`; that writes the fail
+   grade and needs no grader. Any typed answer, however weak, goes to a grader.
 
 7. **Grade.** For every answer that was not conceded, spawn one `teach-me-grader`
    per answer per the grader-isolation rule above, choosing its model by the
@@ -161,8 +158,9 @@ move. The phases:
      the teach questions build on the passed foundations (each concept's inlined
      text is bounded to one window; a cut concept ends with a `more:` trailer
      naming the next `tm src` command), record the gap with `tm gap`, then teach
-     with `tm q --teach --re <qid>`. Once the teach batch resolves
-     all pass, the locked fallback probes become answerable.
+     with `tm q --teach --re <qid>`. Once the teach batch resolves all pass,
+     the locked fallback probes become answerable. When `q --teach` refuses
+     because teaching is spent, ask the locked fallback probes.
    - gated → `q`, `ask`, and `answer` refuse on the concept. Take one exit
      now, before touching another concept: read
      `skill/teach-me/reference/gate.md` and follow it. Use `--override` only
@@ -171,7 +169,7 @@ move. The phases:
    - learner asks to skip a concept → `tm reserve <concept>` if it has no
      questions. It stops blocking its children and can be activated later.
 
-9. Repeat from step 4 until `untested` holds no concept you intend to test.
+9. Repeat from step 4 until `tm status` shows the goal concept passed.
 
 ## Errata
 
