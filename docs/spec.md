@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.21
+# tm: teaching-map CLI, draft spec v0.22
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.20: `tm answer --concede` records a learner-declared fail without a grader; §6, §8, §9, §10, §12, §14 updated.
+Changes from v0.21: repo content has one citation form (`git:` locators with machine-local aliases) and plain paths lose git semantics; the conversion and fetch cache ships from §15 into §13; teacher aids get a home (`aids-dir`) and cannot be cited; a graph carries a `%% tm:format` marker and `tm migrate` upgrades a prior-version graph; §3, §4.4, §4.6, §6, §7, §10, §11, §12, §13, §14, §15, §16 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -61,12 +61,14 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 
 ## 3. Files
 
-- Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; there is no cache or side state.
+- Graph: `<name>.mmd`. Single source of truth. Every command re-parses it; the graph carries no cache or side state. Its first `untested` meta line records the graph format when present; absent, the format is 1 (§4.6). Every command except `migrate`, `lint`, and help refuses a graph whose format is below the binary's with `fix: tm migrate`.
 - Event log: `<name>.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history` and `tm check --drift`.
 - Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolves at all (a usage error with no pointer set). Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
 - Lock: `<name>.mmd.lock`. Every mutating command takes the lock, writes a temp file, lints the result, then renames over the graph. Graders run in parallel, so this is required.
 - File resolution: `--file` > `$TM_FILE` > `file` key in `.tmconfig` in the working directory > `file` key in the user config. `tm new` and `tm load` write the `file` key (and `src-root` when given) into the user config as absolute paths, so the pointer holds from any working directory; with `--local` they write `.tmconfig` in the working directory instead, for two lessons on one machine. Use the env var or `--file` when two concurrent sessions need different graphs.
 - Citations resolve against `$TM_SRC_ROOT`, defaulting to the graph's directory.
+- Aids: `<graph dir>/aids` by default, overridden by the `aids-dir` config key. Everything the teacher authors — examples, study guides, generated diffs, copies it fetches for itself — lives here. Aids are linked to concepts or questions (§4.6) and are never cited (§7, §11).
+- Cache: the conversion and fetch cache lives in the user cache dir (`$XDG_CACHE_HOME/tm`, default `~/.cache/tm`; the `os.UserCacheDir()` equivalent on other systems), never in the graph directory or under src-root. It holds converted text and `fetched_at` keyed by locator, converter, and converter version (section 13). It is not state: deleting it changes nothing but cost.
 - Configuration: user-level `$XDG_CONFIG_HOME/tm/config` (default `~/.config/tm/config`), key=value format (section 13). `.tmconfig` keys override the user config per project. Converters, the active graph, the source root, and the doc path are all machine-specific, so they live in the user config by default. Environment variables are set per call in an agent harness and rarely survive to the next call, which is why every session-scoped setting has a config key.
 
 ## 4. Graph format
@@ -171,14 +173,34 @@ The writer escapes `"` as `#quot;`, `'` as `#39;`, `#` as `#35;`, `<` and `>` as
 | Part | Rule |
 |---|---|
 | `hash` | first 12 hex characters of SHA-256 over the normalized cited text. Fixed width. Parsed first; the `@` after it is the delimiter, so `@` inside a locator is harmless |
-| `locator` | a path relative to `TM_SRC_ROOT`; an absolute path (`/...`, or a drive letter on Windows); or a URI with a scheme (`https://...`). Distinguished by prefix; no per-kind syntax |
-| `START-END` | 1-based inclusive line range into the resolved text, after conversion if any. Split on the last colon; the range never contains one, so scheme separators, ports, and drive letters are harmless |
+| `locator` | one of three kinds, distinguished by prefix with no per-kind syntax: a **plain path** relative to `TM_SRC_ROOT` or absolute (`/...`, or a drive letter on Windows), read from disk with no git semantics; a **`git:` URI** naming committed content in a machine-local repo (below); or a **fetched URI** with a scheme (`https://...`) |
+| `START-END` | 1-based inclusive line range into the resolved text, after conversion if any. Split on the last colon; the range never contains one, so scheme separators, ports, drive letters, the `git:` scheme colon, and the `<sha>:<path>` separator are harmless |
 
 The model never types the hash. `tm add` and `tm q` accept the hashless form `<locator>:START-END`, resolve the text, compute the hash, and write the full form. The hash is a content hash of the cited lines, not a commit hash; the position invites that reading, so the spec says so here.
 
 Normalization before hashing: CRLF to LF; trailing whitespace stripped per line; lines joined with LF; no trailing newline; hash over the UTF-8 bytes. Internal whitespace is preserved because indentation is meaningful in code.
 
-A `"` in a locator must be percent-encoded; lint rejects a raw one.
+A `"` in a locator must be percent-encoded; lint rejects a raw one. A `:` inside a `<path>` in a `git:` locator must be percent-encoded as `%3A`, so the `<sha>:<path>` split and the range split stay unambiguous; lint rejects a raw one.
+
+**Plain paths.** A plain path is a file read raw, or through a converter for its extension (section 13.1). It carries no git semantics: no `HEAD` fallback, no `commit` field. A path not in the working tree refuses:
+
+```
+err: <path> is not in the working tree
+fix: cite it as git:<alias>@<ref>:<path> if it is committed
+```
+
+**`git:` locators.** Committed content in any repo on the machine is cited through one grammar with optional parts:
+
+| Locator | Resolves to | Text that is cited |
+|---|---|---|
+| `git:<alias>@<ref>:<path>` | a file at a commit | the blob's lines |
+| `git:<alias>@<sha>` | one commit | `git show <sha>` output: header, message, patch |
+| `git:<alias>@<a>..<b>` | a diff | `git diff <a> <b>` output |
+| `git:<alias>@<a>..<b>:<path>` | that diff for one path | `git diff <a> <b> -- <path>` output |
+
+`<alias>` matches `[A-Za-z0-9_-]+` and holds no `@` or `:`, which keeps parsing unambiguous and sidesteps Windows drive letters; it names a repo registered in machine config (`tm repo add`, section 13). `<ref>` is anything `git rev-parse` accepts. A converter never applies to git output — it is already text — except a file at a ref, which goes through the extension rule like a plain path.
+
+**Resolution to SHA on write.** On `add`, `q`, and `recite` the CLI resolves every `<ref>`, `<a>`, `<b>` through `git rev-parse` and writes the short SHA (12 hex) into the stored citation, so a git citation never drifts unless history is rewritten. The ref as typed goes to the log (`ref` field, section 10). Forge-only objects (pull requests, issues) are not git; the teacher cites the forge's plain-text `.diff` or `.patch` URL as a fetched URI instead (sections 12, 13.1).
 
 ### 4.5 Classes
 
@@ -192,10 +214,22 @@ Concepts carry no class. Their state is their block plus what hangs off them; a 
 
 ### 4.6 Meta lines
 
-Two forms exist, both in the `untested` block:
+- `%% tm:format <N>` — the graph format version. When present it is the first meta line in the `untested` block, before `%% tm:next`. At most one per file. Absent means format 1 (every graph written before v0.22); `tm new` writes `%% tm:format 2`. The format is the graph file's own version and is unrelated to the `tm-version` marker in the doc file. Every command except `migrate`, `lint`, and help refuses a graph below the binary's format; every command refuses one above it. See section 6 (`migrate`) and section 11. A graph below the binary's format refuses:
 
-- `%% tm:next q=<N> batch=<M>` — the monotonic allocation counter (§4.3). At most one per file. Written first in the `untested` block, before any `%% tm:gate` lines. `N` and `M` are integers ≥ 1: the next question/answer number and the next batch number to allocate. Only commands that allocate new IDs (`tm q`) write or update this line; read-only commands and commands that do not allocate leave it unchanged.
-- `%% tm:gate <concept> base=<N>` — written when an upstream action clears a gate (section 7).
+  ```
+  err: <file> is format 1, this is tm format 2
+  fix: tm migrate
+  ```
+
+  A graph above it refuses:
+
+  ```
+  err: <file> is format 3, this is tm format 2
+  fix: upgrade tm
+  ```
+- `%% tm:next q=<N> batch=<M>` — the monotonic allocation counter (§4.3). At most one per file. In the `untested` block, after `%% tm:format` and before any `%% tm:gate` lines. `N` and `M` are integers ≥ 1: the next question/answer number and the next batch number to allocate. Only commands that allocate new IDs (`tm q`) write or update this line; read-only commands and commands that do not allocate leave it unchanged.
+- `%% tm:gate <concept> base=<N>` — in the `untested` block; written when an upstream action clears a gate (section 7).
+- `%% tm:aid <concept|qid> <path>` — links an aid (section 3) to a concept or question. It sits in the block that holds the concept, or in `testing` for a qid, and moves with the concept. `<path>` is relative to the graph directory or absolute; it is not a citation and carries no hash. Written by `tm aid`, removed by `tm aid rm`. `tm show <id>` and `tm report` list aids. The gc that clears a passed concept's tests leaves concept aid lines alone; an aid on a qid is removed with the question and logged in the `gc` event's `meta` (section 8).
 
 Anything else outside this subset is a lint error. No command mutates a file that fails lint.
 
@@ -264,6 +298,14 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm recite <concept> <locator>:START-END` | re-point a concept citation to a new range that resolves to the same hash. Logged | `ok` |
 | `tm check --drift <concept>` | grader: for a passed concept, read its `grade` events, resolve each question citation against the current source, and emit per-question pairs for judging whether the pass survives | the recheck payload |
 | `tm grade --drift <concept> keep\|reopen "<summary>"` | grader: record the recheck verdict; `keep` re-hashes the concept citation; `reopen` runs `reopen` with the summary as the GAP | `ok` |
+| `tm migrate [<file>]` | upgrade a format-1 graph to format 2 (section 4.6), rewriting each citation only to a locator that resolves to the same hash and listing what it cannot convert; always writes `%% tm:format 2` and exits 0. `--dry-run` prints without writing. Logged | one line per citation, then a summary |
+| `tm repo add <alias> <path>` | register a repo alias in machine config for `git:` locators (section 13) | `ok` |
+| `tm repo rm <alias>` | remove a repo alias | `ok` |
+| `tm repo list` | list registered aliases and their paths | one line per alias |
+| `tm cache clear` | empty the conversion and fetch cache (section 3) | `ok` |
+| `tm cache list` | list cache entries | one line per entry |
+| `tm aid <id> <path>` | link an aid to a concept or question (section 4.6). Logged | `ok` |
+| `tm aid rm <id> <path>` | unlink an aid. Logged | `ok` |
 | Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when a doc is configured; otherwise one usage line per command |
 | `tm --help --all` | one usage line per command, whatever the doc setting | usage lines |
 | `tm --help <command>`, `tm <command> --help [<flag>]` | specific inquiry | that command's usage line, or one line on the flag |
@@ -307,6 +349,8 @@ The `reserve` count is printed only when it is nonzero.
 | Command | Refuses when |
 |---|---|
 | any mutating command | the graph fails lint |
+| any command except `migrate`, `lint`, help | the graph's format is below the binary's (`fix: tm migrate`) |
+| any command | the graph's format is above the binary's (`fix:` to upgrade tm) |
 | `add` | ID exists (`fix: tm reopen` when it is passed), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
 | `link` | unknown ID, non-concept endpoint, or cycle |
 | `edit` | the ID is a question or answer; the concept is passed or has any question |
@@ -316,10 +360,13 @@ The `reserve` count is printed only when it is nonzero.
 | `reserve` | the concept is not in `untested`, or has any question |
 | `activate` | the concept is not in `reserve` |
 | `prune` | the goal is not in `untested` (`fix: tm activate <goal>` when it is in `reserve`), or `--keep` is below 1 |
-| `add`, `q` | the cited file cannot be fetched (URI locator, fetch failed) |
+| `add`, `q` | the cited URI cannot be fetched (fetch failed after a cache miss or expiry) |
 | `add`, `q` | a converter is required for the MIME type or extension and none is configured |
 | `add`, `q`, `recite` | the configured converter's version does not match its pinned value |
-| `add`, `q` | the path is not in the working tree and git is not configured (sparse checkout or deleted file) |
+| `add`, `q` | a plain-path locator is not in the working tree (`fix: cite it as git:<alias>@<ref>:<path>` when it is committed) |
+| `add`, `q`, `recite` | a `git:` locator names an unknown alias (`fix: tm repo add <alias> <path>`) |
+| `add`, `q`, `recite` | a `git:` locator is used with no `git` configured, or its `<ref>`, `<a>`, or `<b>` does not resolve |
+| `add`, `q`, `recite` | the resolved locator lies under aids-dir (`err: <path> is an aid, not a source`; `fix: cite the primary source; link the aid with tm aid <id> <path>`) |
 | `recite` | the new range does not hash to the existing citation hash |
 | `check --drift` | the event log is missing or unreadable (`fix: tm reopen`) |
 | `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |
@@ -435,12 +482,12 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `ev` | Fields |
 |---|---|
 | `new`, `load` | `file` |
-| `add` | `id`, `scope`, `src`, `parents`, `children`; optional: `commit` (when locator is inside a git repo), `url` (final URL after redirects), `mime`, `converter`, `converter_version`, `fetched_at` |
+| `add` | `id`, `scope`, `src`, `parents`, `children`; optional: `ref` (the git ref as typed), `commit` (resolved SHA for a `git:` file-at-ref citation), `url` (final URL after redirects), `mime`, `converter`, `converter_version`, `fetched_at` |
 | `link` | `from`, `to`, `rel` |
 | `edit` | `id`, `before`, `after` |
 | `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and `answer: <pending answer text>` if a pending answer existed |
 | `gap` | `concept`, `before`, `after` |
-| `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
+| `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `ref`, `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
 | `answer` | `q`, `raw`, `asked`; optional: `concede: true` (when `--concede`) |
 | `grade` | `q`, `verdict`, `recorded` (differs from `verdict` under 8.2), `summary`, `raw`, `src_text`, `guided`, `oos`; optional: `via: concede` (on the `--concede` path) |
 | `pass` | `concept`, `batches`, `unblocked` |
@@ -451,8 +498,10 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `prune` | `goal`, `keep` (null without `--keep`), `moved` (IDs parked, in file order) |
 | `gate` | `concept`, `trip` (`probes`, `stall`), `base`, `via` (`add`, `activate`, `reopen`, `override`), `reason` |
 | `rehash` | `id`, `before` (old citation), `after` (new citation with hash) |
-| `recite` | `id`, `before` (old citation), `after` (new citation at new range) |
+| `recite` | `id`, `before` (old citation), `after` (new citation at new range); optional: `ref` (the git ref as typed), `commit` (resolved SHA for a `git:` file-at-ref citation) |
 | `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; per question: `q`, `src_text_before`, `src_text_after` |
+| `aid` | `id` (concept or qid), `path`, `action` (`add`, `rm`) |
+| `migrate` | `from`, `to` (format numbers), `rewritten` (count), `left` (count), `unresolved` (IDs left as plain paths) |
 
 `src_text` in `grade` records what the grader saw, so a later audit survives edits to the source file.
 
@@ -492,9 +541,11 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 11. Every citation names an existing file and an in-bounds line range.
 12. Passed concepts have no tests, no GAP, and no gate line. Reserve concepts have no tests and no gate line.
 13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
-14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`.
+14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`. No unencoded `:` appears inside a `git:` locator's `<path>`; lint refuses it with `fix: percent-encode : as %3A`.
 15. When `%% tm:next` is present, its `q` value must be strictly greater than every `qN` and `aN` suffix in the file, and its `batch` value must be strictly greater than every `probe_N` and `teach_N` suffix. Lint refuses a stale counter with `fix: raise the counters in %% tm:next`.
-16. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
+16. No citation's locator lies under aids-dir (section 3). Lint refuses one with `fix: cite the primary source; link the aid with tm aid <id> <path>`. This is path arithmetic on the locator, not a file read.
+17. The `%% tm:format` marker, when present, is at most the binary's format. Lint refuses a higher format with a `fix:` to upgrade tm. A lower format is a `migrate` matter, not a lint failure; `lint` accepts it so `migrate` can lint its own result.
+18. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
 
 Runtime lint checks the subset grammar only and links no Mermaid parser. Whether the subset is valid Mermaid is a property of the grammar and the writer, so it is proven in CI by the conformance suite (16.6), against the real parser.
 
@@ -550,14 +601,15 @@ stateDiagram-v2
     }
 ```
 
-Four behaviors the CLI cannot enforce belong in the teacher's prompt:
+Five behaviors the CLI cannot enforce belong in the teacher's prompt:
 
 1. Teach questions target the diagnosed gap, not the scopes of the locked probes.
 2. The grader's spawn prompt carries the question ID and nothing about the user.
-3. The no-memory rule: model knowledge may draft questions and explain during teaching, but it never becomes source. When no real source can be obtained, the teacher says so and stops. Nothing model-authored is stored as source.
-4. The file-access rule: the model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on those file patterns; the CLI cannot.
+3. The no-memory rule: model knowledge may draft questions and explain during teaching, but it never becomes source. When no real source can be obtained, the teacher says so and stops. Nothing model-authored is stored as source or cited, including summaries, examples, scripts, and study guides derived from real sources.
+4. The file-access rule: the model never reads or writes `<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on those file patterns; the CLI cannot. Alongside that deny, the adapter recommends a deny on writes under src-root with an allow for aids-dir; that pairing is the only enforcement against a teacher-authored file placed outside aids-dir and cited as a plain path.
+5. The aids rule: everything the teacher writes — examples, study guides, generated diffs, copies it fetches for itself — goes in aids-dir and is linked with `tm aid`; it is never cited. `tm add`, `tm q`, and `tm recite` refuse a citation resolving under aids-dir and lint refuses one in the graph, but a teacher-authored file placed elsewhere is undetectable by the CLI; the harness deny in rule 4 is the only guard.
 
-The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and records their root with `tm new --src-root <dir>`. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and points at the setup reference.
+The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and records their root with `tm new --src-root <dir>`. It registers every repo the learner names with `tm repo add <alias> <path>`, so repo content cites through one portable `git:` form. It cites web docs by URL and lets the cache carry the fetch and conversion cost; drift on a live URL is caught at most one cache TTL late. Learner-supplied local files — corporate downloads, output of other programs or agents — are cited as plain paths. The teacher never saves a copy of anything: a copy it makes is an aid, and only a copy the learner supplies is a legitimate plain-path source. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and for writes under src-root outside aids-dir, and points at the setup reference.
 
 The **Map phase** delegates to the planner adapter (`skill/teach-me/agents/teach-me-planner.md`). The teacher's spawn prompt carries the learning goal, the source locations, what the learner says they already know, and the request scope: initial map, extension around a named concept, or errata against named concepts. For extension or errata the teacher passes `tm report <concept>` output so the planner sees the existing foundations. The planner maps to a bounded depth around the goal and checks `reserve` before adding, since the foundation it needs may already be parked. It returns one paragraph; the teacher reads the result through `tm status` and `tm show`, never through the planner's prose.
 
@@ -571,6 +623,7 @@ The **Prune phase** follows every Map. The planner's prompt primes inclusion, an
 - A learner who disputes a verdict: not errata. Re-probe with `--re`; the grader decides.
 - A gate: take the exits in the `fix:` line's order. Activate a reserve parent when one fits the GAP; otherwise spawn the planner to add one, or reopen a passed parent. `--override` only when the learner asks for it, with the learner's reason; the teacher's own read of the verdicts is the bias the grader isolation exists to block.
 - A learner who asks to skip or set aside a concept: `tm reserve` it if it has no questions. It stops blocking its children and can be activated later.
+- An old graph on a new binary: a command refuses with `fix: tm migrate`. Run `tm migrate`, read its output, register with `tm repo add` any repo it names, and re-run until nothing more resolves. Leftover plain paths that still resolve are legitimate and stay; for a concept whose source is now registered, `tm recite` points it at the `git:` form.
 - **Answering**: the question UI offers an explicit "I don't know" choice for every question. Picking it is the only trigger for `--concede`; record it with `tm answer <qid> "I don't know" --concede` and no grader is spawned. Any typed answer, however weak or short, is recorded without the flag and graded by a grader; the teacher never decides on its own that an answer amounts to a concession.
 
 ## 13. Configuration
@@ -582,6 +635,7 @@ The **Prune phase** follows every Map. The planner's prompt primes inclusion, an
 | `TM_ROLE` | unset | `teacher` or `grader`; soft guard |
 | `TM_ERRORS` | `ERRORS.jsonl` beside the graph | error log path |
 | `TM_DOC` | unset | path to the skill or agent file that documents `tm` for this harness; baseline help defers to it, and its `metadata.tm-version` is checked. Overrides the `doc` config key for one call |
+| `TM_CACHE_TTL` | `24h` | conversion and fetch cache TTL (Go duration); overrides the `cache-ttl` key for one call; `0` disables the cache |
 | `TM_PROBE_MIN` / `TM_PROBE_MAX` | 2 / 5 | probe batch size |
 | `TM_TEACH_MIN` / `TM_TEACH_MAX` | 1 / 3 | teach batch size |
 | `TM_MAX_FAILS` | 2 | failed probe batches before the gate |
@@ -599,43 +653,53 @@ Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per pr
 | `ext <ext>` | `= <mime>` | map a file extension to a MIME type for converter lookup |
 | `version <program>` | `= <string>` | required version pin; the CLI checks that the pin is a substring of the first output line before the first use |
 | `version-cmd <program>` | `= <command...>` | version command override (default: `<program> --version`) |
-| `git` | `= <command>` | git executable; enables `HEAD` blob resolution for missing files and commit recording on `add` and `q` |
+| `git` | `= <command>` | git executable; required for any `git:` locator (section 4.4). `HEAD` is not special and the CLI never contacts a remote |
+| `repo <alias>` | `= <path>` | local path for a `git:` alias; written by `tm repo add`, removed by `tm repo rm`. The alias in the graph is portable; the path is machine-specific |
+| `cache-ttl` | `= <duration>` | conversion and fetch cache TTL (Go duration); default `24h`; `0` disables the cache |
+| `aids-dir` | `= <dir>` | where teacher aids live (section 3); default `<graph dir>/aids` |
 
 
 ### 13.1 Source resolution
 
-Resolution order: parse the citation into hash, locator, and range; locate the source bytes (path or fetch); convert if a converter matches the MIME type or file extension; slice the line range; compare the computed hash.
+Resolution order: parse the citation into hash, locator, and range; locate the source text (plain path, `git:` locator, or fetch, possibly from the cache); convert if a converter matches the MIME type or file extension; slice the line range; compare the computed hash.
 
-**Paths.** When the locator is a relative or absolute path, the file is read raw unless a converter is configured for its extension, in which case it is piped through the converter.
-
-When the path does not exist locally and the path is inside a git repository: walk up from the longest existing ancestor until a `.git` directory or a `gitdir:` file is found (the latter for worktrees and submodules). Compute the repo-relative path. If `git` is configured (section 13), request the blob at `HEAD` through it. If git is not configured, or `HEAD` has no such blob:
+**Plain paths.** When the locator is a relative or absolute path, the file is read raw unless a converter is configured for its extension, in which case it is piped through the converter. A plain path carries no git semantics: the CLI does no `HEAD` fallback and records no `commit`. A path not in the working tree refuses:
 
 ```
-err: my-folder/file.txt is not in the working tree
-fix: check it out, or set git in <config> to read it from HEAD
+err: <path> is not in the working tree
+fix: cite it as git:<alias>@<ref>:<path> if it is committed
 ```
 
-The CLI never talks to a remote git server. A file that exists only on the remote requires the user to fetch, or the teacher cites the remote URL at a commit instead.
+**`git:` locators.** A `git:` locator (section 4.4) names committed content in the repo registered under `<alias>` (`tm repo add`, section 13). The `git` key is required; `HEAD` is not special, and the CLI never contacts a remote. On `add`, `q`, and `recite` the CLI resolves each `<ref>`, `<a>`, `<b>` with `git rev-parse` and stores the short SHA, so the citation is pinned to a commit. Every git run uses `-C <repo path>` and a fixed config that disables color, the pager, and user-specific diff drivers (`-c core.pager=cat -c color.ui=false`), so output is byte-identical across machines:
 
-**Commit recording.** On `add` and `q`, when the locator is inside a git repo, the CLI reads `HEAD` by reading `.git/HEAD`, then the ref under `refs/heads/` or in `packed-refs`, following `commondir` for worktrees and submodules. This is a direct file read; no git process is exec'd. The resolved commit SHA is written to the `commit` log field.
+| Locator form | Git command |
+|---|---|
+| `git:<alias>@<ref>:<path>` | `git cat-file -p <sha>:<path>` |
+| `git:<alias>@<sha>` | `git show <sha>` |
+| `git:<alias>@<a>..<b>` | `git diff <a> <b>` |
+| `git:<alias>@<a>..<b>:<path>` | `git diff <a> <b> -- <path>` |
 
-**URIs.** Fetched with the standard library: follow redirects and record the final URL; apply a timeout and a size cap; assume UTF-8; no script execution. The `Content-Type` header gives the MIME type; a converter is matched by MIME type first, then by the extension of the URL path. `text/plain` and `text/markdown` are read raw. Any other type with no configured converter refuses:
+A converter applies only to a file at a ref, through the extension rule; commit and diff output is already text. An unknown alias, an unresolvable ref, or a `git:` locator with no `git` configured refuses (section 7). Forge-only objects (pull requests, issues) are not git; the teacher cites the forge's plain-text `.diff` or `.patch` URL as a fetched URI instead.
+
+**URIs and the cache.** A URI locator is fetched with the standard library: follow redirects and record the final URL; apply a timeout and a size cap; assume UTF-8; no script execution. The `Content-Type` header gives the MIME type; a converter is matched by MIME type first, then by the extension of the URL path. `text/plain` and `text/markdown` are read raw. Any other type with no configured converter refuses:
 
 ```
 err: fetch https://... failed: no converter for <mime>
 fix: add a convert <mime> line to <config>
 ```
 
+Fetch and conversion pass through the cache (section 3), keyed by SHA-256 over the final locator string, the converter command, and the converter version. A hit within the TTL skips the fetch and the conversion, and the hash check runs against the cached text; a miss or an expired entry fetches, converts, stores the text and `fetched_at`, then checks. The TTL is `TM_CACHE_TTL` or the `cache-ttl` key (Go duration, default `24h`; `0` disables the cache). Drift on a live URL is therefore detected at most one TTL late; that is the accepted trade for not re-fetching on every read.
+
 A failed fetch (no egress, timeout, non-2xx) refuses:
 
 ```
 err: fetch https://... failed: <reason>
-fix: save a static copy under TM_SRC_ROOT and cite it
+fix: retry when egress is available, or ask the learner for a copy and cite the copy as a plain path
 ```
 
-Dynamic pages are a stated limitation; the correct move is a static copy cited locally.
+A copy the learner supplies is a legitimate plain-path source; a copy the teacher makes is an aid (section 3) and is never cited. Dynamic pages remain a stated limitation.
 
-**One conversion rule.** A converter applies whenever one is configured for the MIME type or for the extension of a local file, regardless of whether the source is local or remote. A local `.html` file is therefore cited by converted line numbers once a converter for it exists. Conversion is deterministic given the same input bytes and the same converter version, so converted output is regenerable and never stored durably.
+**One conversion rule.** A converter applies whenever one is configured for the MIME type or for the extension of a local file or a file at a ref, regardless of whether the source is local, committed, or remote. A local `.html` file is therefore cited by converted line numbers once a converter for it exists. Conversion is deterministic given the same input bytes and the same converter version, so converted output is regenerable, cached (section 3), and never stored in the graph.
 
 **PDF.** Handled through the same mechanism, with `pdftotext` as the configured converter. For arXiv, prefer the versioned HTML rendering or the e-print source; PDF is the fallback.
 
@@ -648,11 +712,21 @@ err: pandoc is 3.2.0, config pins 3.1.11
 fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may drift
 ```
 
-**`git`.** The `git` key enables `HEAD` blob resolution (above) and nothing else.
+**`git`.** The `git` key names the git executable and is required for any `git:` locator. The CLI runs only `rev-parse`, `cat-file`, `show`, and `diff`, each with `-C <repo path>`, and never contacts a remote.
 
 **No config.** With no config file and no relevant keys, the CLI execs no external command and fetches nothing. The narrowing of §2.1 is additive: the default behavior is unchanged.
 
 **Security.** Converters process untrusted bytes fetched from URLs named in the graph; a hand-edited graph can make the CLI fetch and convert anything it names. The user chooses the converters. The skill has the model advise on the config lines and confirm with the user before writing the config.
+
+### 13.2 Migration
+
+`tm migrate [<file>]` upgrades a format-1 graph to format 2 (section 4.6). It never changes a hash or a range: a citation is rewritten only to a locator that resolves to the same hash, so immutable questions (section 5) are rewritten safely, the hash proving their content is unchanged. Per citation with a plain-path locator, in order:
+
+1. If the `add`/`q` event logged a `commit` and the path is inside a repo matching a configured alias (by path prefix), try `git:<alias>@<commit>:<repo-relative path>` and keep it if the hash matches. If no alias matches, report `needs: tm repo add <alias> <repo path>` and leave the citation.
+2. Else if the event logged a `url`, fetch it through the current converter and keep `<url>` if the hash matches.
+3. Else leave it: a legitimate plain path.
+
+Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per citation left with its reason, then a summary. `tm migrate` always writes `%% tm:format 2` and exits 0 even when some citations stay, because plain paths keep resolving. `--dry-run` prints the same report without writing. The run takes the lock like any mutation, lints the result, and logs one `migrate` event (section 10). The teacher resolves leftovers by hand: once a source is registered, `tm recite` re-points a concept citation; a question's plain path stays as written.
 
 ## 14. Decision record
 
@@ -711,7 +785,7 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 | 51 | `tm report` walks foundations: outline by default, `--fulltext` bounded by hops | requirement 1 with no model-authored intermediate text | derived study docs verified by a judge agent; anthologies of verbatim passages | agreed |
 | 52 | No-memory rule in the teacher adapter | the citation machinery is defeated silently by a notes file written from memory; the rule is the one thing the model will not enforce on itself | trust the model to source honestly | agreed |
 | 53 | `grade` keeps `src_text`; `add` and `q` do not copy text | audit needs what was judged; the hash covers detection; bounded log growth | copy every citation on write; filesystem compression | agreed |
-| 54 | Git read through the configured command; commit recorded by reading refs directly | packfile parsing is real work; unreachable commits can be garbage-collected, so the commit is provenance, not the verification mechanism | pure-Go object reader; go-git; commit hash in the citation | agreed |
+| 54 | Git read through the configured command; commit recorded by reading refs directly | packfile parsing is real work; unreachable commits can be garbage-collected, so the commit is provenance, not the verification mechanism | pure-Go object reader; go-git; commit hash in the citation | agreed; commit is now the `git rev-parse` SHA written on `add`/`q`/`recite`, direct ref-reading struck in v0.22 (65, 66) |
 | 55 | Concept citations may be updated on drift through `recite` (hash-preserving), `reopen --src`, and a grader recheck; each logged with before and after | no verdict is graded against a concept citation, so updating it rewrites nothing a pass was earned against; the graph is already not add-only | errata nodes with edge transfer and a superseded marker; teacher override with a reason | agreed |
 | 56 | Whether a pass survives a source change is a grader's verdict from the logged answers and the current text, never the teacher's | same isolation argument as grading; the teacher's bias runs toward always or never re-testing | teacher `recite --override`; automatic reopen on any drift | agreed |
 | 57 | The model reaches the graph, log, and lock only through the CLI; adapters ask for harness deny rules on `tm new`, tell the model never to touch the files, and require it to report any accidental access as a misconfiguration | every CLI invariant assumes the CLI is the only writer and the grader's isolation assumes the model cannot read verdict history except through `show --history`; a model that opens the files bypasses all of it silently | CLI-side enforcement (impossible: it cannot see who opened a file); trust the model; encrypted or obfuscated graph | agreed |
@@ -719,8 +793,13 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 | 59 | A fourth block, `reserve`, holds concepts that are mapped but not required for the current goal; a reserve parent does not block the frontier; only question-less untested concepts can enter it | a live lesson showed a dense map turning a targeted lesson into a survey, because every mapped edge became mandatory; a concept's state is its block, so a parked concept is a block, not a marker; the edges and citations survive, so a later gap wakes a foundation instead of authoring one; the entry rule means no verdict was earned against a parked prerequisite | `:::inactive` class on concepts (breaks 4.5 and makes every count filter); dotted `-.->` edges (edges as state, and new grammar); deleting the extra concepts | agreed, 2026-09-24 |
 | 60 | `tm prune` is mechanical (ancestor closure and nearest-N by hop distance); a pruner sub-agent makes the required-versus-related call, with tools that cannot grow the graph | edges do not distinguish a foundation the goal needs from one that is merely related, so the closure is a floor, not the answer; the planner's prompt primes inclusion and it defends its own map, so the judgment goes to a separate prompt whose default is to park; the tool split keeps the pruner from becoming a second planner | planner prunes its own map; CLI-only prune; a hard-versus-soft edge kind chosen at link time (the same judgment the planner already gets wrong, made without the goal in view) | agreed, 2026-09-24 |
 | 61 | `activate` on a parent of a gated concept clears the gate with `via: activate`, and the gate's `fix:` line names reserve parents first | activating a parked prerequisite is the same upstream move as `add --child`, made cheaper by the planner's earlier work; the refusal is where the teacher learns the cheap exit exists | activate as a plain move with a separate gate step; listing exits without the concept's reserve parents | agreed, 2026-09-24 |
-| 62 | Monotonic question and batch IDs via a `%% tm:next` counter written into the graph file; on first allocation for a file without the line, seeded from max(max in file, max in log)+1 | the graph file is the single source of truth (no cache or side state): once the line is written the log is never consulted again; IDs already in the log cannot be reused even after the pass procedure removes their nodes, so `tm show <id> --history` never interleaves two different questions | log-derived allocation on every call (log is append-only history, not state); keeping tests of passed concepts in the file (reuse only harmed history lookups; the gate base is computed over the concept's own batches so it was never affected) | agreed, 2026-09-24 |
+| 62 | Monotonic question and batch IDs via a `%% tm:next` counter written into the graph file; on first allocation for a file without the line, seeded from max(max in file, max in log)+1 | the graph file is the single source of truth (the graph carries no cache or side state): once the line is written the log is never consulted again; IDs already in the log cannot be reused even after the pass procedure removes their nodes, so `tm show <id> --history` never interleaves two different questions | log-derived allocation on every call (log is append-only history, not state); keeping tests of passed concepts in the file (reuse only harmed history lookups; the gate base is computed over the concept's own batches so it was never affected) | agreed, 2026-09-24 |
 | 63 | `tm answer --concede` writes the fail itself when the learner explicitly concedes | grader isolation guards against the teacher's pass-bias, and a learner-declared fail has nothing to judge; a grader spawn costs the spawn prompt and the return, far more than one CLI call; the trigger is mechanical (the learner's choice), so the teacher never interprets an answer | routing concessions to a cheaper grader model (still a spawn); letting the teacher classify weak answers as concessions (the interpretation step isolation exists to block) | agreed, 2026-09-24 |
+| 64 | A `%% tm:format` marker versions the graph file; every command but `migrate`, `lint`, and help refuses a below-format graph, and `tm migrate` upgrades it in place, rewriting a citation only to a locator that hashes the same | a citation-format change needs a mechanical upgrade path, and the graph's own version must be separate from the doc's `tm-version`; the hash proves content is unchanged, so migrate may rewrite immutable questions | no marker with best-effort parsing of old graphs; reusing the doc `tm-version`; a migration that changes hashes | agreed, 2026-09-24 |
+| 65 | One `git:` locator form for all committed content — file at a ref, a commit, a diff, a diff for one path — keyed by a machine-local repo alias, with `<ref>`/`<a>`/`<b>` resolved to a short SHA on write | repos live anywhere on disk and git produces text objects beyond files; the alias keeps the graph portable while the path stays machine config; resolving to a SHA pins the citation so it drifts only on a history rewrite; the alias excludes `@` and `:`, so parsing stays unambiguous and Windows drive letters are sidestepped | absolute repo paths in the graph; a separate citation form per git object kind; storing the ref as typed and resolving on every read | agreed, 2026-09-24 |
+| 66 | Plain paths lose git semantics: a plain-path locator is a file on disk read raw or through a converter, with no `HEAD` fallback and no `commit` field; a missing file refuses and points at the `git:` form | the silent HEAD fallback gave repo files two citation forms; splitting the kinds makes each locator mean one thing and keeps plain local non-repo files (downloads, program output) first-class | HEAD fallback for any path inside a repo (the v0.21 behavior, and the ref-reading of decision 54); dropping plain non-repo files | agreed, 2026-09-24 |
+| 67 | The conversion and fetch cache ships, in the user cache dir keyed by locator, converter, and version, with a `cache-ttl` (default 24h, `0` disables); it holds regenerable text and cost, never graph state | re-fetching and re-converting on every read is the cost the deferred cache was meant to remove; a TTL bounds live-URL staleness to one interval; scoping "no cache or side state" to graph state reconciles §3 | the OS temp directory (the v0.21 deferral); the graph directory or src-root; no TTL, which never notices live-URL drift | agreed, 2026-09-24 |
+| 68 | Teacher aids get a home (`aids-dir`, linked with `tm aid`) and cannot be cited: `add`, `q`, `recite`, and lint refuse a citation resolving under aids-dir, and the adapter recommends a harness deny on writes under src-root outside aids-dir | aids are useful but citing them defeats the source machinery; a mechanical refusal plus one deny rule is the enforceable part, and a file placed elsewhere is the harness's to block | a source registry the grader checks; the grader policing citations; the CLI detecting model authorship of a file | agreed, 2026-09-24 |
 
 ## 15. Deferred
 
@@ -734,7 +813,6 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 - Automatic grader spawning: a filter command the CLI runs, or a harness skill that injects `tm check` output into the grader's prompt. Both close the teacher's channel to the grader and both sit on `check` and `grade` unchanged.
 - Harness hook that authenticates the grader role.
 - Quote and position selectors, and fragment anchoring, for web citations.
-- Conversion cache (OS temp directory, keyed by input hash, converter, and version).
 - Learner-facing study guide from `tm report` (same walk over the passed block, question text omitted).
 - Remote git fetch.
 - `tm lint --remote` (resolve fetched citations).
@@ -780,8 +858,8 @@ internal/state/           derived state (section 5): frontier, batch states, tar
 internal/ops/             one file per mutating command: invariants (section 7), transitions (section 8)
 internal/lint/            section 11
 internal/cite/            citation parsing and hash computation
-internal/config/          config file lookup and targeted key writes: file, src-root, doc
-internal/source/          source resolution: resolve, fetch, convert, git HEAD blob
+internal/config/          config file lookup and targeted key writes: file, src-root, doc, repo aliases
+internal/source/          source resolution: resolve, fetch, convert, git locators, cache
 internal/report/          tm report: walk, format, inline text
 internal/eventlog/        section 10
 internal/errlog/          section 10.1
@@ -825,6 +903,10 @@ docs/spec.md              this document
 | Fuzz | `FuzzEscape` (escape then unescape is identity) and `FuzzParse` (no panics; anything accepted re-serializes to something accepted). CI runs each for 30 s |
 | Invariants | one case per refusal in section 7, asserting exit code, `err:` line, `fix:` line, and the `ERRORS.jsonl` row |
 | Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes, prune then pass through a reserve parent, gate cleared by `activate`, conceded probe opens a teaching round, two conceded probe batches trip the gate. Monotonic ID lifecycle: grade a concept's probes to pass; allocate a new question for a second concept; assert the new ID (e.g. `q3`) exceeds every `qN`/`aN` ID recorded in the event log before the allocation (verifies §4.3 non-reuse after the pass procedure clears the testing block). |
+| Format and migrate | a format-1 graph refuses on every command but `migrate`, `lint`, and help; `tm migrate` rewrites a repo-path citation to `git:`, leaves an unresolvable one with a reason, writes `%% tm:format 2`, exits 0, and the result lints; a format above the binary refuses everywhere |
+| Git resolution | a fixture repo built in a temp dir by the test; each `git:` form (file at a ref, a commit, a diff, a diff for one path) resolves to the expected text and hash; `<ref>` is rewritten to a short SHA on write; an unknown alias, an unresolvable ref, and no `git` configured each refuse |
+| Cache | a fetch is served from the cache within the TTL and re-fetched after expiry; `cache-ttl=0` disables it; `tm cache clear` empties it |
+| Aids | `tm add`, `tm q`, and `tm recite` refuse a citation resolving under aids-dir and lint refuses one; `tm aid` and `tm aid rm` write and remove the meta line; a qid's aid is removed with its question and logged in the `gc` event |
 | Concurrency | 20 parallel `grade` calls on one graph all land, the file lints, and the event log has 20 `grade` rows |
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
 
