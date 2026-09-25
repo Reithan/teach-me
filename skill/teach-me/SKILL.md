@@ -121,8 +121,10 @@ move. The phases:
    - Aids: anything the teacher writes — study guides, generated diffs,
      summaries — goes under aids-dir (default `<lesson dir>/aids`) and is
      linked with `tm aid <id> <path>`; it is never cited. `tm add`, `tm q`,
-     `tm recite`, and lint refuse a citation under aids-dir, so a refusal with
-     that `fix:` line means "cite the primary source instead". No registry file
+     `tm recite`, and lint refuse a citation under aids-dir
+     (`fix: cite the primary source; link the aid with tm aid <id> <path>`);
+     `tm src` gives the same `err:` with only `fix: cite the primary source`.
+     No registry file
      of sources exists or is needed; the graph and `tm show` are the registry.
    - **Line ranges come only from `tm src`.** Never derive a range from Read,
      WebFetch, a search result, or memory. Workflow: find a candidate source

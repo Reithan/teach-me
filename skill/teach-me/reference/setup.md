@@ -147,6 +147,9 @@ err: <path> is an aid, not a source
 fix: cite the primary source; link the aid with tm aid <id> <path>
 ```
 
+`tm src` gives the same `err:` line with only `fix: cite the primary source`
+(no concept or question id, since `src` is read-only).
+
 **aids-dir must not sit under src-root.** The deny rule on writes under
 src-root (see Harness permissions below) cannot carve an exception for
 aids-dir; the two trees must be separate.
