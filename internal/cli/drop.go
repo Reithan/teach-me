@@ -297,6 +297,9 @@ func dropQuestionDrift(
 	if pendingAnswerText != "" {
 		evFields["answer"] = pendingAnswerText
 	}
+	if len(qn.Aids) > 0 {
+		evFields["aids"] = qn.Aids
+	}
 
 	row := eventlog.NewRow("drop", evFields)
 

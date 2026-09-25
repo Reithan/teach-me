@@ -205,6 +205,9 @@ func showConcept(ctx *Context, s *state.State, g *graph.Graph, id string,
 			}
 		}
 	}
+	if len(concept.Aids) > 0 {
+		_, _ = fmt.Fprintf(ctx.Out, "aids: %s\n", strings.Join(concept.Aids, ", "))
+	}
 
 	// Parents and children (concept-to-concept edges).
 	var parents, children []string
@@ -284,6 +287,9 @@ func showQuestion(ctx *Context, s *state.State, _ *graph.Graph, id string,
 	}
 	if drifted, _, driftErr := resolver.CheckDrift(q.Cite); driftErr == nil && drifted {
 		_, _ = fmt.Fprintf(ctx.Out, "DRIFT %s\n", q.Cite)
+	}
+	if len(q.Aids) > 0 {
+		_, _ = fmt.Fprintf(ctx.Out, "aids: %s\n", strings.Join(q.Aids, ", "))
 	}
 
 	// Answer section.

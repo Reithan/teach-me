@@ -207,10 +207,17 @@ func gradeApply(g *graph.Graph, s *state.State, qid, verdict, summary string, gu
 				unblocked = []string{}
 			}
 
+			qidAids := make(map[string][]string)
+			for _, item := range newG.TestingItems {
+				if item.Q != nil && len(item.Q.Aids) > 0 {
+					qidAids[item.Q.ID] = item.Q.Aids
+				}
+			}
+
 			rst, newG2 := ops.RemoveTestingSubtree(newG, s, conceptID)
 			newG3 := ops.MoveToPassed(newG2, conceptID)
 
-			gcRow := gradeGCRow(rst, "pass")
+			gcRow := gradeGCRow(rst, "pass", qidAids)
 			passRow := eventlog.NewRow("pass", map[string]any{
 				"concept":   conceptID,
 				"batches":   rst.Batches,
@@ -245,7 +252,8 @@ func gradeReplaceAnswer(g *graph.Graph, newAN *graph.AnswerNode) *graph.Graph {
 // gradeGCRow constructs the gc event row (§10) from a RemovedSubtree.
 // nodes: question nodes use Scope as label (batch class as class);
 // answer nodes use Label (answer text) and their grading class.
-func gradeGCRow(rst ops.RemovedSubtree, reason string) eventlog.Row {
+// qidAids maps question IDs to their aid paths, captured before gc.
+func gradeGCRow(rst ops.RemovedSubtree, reason string, qidAids map[string][]string) eventlog.Row {
 	nodes := make([]map[string]any, len(rst.Nodes))
 	for i, n := range rst.Nodes {
 		nodes[i] = map[string]any{
@@ -268,11 +276,22 @@ func gradeGCRow(rst ops.RemovedSubtree, reason string) eventlog.Row {
 			"base":    m.Base,
 		}
 	}
-	return eventlog.NewRow("gc", map[string]any{
+	// Collect aids for removed question nodes.
+	aids := make(map[string][]string)
+	for _, n := range rst.Nodes {
+		if paths, ok := qidAids[n.ID]; ok && len(paths) > 0 {
+			aids[n.ID] = paths
+		}
+	}
+	payload := map[string]any{
 		"concept": rst.Concept,
 		"reason":  reason,
 		"nodes":   nodes,
 		"edges":   edges,
 		"meta":    meta,
-	})
+	}
+	if len(aids) > 0 {
+		payload["aids"] = aids
+	}
+	return eventlog.NewRow("gc", payload)
 }

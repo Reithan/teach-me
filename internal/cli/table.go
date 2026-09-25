@@ -150,6 +150,16 @@ var Table = []Command{
 		Run:          activateRun,
 	},
 	{
+		Name: "aid",
+		PosArgs: []PosArg{
+			{Name: "rm|<id>"},
+			{Name: "<id/path>"},
+			{Name: "[<path>]", Optional: true},
+		},
+		ForbidGrader: true,
+		Run:          aidRun,
+	},
+	{
 		Name: "prune",
 		PosArgs: []PosArg{
 			{Name: "<goal>"},

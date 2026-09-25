@@ -454,6 +454,13 @@ func renderOutline(concepts []ConceptInfo) string {
 			sb.WriteString("\n")
 		}
 
+		if len(cn.Aids) > 0 {
+			sb.WriteString("\nAids:\n")
+			for _, a := range cn.Aids {
+				fmt.Fprintf(&sb, "- %s\n", a)
+			}
+		}
+
 		sb.WriteString("\n")
 	}
 
@@ -532,6 +539,13 @@ func renderFulltext(concepts []ConceptInfo, opts Options, reader TextReader) str
 			}
 			sb.WriteString(text)
 			sb.WriteString("```\n")
+		}
+
+		if len(cn.Aids) > 0 {
+			sb.WriteString("\nAids:\n")
+			for _, a := range cn.Aids {
+				fmt.Fprintf(&sb, "- %s\n", a)
+			}
 		}
 
 		sb.WriteString("\n")
