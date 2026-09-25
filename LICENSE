@@ -9,16 +9,20 @@ Licensing inquiries: bryan@darkplanetgames.com
 "Software" means the source code, binaries, documentation, and skill and agent
 files distributed with this license, and any part of them.
 
-"Licensor" means the copyright holder named above.
+"Licensor" means the copyright holder named above, and the Licensor's
+successors and assigns.
 
 "You" means the natural person who uses the Software under this license.
 
-"Organization" means any legal entity or group of people acting together,
-including a company, school, university, department, laboratory, research
-group, nonprofit, government body, or training provider.
+"Organization" means any legal entity, such as a company, school, university,
+nonprofit, government body, or training provider, and any unit of one, such as
+a department, laboratory, or research group.
 
-"Individual Use" means use of the Software by You, for Your own purposes, that
-no Organization directs, requires, provides, or deploys.
+"Individual Use" means use of the Software by You, for Your own purposes, and
+not on behalf of or at the direction of an Organization. Use does not stop being
+Individual Use because it happens on equipment, networks, or accounts that an
+Organization makes available to You, or because You are affiliated with an
+Organization.
 
 "Organizational Use" means any use of the Software that is not Individual Use.
 
@@ -36,12 +40,15 @@ The following are Individual Use:
   a. learning a subject for Your own interest or career;
   b. studying as a student, including for coursework You choose to use the
      Software on;
-  c. research You conduct Yourself, including studies with participants You
-     recruit and run, and publishing the results;
+  c. research You design and conduct Yourself, including studies with
+     participants You recruit and run, and publishing the results, even if the
+     research counts toward a degree or a supervisor suggested the Software;
   d. a teacher using the Software to prepare their own material, or
      suggesting it to students as an optional aid;
-  e. an employee using the Software for their own learning, provided the use
-     is not for the employer's business.
+  e. an employee learning a subject for their own knowledge or career, even
+     if the subject relates to their job, provided the employer does not
+     require or direct the use and the Software is not used to perform work
+     for the employer.
 
 4. Examples of Organizational Use
 
@@ -50,12 +57,15 @@ The following are Organizational Use and require a separate license:
   a. requiring the Software for a course, or including it in official
      curriculum or course materials;
   b. installing, hosting, or providing the Software to students, staff,
-     members, or customers;
-  c. use by a laboratory, research group, or department, whether as a shared
-     tool or in its studies;
-  d. use for a company's business, including in products, services, or
-     internal training;
+     members, or customers on behalf of an Organization;
+  c. use by a laboratory, research group, or department as a shared tool, or
+     in studies it runs as a group;
+  d. use by or for a company in its business, including in products,
+     services, required or internal training, or work performed for it;
   e. offering paid instruction, training, or services built on the Software.
+
+If a use matches examples in both section 3 and this section, it is
+Organizational Use.
 
 5. Separate licenses
 
@@ -67,16 +77,26 @@ If You are unsure whether a use is Individual Use, ask the Licensor. A written
 statement from the Licensor that a use is Individual Use is binding on the
 Licensor for that use.
 
-6. Distribution conditions
+6. Distribution
+
+Everyone who receives the Software, from the Licensor or from anyone else,
+receives a license from the Licensor under these terms. You may not grant
+licenses in the Software Yourself.
 
 When You distribute the Software or a modified version of it, You must:
 
   a. include a copy of this license and the copyright notice above;
   b. state prominently that You modified the Software, if You did; and
-  c. pass it on under this license only, without adding terms that restrict
-     what recipients may do under it.
+  c. add no terms that restrict what recipients may do under this license.
 
-7. Patents
+7. Your outputs
+
+Concept graphs, lesson files, notes, answers, and other material You create by
+using the Software belong to You, or to whoever else owns them, and this license
+places no restrictions on them. This section grants no rights in the Software
+itself.
+
+8. Patents
 
 The Licensor grants You a license, for Individual Use only, under any patent
 claims the Licensor can license that the Software, as distributed by the
@@ -84,19 +104,19 @@ Licensor, would otherwise infringe. If You bring a claim alleging that the
 Software infringes a patent, Your patent license under this section ends
 immediately.
 
-8. Termination
+9. Termination
 
 If You violate this license, Your rights under it end. If You stop the
 violation within 30 days of receiving written notice of it from the Licensor,
 Your rights are restored, once. A second violation ends Your rights
 permanently.
 
-9. No other rights
+10. No other rights
 
 This license grants no rights in the Licensor's names, trademarks, or logos,
 and no rights except those it states expressly.
 
-10. No warranty; limitation of liability
+11. No warranty; limitation of liability
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -104,3 +124,9 @@ PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY
 CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
 OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
+
+12. Severability
+
+If a court holds any provision of this license unenforceable, that provision is
+enforced to the maximum extent permitted, and the rest of this license remains
+in effect.
