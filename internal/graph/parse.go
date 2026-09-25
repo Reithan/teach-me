@@ -212,6 +212,24 @@ func (p *parser) parseBlock(g *Graph, block Block) error {
 			continue
 		}
 
+		// %% tm:next is a meta line (untested block only, at most one).
+		if strings.HasPrefix(t, "%% tm:next ") {
+			if block != BlockUntested {
+				return fmt.Errorf("graph: tm:next meta outside untested block")
+			}
+			if g.NextMeta != nil {
+				return fmt.Errorf("graph: duplicate tm:next meta line")
+			}
+			comments := p.takePending()
+			p.pos++
+			meta, err := parseNextMeta(t, comments)
+			if err != nil {
+				return err
+			}
+			g.NextMeta = meta
+			continue
+		}
+
 		// %% tm:gate is a meta line (untested block only).
 		if strings.HasPrefix(t, "%% tm:gate ") {
 			comments := p.takePending()
@@ -285,6 +303,33 @@ func parseSubgraphHeader(line string) (id, title string, err error) {
 	}
 	title = rest[:end]
 	return id, title, nil
+}
+
+// parseNextMeta parses a %% tm:next line:
+//
+//	%% tm:next q=<N> batch=<M>
+func parseNextMeta(t string, comments []string) (*NextMeta, error) {
+	rest := strings.TrimPrefix(t, "%% tm:next ")
+	parts := strings.Fields(rest)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("graph: invalid tm:next line: %q", t)
+	}
+	qStr, bStr := "", ""
+	for _, part := range parts {
+		if strings.HasPrefix(part, "q=") {
+			qStr = part[2:]
+		} else if strings.HasPrefix(part, "batch=") {
+			bStr = part[6:]
+		}
+	}
+	if !isDigits(qStr) || !isDigits(bStr) {
+		return nil, fmt.Errorf("graph: invalid tm:next line: %q", t)
+	}
+	q, b := parseDigits(qStr), parseDigits(bStr)
+	if q < 1 || b < 1 {
+		return nil, fmt.Errorf("graph: invalid tm:next line (values must be >= 1): %q", t)
+	}
+	return &NextMeta{Q: q, Batch: b, LeadingComments: comments}, nil
 }
 
 // parseGateMeta parses a %% tm:gate line:

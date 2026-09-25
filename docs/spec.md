@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.19
+# tm: teaching-map CLI, draft spec v0.20
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.18: the `reserve` block, `tm reserve`, `tm activate`, `tm prune`, the pruner role, and `activate` as a gate exit; §2, §4, §5, §6, §7, §10, §11, §12, §14, §15, §16 updated.
+Changes from v0.19: monotonic question and batch IDs via the `%% tm:next` meta line; §4.3, §4.6, §11, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -147,8 +147,8 @@ Mermaid assigns a node to the first subgraph that mentions it. I checked this ag
 ### 4.3 IDs
 
 - Concept: `[a-z][a-z0-9_]*`, chosen by the teacher. Rejected: anything matching `[qa][0-9]+`, the block IDs, and Mermaid keywords (`end`, `graph`, `flowchart`, `subgraph`, `class`, `classDef`, `click`, `style`, `default`).
-- Question: `qN`. Answer: `aN`, sharing N with its question. N is global, allocated as max + 1.
-- Batch: `probe_N` or `teach_N`. N is global across both kinds, allocated as max + 1. Any number of batches may be open.
+- Question: `qN`. Answer: `aN`, sharing N with its question. N is global, allocated from the `%% tm:next` counter (§4.6) when the line is present. When the line is absent (pre-v0.20 files), N is seeded from max(max N in the file, max N in the event log) + 1 on the first allocation, then the counter is written and maintained from that point forward. Numbers are never reused.
+- Batch: `probe_N` or `teach_N`. N is global across both kinds, allocated and advanced by the same `%% tm:next` counter. Any number of batches may be open.
 
 ### 4.4 Labels
 
@@ -192,7 +192,12 @@ Concepts carry no class. Their state is their block plus what hangs off them; a 
 
 ### 4.6 Meta lines
 
-One form exists: `%% tm:gate <concept> base=<N>` in `untested`, written when an upstream action clears a gate (section 7). Anything else outside this subset is a lint error. No command mutates a file that fails lint.
+Two forms exist, both in the `untested` block:
+
+- `%% tm:next q=<N> batch=<M>` — the monotonic allocation counter (§4.3). At most one per file. Written first in the `untested` block, before any `%% tm:gate` lines. `N` and `M` are integers ≥ 1: the next question/answer number and the next batch number to allocate. Only commands that allocate new IDs (`tm q`) write or update this line; read-only commands and commands that do not allocate leave it unchanged.
+- `%% tm:gate <concept> base=<N>` — written when an upstream action clears a gate (section 7).
+
+Anything else outside this subset is a lint error. No command mutates a file that fails lint.
 
 ## 5. Derived state
 
@@ -486,7 +491,8 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 12. Passed concepts have no tests, no GAP, and no gate line. Reserve concepts have no tests and no gate line.
 13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
 14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`.
-15. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
+15. When `%% tm:next` is present, its `q` value must be strictly greater than every `qN` and `aN` suffix in the file, and its `batch` value must be strictly greater than every `probe_N` and `teach_N` suffix. Lint refuses a stale counter with `fix: raise the counters in %% tm:next`.
+16. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
 
 Runtime lint checks the subset grammar only and links no Mermaid parser. Whether the subset is valid Mermaid is a property of the grammar and the writer, so it is proven in CI by the conformance suite (16.6), against the real parser.
 
@@ -710,6 +716,7 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 | 59 | A fourth block, `reserve`, holds concepts that are mapped but not required for the current goal; a reserve parent does not block the frontier; only question-less untested concepts can enter it | a live lesson showed a dense map turning a targeted lesson into a survey, because every mapped edge became mandatory; a concept's state is its block, so a parked concept is a block, not a marker; the edges and citations survive, so a later gap wakes a foundation instead of authoring one; the entry rule means no verdict was earned against a parked prerequisite | `:::inactive` class on concepts (breaks 4.5 and makes every count filter); dotted `-.->` edges (edges as state, and new grammar); deleting the extra concepts | agreed, 2026-09-24 |
 | 60 | `tm prune` is mechanical (ancestor closure and nearest-N by hop distance); a pruner sub-agent makes the required-versus-related call, with tools that cannot grow the graph | edges do not distinguish a foundation the goal needs from one that is merely related, so the closure is a floor, not the answer; the planner's prompt primes inclusion and it defends its own map, so the judgment goes to a separate prompt whose default is to park; the tool split keeps the pruner from becoming a second planner | planner prunes its own map; CLI-only prune; a hard-versus-soft edge kind chosen at link time (the same judgment the planner already gets wrong, made without the goal in view) | agreed, 2026-09-24 |
 | 61 | `activate` on a parent of a gated concept clears the gate with `via: activate`, and the gate's `fix:` line names reserve parents first | activating a parked prerequisite is the same upstream move as `add --child`, made cheaper by the planner's earlier work; the refusal is where the teacher learns the cheap exit exists | activate as a plain move with a separate gate step; listing exits without the concept's reserve parents | agreed, 2026-09-24 |
+| 62 | Monotonic question and batch IDs via a `%% tm:next` counter written into the graph file; on first allocation for a file without the line, seeded from max(max in file, max in log)+1 | the graph file is the single source of truth (no cache or side state): once the line is written the log is never consulted again; IDs already in the log cannot be reused even after the pass procedure removes their nodes, so `tm show <id> --history` never interleaves two different questions | log-derived allocation on every call (log is append-only history, not state); keeping tests of passed concepts in the file (reuse only harmed history lookups; the gate base is computed over the concept's own batches so it was never affected) | agreed, 2026-09-24 |
 
 ## 15. Deferred
 
@@ -813,7 +820,7 @@ docs/spec.md              this document
 | Property | a seeded generator builds random valid graphs with adversarial labels (every escaped character, keyword near-misses, non-ASCII); writer output always passes `lint`; parse of write equals the model |
 | Fuzz | `FuzzEscape` (escape then unescape is identity) and `FuzzParse` (no panics; anything accepted re-serializes to something accepted). CI runs each for 30 s |
 | Invariants | one case per refusal in section 7, asserting exit code, `err:` line, `fix:` line, and the `ERRORS.jsonl` row |
-| Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes, prune then pass through a reserve parent, gate cleared by `activate` |
+| Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes, prune then pass through a reserve parent, gate cleared by `activate`. Monotonic ID lifecycle: grade a concept's probes to pass; allocate a new question for a second concept; assert the new ID (e.g. `q3`) exceeds every `qN`/`aN` ID recorded in the event log before the allocation (verifies §4.3 non-reuse after the pass procedure clears the testing block). |
 | Concurrency | 20 parallel `grade` calls on one graph all land, the file lints, and the event log has 20 `grade` rows |
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
 

@@ -64,6 +64,7 @@ func Check(data []byte, cfg Config) []Violation {
 		check10(g, allConcepts),
 		check11(g, cfg),
 		check12(g, allConcepts, inEdges, qByID, aByID),
+		check15(g),
 	}
 	total := 0
 	for _, r := range perCheck {
@@ -831,6 +832,43 @@ func check11(g *graph.Graph, _ Config) []Violation {
 			q := item.Q
 			if q.Cite != "" {
 				checkCite(fmt.Sprintf("question %q", q.ID), q.Cite)
+			}
+		}
+	}
+	return viols
+}
+
+// check15 verifies that when a %% tm:next line is present, its q counter is
+// strictly greater than every qN/aN suffix in the file and its batch counter is
+// strictly greater than every probe_N/teach_N suffix in the file (§11 check 15).
+// Fix suggestion: raise the counters in %% tm:next.
+func check15(g *graph.Graph) []Violation {
+	if g.NextMeta == nil {
+		return nil
+	}
+	const fix = "; fix: raise the counters in %% tm:next"
+	var viols []Violation
+	for _, item := range g.TestingItems {
+		if item.Q != nil {
+			if n := graph.QuestionN(item.Q.ID); n >= g.NextMeta.Q {
+				viols = append(viols, Violation{Msg: fmt.Sprintf(
+					"tm:next q=%d is not greater than question %s (N=%d)%s",
+					g.NextMeta.Q, item.Q.ID, n, fix,
+				)})
+			}
+			if n := graph.BatchN(item.Q.Class); n >= g.NextMeta.Batch {
+				viols = append(viols, Violation{Msg: fmt.Sprintf(
+					"tm:next batch=%d is not greater than batch class %s (N=%d)%s",
+					g.NextMeta.Batch, item.Q.Class, n, fix,
+				)})
+			}
+		}
+		if item.A != nil {
+			if n := graph.QuestionN(item.A.ID); n >= g.NextMeta.Q {
+				viols = append(viols, Violation{Msg: fmt.Sprintf(
+					"tm:next q=%d is not greater than answer %s (N=%d)%s",
+					g.NextMeta.Q, item.A.ID, n, fix,
+				)})
 			}
 		}
 	}
