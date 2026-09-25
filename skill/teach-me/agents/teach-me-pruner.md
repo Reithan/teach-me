@@ -91,3 +91,6 @@ needs.
 One paragraph: which concepts stay active and the one-sentence defence of each,
 which were parked and why (learner claim, related only, over budget), which
 scopes were narrowed, and any foundation that is missing. Then stop.
+End with a reminder that parked concepts are restored by `tm activate` from a
+gate `fix:` line or at the learner's request, not by the teacher reviewing the
+map.
