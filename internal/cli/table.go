@@ -344,6 +344,7 @@ var Table = []Command{
 		},
 		Flags: []FlagSpec{
 			{Name: "find", TakesValue: true, ValueName: "<regex>"},
+			{Name: "fulldump"},
 		},
 		ForbidGrader:    true,
 		SkipFormatCheck: true, // src does not parse a graph

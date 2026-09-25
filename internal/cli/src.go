@@ -14,7 +14,13 @@ import (
 
 // srcRun is the Run handler for:
 //
-//	tm src <locator> [START-END] [--find <regex>]
+//	tm src <locator> [START-END] [--find <regex>] [--fulldump]
+//
+// Output is bounded to one window (§1): at most 200 lines or 8,000 characters,
+// whichever comes first, cut at a whole line. When more remains it ends with a
+// trailer naming the command that prints the next window. The window applies to
+// the whole file, an explicit range, and --find hits alike. --fulldump prints
+// everything with no trailer.
 //
 // Resolves a source locator through the same resolver pipeline as tm add
 // (src-root, repo aliases, converters, cache, aids-dir refusal) and prints the
@@ -144,13 +150,54 @@ func srcRun(ctx *Context) int {
 		_, _ = fmt.Fprintf(ctx.Out, "src: %s\n", meta.URL)
 	}
 
-	// Print numbered lines (1-indexed, within the range, filtered by --find).
+	// Collect the lines to print (1-indexed, within the range, filtered by
+	// --find), keeping each line's original number.
+	var nums []int
+	var texts []string
 	for i := start; i <= end; i++ {
 		line := allLines[i-1]
 		if findRE != nil && !findRE.MatchString(line) {
 			continue
 		}
-		_, _ = fmt.Fprintf(ctx.Out, "%d\t%s\n", i, line)
+		nums = append(nums, i)
+		texts = append(texts, line)
+	}
+
+	// Bound the output to one window (§1) unless --fulldump prints everything.
+	fulldump := len(ctx.Flags["fulldump"]) > 0
+	printCount := len(texts)
+	showTrailer := false
+	if !fulldump && len(texts) > 0 {
+		kept, _, more := windowLines(texts, 1)
+		printCount = len(kept)
+		showTrailer = more
+	}
+
+	for k := 0; k < printCount; k++ {
+		_, _ = fmt.Fprintf(ctx.Out, "%d\t%s\n", nums[k], texts[k])
+	}
+
+	// A trailer names the command that prints the next window. <next-start> is
+	// the line after the last printed line; <next-end> is <next-start>+199
+	// capped at the last line of the requested range (the whole file when no
+	// range was given). The --find argument is carried through, double-quoted
+	// when the pattern contains a space.
+	if showTrailer {
+		nextStart := nums[printCount-1] + 1
+		nextEnd := nextStart + windowLineMax - 1
+		if nextEnd > end {
+			nextEnd = end
+		}
+		findArg := ""
+		if findRE != nil {
+			pat := ctx.Flags["find"][0]
+			if strings.ContainsRune(pat, ' ') {
+				findArg = fmt.Sprintf(` --find "%s"`, pat)
+			} else {
+				findArg = " --find " + pat
+			}
+		}
+		_, _ = fmt.Fprintf(ctx.Out, "more: tm src %s %d-%d%s\n", locator, nextStart, nextEnd, findArg)
 	}
 
 	return 0
