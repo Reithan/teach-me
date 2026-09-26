@@ -7,6 +7,14 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Fixed
+
+- On Windows, parallel mutating commands (for example, concurrent graders)
+  could fail with `graph is locked` for 45 s. A holder could not delete the
+  lock file while a waiter had it open, so the lock stayed behind. Release now
+  retries the removal, and acquire treats a transient access-denied error as
+  contention. (#100)
+
 ## [0.5.1] - 2026-09-25
 
 Spec v0.30. Skill `tm-version` is `0.5`.

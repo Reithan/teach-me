@@ -5,9 +5,12 @@
 package lockfile
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -20,6 +23,20 @@ const (
 	staleAge      = 90 * time.Second
 	renameRetries = 3
 	renameSleep   = 5 * time.Millisecond
+	removeRetries = 40
+)
+
+// Windows opens files without FILE_SHARE_DELETE, so while a waiter reads the
+// lock file to check its age the holder cannot delete it, and while a delete
+// is pending a new O_EXCL create fails with access denied instead of "file
+// exists". Both are momentary contention, not errors. The hooks below are
+// variables so tests can simulate those failures on any platform.
+var (
+	removeFile = os.Remove
+
+	transientOpenErr = func(err error) bool {
+		return runtime.GOOS == "windows" && errors.Is(err, fs.ErrPermission)
+	}
 )
 
 // Lock is an acquired advisory lock. Release removes the lock file.
@@ -56,6 +73,14 @@ func Acquire(graphFile string, clk errlog.Clock) (*Lock, error) {
 			now := clk.Now().UTC()
 			_, _ = fmt.Fprintf(f, "%s\n%d\n", now.Format(time.RFC3339), os.Getpid())
 			return &Lock{path: path, f: f}, nil
+		}
+
+		if transientOpenErr(err) {
+			if !clk.Now().Before(deadline) {
+				return nil, fmt.Errorf("graph is locked (%s)", path)
+			}
+			time.Sleep(pollInterval)
+			continue
 		}
 
 		if !os.IsExist(err) {
@@ -108,10 +133,21 @@ func Acquire(graphFile string, clk errlog.Clock) (*Lock, error) {
 
 // Release closes the file handle and removes the lock file.
 // The handle is closed before removal so that Windows (which refuses to
-// delete open files) does not return a spurious error.
+// delete open files) does not return a spurious error. The removal is
+// retried because on Windows a waiter reading the lock file blocks deletion;
+// giving up would strand the lock until it goes stale, and every other
+// waiter would time out first.
 func (l *Lock) Release() error {
 	closeErr := l.f.Close()
-	removeErr := os.Remove(l.path)
+	var removeErr error
+	for i := 0; i < removeRetries; i++ {
+		removeErr = removeFile(l.path)
+		if removeErr == nil || os.IsNotExist(removeErr) {
+			removeErr = nil
+			break
+		}
+		time.Sleep(pollInterval)
+	}
 	if closeErr != nil {
 		return closeErr
 	}
