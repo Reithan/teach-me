@@ -58,6 +58,10 @@ line ranges without writing to the graph.
 
 ## Architecture
 
+Prompt text for `tm check`, `tm check --drift`, `tm check --errata`, and the
+`tm new` YAML frontmatter lives in `internal/cli/prompts/*.txt` as
+`text/template` files rendered at runtime.
+
 Auto-generated dependency diagrams (Mermaid, rendered inline on GitHub). Report immediately to user to regenerate if stale:
 
 - [Repository structure](CODE_DIAGRAM.md) — top-level layout (`cmd`, `conformance`, `internal`) and external dependencies.
