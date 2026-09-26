@@ -180,6 +180,15 @@ never decide whether a pass survives; a grader does.
 - **Disputed verdict**: not errata. Re-probe with `--re`; the grader decides.
 - **After any hand edit to the graph**: run `tm lint`.
 
+## Reporting problems
+
+When `tm` or this skill misbehaves (a crash, a refusal whose `fix:` does not
+work, output that contradicts these instructions), open an issue at
+https://github.com/Reithan/teach-me/issues if your user, project, harness, and
+environment all allow it; otherwise suggest the user open one. Include the
+command, its output, and the `tm --version` output; leave out learner answers
+and private source text.
+
 ## Command reference
 
 Generated from the CLI; for one command or flag, run `tm <command> --help`:
