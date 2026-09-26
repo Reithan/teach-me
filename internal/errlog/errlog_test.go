@@ -22,8 +22,6 @@ var (
 	testClock = fixedClock{t: testTime}
 )
 
-func ptr(s string) *string { return &s }
-
 func TestPath_EnvOverride(t *testing.T) {
 	t.Setenv("TM_ERRORS", "/custom/errors.jsonl")
 	got := errlog.Path("/some/dir")
