@@ -189,20 +189,9 @@ func latestErrata(logPath, concept string) (errataEdit, bool) {
 func checkErrataRun(ctx *Context) int {
 	concept := ctx.Positionals[0]
 
-	file, err := state.ResolveFile(ctx.FileFlag)
-	if err != nil {
-		ctx.ErrMsg = err.Error()
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
-	ctx.GraphFile = file
-
-	cfg := state.ConfigFromEnv()
-	s, loadErr := state.Load(file, cfg)
-	if loadErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
+	s, file, loadCode := loadStateCtx(ctx)
+	if loadCode != 0 {
+		return loadCode
 	}
 
 	g := s.Graph()

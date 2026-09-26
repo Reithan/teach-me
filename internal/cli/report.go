@@ -7,7 +7,6 @@ import (
 
 	"github.com/reithan/teach-me/internal/cite"
 	"github.com/reithan/teach-me/internal/report"
-	"github.com/reithan/teach-me/internal/state"
 )
 
 // reportRun is the Run handler for
@@ -56,20 +55,9 @@ func reportRun(ctx *Context) int {
 		hops = n
 	}
 
-	file, err := state.ResolveFile(ctx.FileFlag)
-	if err != nil {
-		ctx.ErrMsg = err.Error()
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
-	ctx.GraphFile = file
-
-	cfg := state.ConfigFromEnv()
-	s, loadErr := state.Load(file, cfg)
-	if loadErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
+	s, file, code := loadStateCtx(ctx)
+	if code != 0 {
+		return code
 	}
 
 	g := s.Graph()
@@ -79,7 +67,10 @@ func reportRun(ctx *Context) int {
 		IncludeReserve: includeReserve,
 	}
 
-	var concepts []report.ConceptInfo
+	var (
+		concepts []report.ConceptInfo
+		err      error
+	)
 	if hasConcept {
 		concepts, err = report.Walk(g, s, conceptID, hops, walkOpts)
 		if err != nil {

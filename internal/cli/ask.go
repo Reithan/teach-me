@@ -54,22 +54,12 @@ func askRun(ctx *Context) int {
 	}
 
 	// Resolve graph file.
-	file, err := state.ResolveFile(ctx.FileFlag)
-	if err != nil {
-		ctx.ErrMsg = err.Error()
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
-	ctx.GraphFile = file
-
-	cfg := state.ConfigFromEnv()
-	s, loadErr := state.Load(file, cfg)
-	if loadErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
+	s, file, code := loadStateCtx(ctx)
+	if code != 0 {
+		return code
 	}
 
+	cfg := s.Cfg()
 	g := s.Graph()
 
 	ns := graphNodeSets(g, false)
@@ -129,6 +119,7 @@ func askRun(ctx *Context) int {
 			return gateRefusal.Exit
 		}
 		// Reload state from the updated graph file and rebuild derived values.
+		var loadErr error
 		s, loadErr = state.Load(file, cfg)
 		if loadErr != nil {
 			ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)

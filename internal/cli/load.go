@@ -10,6 +10,29 @@ import (
 	"github.com/reithan/teach-me/internal/state"
 )
 
+// loadStateCtx resolves the graph file and loads the state for read-only
+// commands. On success it sets ctx.GraphFile and returns (s, file, 0). On
+// failure it writes err:/fix: to ctx.ErrOut, sets ctx.ErrMsg, and returns
+// (nil, "", 3).
+func loadStateCtx(ctx *Context) (*state.State, string, int) {
+	file, err := state.ResolveFile(ctx.FileFlag)
+	if err != nil {
+		ctx.ErrMsg = err.Error()
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return nil, "", 3
+	}
+	ctx.GraphFile = file
+
+	cfg := state.ConfigFromEnv()
+	s, loadErr := state.Load(file, cfg)
+	if loadErr != nil {
+		ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
+		return nil, "", 3
+	}
+	return s, file, 0
+}
+
 // loadRun is the Run handler for `tm load <file> [--src-root <dir>] [--local]`.
 //
 // Makes an existing graph active by writing the `file` pointer (and
@@ -43,12 +66,11 @@ func loadRun(ctx *Context) int {
 	// since at load time there is no configured pointer yet to resolve.
 	if n := s.Graph().FormatN(); n != graph.CurrentFormat {
 		base := filepath.Base(file)
-		var errMsg, fixMsg string
+		errMsg := formatMismatchMsg(base, n)
+		var fixMsg string
 		if n < graph.CurrentFormat {
-			errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
 			fixMsg = fmt.Sprintf("tm migrate %s", file)
 		} else {
-			errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
 			fixMsg = "upgrade tm"
 		}
 		ctx.ErrMsg = errMsg

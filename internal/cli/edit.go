@@ -107,17 +107,7 @@ func editRun(ctx *Context) int {
 			newNode.Cites = []string{citeStr}
 		}
 
-		// Build new graph with the edited node.
-		newG := *g
-		newConcepts := make([]*graph.ConceptNode, len(g.UntestedConcepts))
-		for i, c := range g.UntestedConcepts {
-			if c.ID == concept {
-				newConcepts[i] = &newNode
-			} else {
-				newConcepts[i] = c
-			}
-		}
-		newG.UntestedConcepts = newConcepts
+		newG := replaceConceptInGraph(g, &newNode)
 
 		row := eventlog.NewRow("edit", map[string]any{
 			"id":     concept,
@@ -125,7 +115,7 @@ func editRun(ctx *Context) int {
 			"after":  scope,
 		})
 
-		return &newG, []eventlog.Row{row}, nil
+		return newG, []eventlog.Row{row}, nil
 	}
 
 	return runMutationWithFile(ctx, file, apply)

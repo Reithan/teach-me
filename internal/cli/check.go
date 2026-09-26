@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/reithan/teach-me/internal/graph"
-	"github.com/reithan/teach-me/internal/state"
 )
 
 // checkRun is the Run handler for:
@@ -32,20 +31,9 @@ func checkRun(ctx *Context) int {
 	qid := ctx.Positionals[0]
 
 	// Resolve graph file (global --file > $TM_FILE > .tmconfig per §3).
-	file, err := state.ResolveFile(ctx.FileFlag)
-	if err != nil {
-		ctx.ErrMsg = err.Error()
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
-	ctx.GraphFile = file
-
-	cfg := state.ConfigFromEnv()
-	s, loadErr := state.Load(file, cfg)
-	if loadErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
+	s, _, code := loadStateCtx(ctx)
+	if code != 0 {
+		return code
 	}
 
 	g := s.Graph()

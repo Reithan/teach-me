@@ -195,6 +195,11 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 	return code
 }
 
+// formatMismatchMsg returns the standard error string for a format mismatch.
+func formatMismatchMsg(base string, n int) string {
+	return fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
+}
+
 // checkFormat enforces the §4.6 format guard: refuses a graph whose format
 // differs from CurrentFormat. Returns 0 when the command may run or when the
 // active graph file cannot be resolved (fall-through; let the command report
@@ -224,12 +229,11 @@ func checkFormat(_ *Command, fileFlag string, argv []string, role string, errOut
 		return 0
 	}
 
-	var errMsg, fixMsg string
+	errMsg := formatMismatchMsg(base, n)
+	var fixMsg string
 	if n < graph.CurrentFormat {
-		errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
 		fixMsg = "tm migrate"
 	} else {
-		errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
 		fixMsg = "upgrade tm"
 	}
 	writeErrFix(errOut, errMsg, fixMsg)

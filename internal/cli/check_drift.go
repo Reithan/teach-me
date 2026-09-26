@@ -123,20 +123,9 @@ func conceptGrades(logPath, concept string) ([]gradeRec, error) {
 func checkDriftRun(ctx *Context) int {
 	concept := ctx.Positionals[0]
 
-	file, err := state.ResolveFile(ctx.FileFlag)
-	if err != nil {
-		ctx.ErrMsg = err.Error()
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
-	ctx.GraphFile = file
-
-	cfg := state.ConfigFromEnv()
-	s, loadErr := state.Load(file, cfg)
-	if loadErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("cannot load %s: %v", file, loadErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
+	s, file, code := loadStateCtx(ctx)
+	if code != 0 {
+		return code
 	}
 
 	srcRoot := s.Cfg().SrcRoot
@@ -330,41 +319,7 @@ func gradeDriftRun(ctx *Context) int {
 			}
 			newNode.Cites = newCites
 
-			// Build updated graph.
-			ng := *g
-			switch targetNode.Block {
-			case graph.BlockPassed:
-				newPassed := make([]*graph.ConceptNode, len(g.PassedConcepts))
-				copy(newPassed, g.PassedConcepts)
-				for i, c := range newPassed {
-					if c.ID == concept {
-						newPassed[i] = &newNode
-						break
-					}
-				}
-				ng.PassedConcepts = newPassed
-			case graph.BlockReserve:
-				newReserve := make([]*graph.ConceptNode, len(g.ReserveConcepts))
-				copy(newReserve, g.ReserveConcepts)
-				for i, c := range newReserve {
-					if c.ID == concept {
-						newReserve[i] = &newNode
-						break
-					}
-				}
-				ng.ReserveConcepts = newReserve
-			default:
-				newUntested := make([]*graph.ConceptNode, len(g.UntestedConcepts))
-				copy(newUntested, g.UntestedConcepts)
-				for i, c := range newUntested {
-					if c.ID == concept {
-						newUntested[i] = &newNode
-						break
-					}
-				}
-				ng.UntestedConcepts = newUntested
-			}
-			newG = &ng
+			newG = replaceConceptInGraph(g, &newNode)
 
 		} else {
 			// reopen: run the full reopenApply logic (gate clearing, reopen event).

@@ -69,17 +69,7 @@ func gapRun(ctx *Context) int {
 		newNode := *targetNode
 		newNode.GAP = gap
 
-		// Build new graph.
-		newG := *g
-		newConcepts := make([]*graph.ConceptNode, len(g.UntestedConcepts))
-		for i, c := range g.UntestedConcepts {
-			if c.ID == concept {
-				newConcepts[i] = &newNode
-			} else {
-				newConcepts[i] = c
-			}
-		}
-		newG.UntestedConcepts = newConcepts
+		newG := replaceConceptInGraph(g, &newNode)
 
 		row := eventlog.NewRow("gap", map[string]any{
 			"concept": concept,
@@ -87,7 +77,7 @@ func gapRun(ctx *Context) int {
 			"after":   gap,
 		})
 
-		return &newG, []eventlog.Row{row}, nil
+		return newG, []eventlog.Row{row}, nil
 	}
 
 	return runMutation(ctx, apply)
