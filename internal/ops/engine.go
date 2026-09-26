@@ -79,14 +79,7 @@ func Mutate(
 
 	// 4. Lint the current on-disk graph.
 	if viols := lint.Check(data, lintCfg); len(viols) > 0 {
-		msgs := make([]string, len(viols))
-		for i, v := range viols {
-			msgs[i] = v.Msg
-		}
-		return nil, &Refusal{
-			Err:  "graph fails lint: " + strings.Join(msgs, "; "),
-			Exit: 2,
-		}, nil
+		return nil, lintRefusal(viols, "graph fails lint: "), nil
 	}
 
 	// 5. Load state (also parses the graph internally).
@@ -107,14 +100,7 @@ func Mutate(
 
 	// 8. Lint the output bytes (bug guard — our writer must not emit invalid graphs).
 	if viols := lint.Check(outBytes, lintCfg); len(viols) > 0 {
-		msgs := make([]string, len(viols))
-		for i, v := range viols {
-			msgs[i] = v.Msg
-		}
-		return nil, &Refusal{
-			Err:  "output fails lint (internal error): " + strings.Join(msgs, "; "),
-			Exit: 2,
-		}, nil
+		return nil, lintRefusal(viols, "output fails lint (internal error): "), nil
 	}
 
 	// 9. Atomic rename over the graph file.
@@ -132,4 +118,13 @@ func Mutate(
 
 	// 11. Return.
 	return rows, nil, nil
+}
+
+// lintRefusal converts lint violations into a Refusal with the given prefix.
+func lintRefusal(viols []lint.Violation, prefix string) *Refusal {
+	msgs := make([]string, len(viols))
+	for i, v := range viols {
+		msgs[i] = v.Msg
+	}
+	return &Refusal{Err: prefix + strings.Join(msgs, "; "), Exit: 2}
 }
