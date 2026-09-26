@@ -19,9 +19,10 @@ type nodeSets struct {
 	AllNodes    map[string]bool // AllConcepts + Q/A testing items
 }
 
-// graphNodeSets builds every nodeSets field from g. Only activate, prune, and
-// reserve operate on reserve concepts; every other command must treat a
-// reserve ID as unknown, so they pass withReserve=false.
+// graphNodeSets builds every nodeSets field from g. Activate, prune, and
+// reserve operate on reserve concepts, and add and link may attach edges to
+// them; every other command must treat a reserve ID as unknown, so they pass
+// withReserve=false.
 func graphNodeSets(g *graph.Graph, withReserve bool) nodeSets {
 	nc := len(g.PassedConcepts) + len(g.UntestedConcepts) + len(g.ReserveConcepts)
 	allConcepts := make(map[string]bool, nc)

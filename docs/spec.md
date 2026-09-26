@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.27
+# tm: teaching-map CLI, draft spec v0.28
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.26: the owner chose a license. teach-me ships under Apache-2.0 with a `CITATION.cff`; decision 45, §16.1, §16.3, §16.7, and §16.9 updated; `version-sync` also checks `CITATION.cff`.
+Changes from v0.27: `tm add --parent/--child` and `tm link` accept `reserve` concepts as endpoints, and `add` on a reserve ID refuses with `fix: tm activate <id>`; §6, §7, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -278,8 +278,8 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm status --concept <id>` | that concept's batches, verdicts, failed count, and open teaching targets | see sample; chains per section 1 |
 | `tm find "<text>" [--kind concept\|q\|a]` | search scopes and summaries | one line per hit: ID, state, truncated scope |
 | `tm show <id> [--history]` | node, edges, Q/A beneath it; `--history` adds its log events | the node record |
-| `tm add <id> <cite> "<scope>" [--parent <id>:"<rel>"]... [--child <id>:"<rel>"]...` | new concept in `untested`. `--child` inserts a prerequisite above an existing concept | `ok` |
-| `tm link <from> <to> "<rel>"` | edge between existing concepts | `ok` |
+| `tm add <id> <cite> "<scope>" [--parent <id>:"<rel>"]... [--child <id>:"<rel>"]...` | new concept in `untested`. `--child` inserts a prerequisite above an existing concept. A parent or child may be in `reserve` | `ok` |
+| `tm link <from> <to> "<rel>"` | edge between existing concepts, `reserve` included | `ok` |
 | `tm edit <concept> "<scope>" [--src <cite>]` | rewrite the scope of a concept that has no questions yet | `ok` |
 | `tm drop <id>` | remove an untested leaf concept that has no questions; or, for a drifted ungraded question, add an `unclear` tombstone answer to the graph so `--re` can target it. Logged | `ok` |
 | `tm gap <concept> "<gap>"` | set or replace the GAP field | `ok` |
@@ -357,7 +357,7 @@ The `reserve` count is printed only when it is nonzero.
 | any mutating command | the graph fails lint |
 | any command except `migrate`, `lint`, help | the graph's format is below the binary's (`fix: tm migrate`) |
 | any command | the graph's format is above the binary's (`fix:` to upgrade tm) |
-| `add` | ID exists (`fix: tm reopen` when it is passed), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
+| `add` | ID exists (`fix: tm reopen` when it is passed, `fix: tm activate` when it is in `reserve`), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
 | `link` | unknown ID, non-concept endpoint, or cycle |
 | `edit` | the ID is a question or answer; the concept is passed or has any question |
 | `errata` | the ID is a question or answer; the reason is empty (`err: errata needs a reason`; `fix: tm errata <concept> "<scope>" "<why the old scope was wrong>"`) |
@@ -849,6 +849,7 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 72 | `--fulldump` exists for the reader role only (§2.1); every other role pages through the `more:` trailer | the reader has disposable context and needs the whole source once to find ranges, while paging suits the teacher and planner | paging-only with no full dump (more tool calls for a cheap model); a `--full` on every read command | agreed, 2026-09-25 |
 | 73 | Scope errata on a graded concept is its own command, `tm errata`: a logged rewrite plus a grader recheck through `tm check --errata` / `tm grade --errata keep\|reopen` | the grader reads the scope on every grade (74) and the teacher drafts each question from it, so a wrong detail can steer a verdict directly or through a question, which is the drift shape (56), while questions stay immutable (21) because they were graded against SRC; a separate command keeps the planner and pruner, which hold `tm edit`, out of it, since a tool allow-list cannot exclude one flag | hand edits only (invisible to the log and closed to the teacher); reopen-then-edit (costs the learner a pass the error may not have touched); teacher-decided keep; `--errata` as a flag on `tm edit` (reachable by every role that holds `tm edit`) | agreed, 2026-09-25 |
 | 74 | `tm check <qid>` prints the concept scope as `CONCEPT`, and a question outside it grades `unclear` with a summary starting `out of scope:` | the grader is the only role that reads Q against source, so it is the only place a probe drawn outside its concept is caught; `unclear` routes to the teacher's existing `--re` replacement with no new transition | a grader error to the teacher (no channel through `tm`); a new `--oos` on probes (`--oos` is a teach-question flag with a different effect) | agreed, 2026-09-25 |
+| 75 | `add` and `link` accept `reserve` concepts as endpoints; the cycle check spans every block | a reserve parent never blocks the frontier (59), so an edge to a parked concept costs active work nothing, and it lets `activate` wake a foundation already wired to its children instead of re-linking it; lint already counts reserve in the DAG rule, so a cycle through reserve must refuse at the command, not fail the post-write lint | refusing reserve endpoints (forces activate, link, re-park); activating an endpoint on link | agreed, 2026-09-25 |
 
 ## 15. Deferred
 
