@@ -7,7 +7,9 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
-Spec v0.30.
+## [0.5.0-beta.1] - 2026-09-25
+
+Spec v0.30. Skill `tm-version` is `0.5`.
 
 ### Added
 
@@ -25,6 +27,9 @@ Spec v0.30.
 
 ### Changed
 
+- GitHub release notes are now this file's section for the release, not a
+  list of commits. The release workflow refuses a tag with no matching
+  `CHANGELOG.md` entry.
 - `make version-sync` also requires `version` in `CITATION.cff` to match
   `internal/version/VERSION`.
 - `tm add --parent/--child` and `tm link` accept `reserve` concepts as
@@ -161,7 +166,8 @@ with content hashes, source resolution and converters, drift and recheck,
 `tm report`), the release pipeline, and the teacher, grader, and planner
 adapters under `skill/teach-me/`. (#1 through #39)
 
-[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.4.0-beta.1...HEAD
+[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.5.0-beta.1...HEAD
+[0.5.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.4.0-beta.1...v0.5.0-beta.1
 [0.4.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.3.0-beta.1...v0.4.0-beta.1
 [0.3.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.2.1-beta.2...v0.3.0-beta.1
 [0.2.1-beta.2]: https://github.com/Reithan/teach-me/compare/v0.2.1-beta.1...v0.2.1-beta.2

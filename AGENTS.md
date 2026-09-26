@@ -27,6 +27,15 @@ make tools hooks
 | `make vuln` | Run `go tool govulncheck ./...` |
 | `make version-sync` | Verify `internal/version/VERSION` matches `version` in `CITATION.cff`, and its major.minor matches `metadata.tm-version` in `skill/teach-me/SKILL.md` |
 
+## Releasing
+
+Bump the version in `internal/version/VERSION`, `CITATION.cff`, and (for a
+major or minor bump) `metadata.tm-version` in `skill/teach-me/SKILL.md`, then
+move `CHANGELOG.md`'s `[Unreleased]` entries under a new `## [X.Y.Z] - date`
+heading and add its compare link. Pushing tag `vX.Y.Z` runs the release
+workflow, which publishes that section as the GitHub release notes via
+`.github/scripts/release-notes.sh` and fails if the section is missing.
+
 ## Spec
 
 Full specification: `docs/spec.md`
