@@ -10,6 +10,16 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 ### Added
 
 - `SECURITY.md` with a private vulnerability-reporting path.
+- Weekly Dependabot npm updates for `conformance/`.
+
+### Fixed
+
+- `make conformance` (and so `make check`) skipped the suite because the target was not phony.
+- Conformance dependencies override `lodash-es` to 4.18.1, clearing 5 high-severity audit findings.
+
+### Security
+
+- CI and cross-platform workflow tokens are limited to `contents: read`.
 
 ## [0.5.0-beta.1] - 2026-09-25
 
