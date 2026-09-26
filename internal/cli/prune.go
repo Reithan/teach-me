@@ -46,7 +46,7 @@ func pruneRun(ctx *Context) int {
 	var movedCount int
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		ns := graphNodeSets(g)
+		ns := graphNodeSets(g, true)
 
 		// Unknown goal → exit 3.
 		if !ns.AllConcepts[goal] {

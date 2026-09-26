@@ -18,7 +18,7 @@ func reopenApply(
 	s *state.State,
 	concept, gap, srcCite, usageLine string,
 ) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-	ns := graphNodeSets(g)
+	ns := graphNodeSets(g, false)
 
 	// Unknown ID → exit 3.
 	if !ns.AllNodes[concept] {

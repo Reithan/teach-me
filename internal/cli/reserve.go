@@ -25,7 +25,7 @@ func reserveRun(ctx *Context) int {
 	usageLine := FindCommand("reserve").Usage()
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		ns := graphNodeSets(g)
+		ns := graphNodeSets(g, true)
 
 		// Unknown ID → exit 3.
 		if !ns.AllNodes[concept] {

@@ -55,7 +55,7 @@ func answerRun(ctx *Context) int {
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		cfg := s.Cfg()
 
-		ns := graphNodeSets(g)
+		ns := graphNodeSets(g, false)
 
 		// Exit 3: unknown qid.
 		var qn *graph.QuestionNode

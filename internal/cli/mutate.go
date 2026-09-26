@@ -12,15 +12,17 @@ import (
 
 // nodeSets holds the ID membership sets that apply closures check against.
 type nodeSets struct {
-	AllConcepts map[string]bool // passed + untested + reserve
+	AllConcepts map[string]bool // passed + untested (+ reserve when withReserve)
 	PassedSet   map[string]bool // passed concepts only
 	UntestedSet map[string]bool // untested concepts only
 	ReserveSet  map[string]bool // reserve concepts only
 	AllNodes    map[string]bool // AllConcepts + Q/A testing items
 }
 
-// graphNodeSets builds every nodeSets field from g.
-func graphNodeSets(g *graph.Graph) nodeSets {
+// graphNodeSets builds every nodeSets field from g. Only activate, prune, and
+// reserve operate on reserve concepts; every other command must treat a
+// reserve ID as unknown, so they pass withReserve=false.
+func graphNodeSets(g *graph.Graph, withReserve bool) nodeSets {
 	nc := len(g.PassedConcepts) + len(g.UntestedConcepts) + len(g.ReserveConcepts)
 	allConcepts := make(map[string]bool, nc)
 	passedSet := make(map[string]bool, len(g.PassedConcepts))
@@ -36,7 +38,9 @@ func graphNodeSets(g *graph.Graph) nodeSets {
 		untestedSet[c.ID] = true
 	}
 	for _, c := range g.ReserveConcepts {
-		allConcepts[c.ID] = true
+		if withReserve {
+			allConcepts[c.ID] = true
+		}
 		reserveSet[c.ID] = true
 	}
 

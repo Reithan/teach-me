@@ -26,7 +26,7 @@ func dropRun(ctx *Context) int {
 	usageLine := FindCommand("drop").Usage()
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		ns := graphNodeSets(g)
+		ns := graphNodeSets(g, false)
 
 		// Unknown ID → exit 3.
 		if !ns.AllNodes[concept] {

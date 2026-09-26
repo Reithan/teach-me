@@ -47,7 +47,7 @@ func editRun(ctx *Context) int {
 
 	// ── Apply closure ────────────────────────────────────────────────────────
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		ns := graphNodeSets(g)
+		ns := graphNodeSets(g, false)
 
 		// Unknown ID → exit 3.
 		if !ns.AllNodes[concept] {

@@ -109,7 +109,7 @@ func qRun(ctx *Context) int {
 		cfg := s.Cfg()
 		logPath := eventlog.Path(file)
 
-		ns := graphNodeSets(g)
+		ns := graphNodeSets(g, false)
 
 		// Exit 3: unknown concept.
 		if !ns.AllConcepts[conceptID] {

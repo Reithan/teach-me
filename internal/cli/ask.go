@@ -72,7 +72,7 @@ func askRun(ctx *Context) int {
 
 	g := s.Graph()
 
-	ns := graphNodeSets(g)
+	ns := graphNodeSets(g, false)
 
 	// Unknown concept → exit 3.
 	if !ns.AllConcepts[conceptID] {
@@ -136,7 +136,7 @@ func askRun(ctx *Context) int {
 			return 3
 		}
 		g = s.Graph()
-		ns = graphNodeSets(g)
+		ns = graphNodeSets(g, false)
 		cs = s.ConceptStatus(conceptID)
 	}
 
@@ -392,7 +392,7 @@ func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code in
 	g := s.Graph()
 	cfg := s.Cfg()
 
-	ns := graphNodeSets(g)
+	ns := graphNodeSets(g, false)
 
 	if !ns.AllConcepts[conceptID] {
 		return 3, fmt.Sprintf("unknown concept %q", conceptID), ""

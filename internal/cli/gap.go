@@ -26,7 +26,7 @@ func gapRun(ctx *Context) int {
 	usageLine := FindCommand("gap").Usage()
 
 	apply := func(g *graph.Graph, _ *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		ns := graphNodeSets(g)
+		ns := graphNodeSets(g, false)
 
 		// Unknown ID → exit 3.
 		if !ns.AllNodes[concept] {
