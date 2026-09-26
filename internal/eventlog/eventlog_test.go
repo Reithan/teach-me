@@ -83,65 +83,44 @@ func TestCommonFieldsPresent(t *testing.T) {
 	}
 }
 
-func TestRoleNullWhenUnset(t *testing.T) {
+// appendOne writes one event row with the given role env value and returns the
+// trimmed log line. Extracted to eliminate repeated scaffold across role/field tests.
+func appendOne(t *testing.T, role, ev string, fields map[string]any) string {
+	t.Helper()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "g.mmd.jsonl")
-
 	clk := fixedClock{t: time.Now()}
 	l := New(logPath, clk)
-
-	t.Setenv("TM_ROLE", "")
-
-	l.Append(NewRow("add", map[string]any{"id": "c1"}))
-
+	t.Setenv("TM_ROLE", role)
+	l.Append(NewRow(ev, fields))
 	data, _ := os.ReadFile(logPath)
-	line := strings.TrimSpace(string(data))
+	return strings.TrimSpace(string(data))
+}
+
+func TestRoleNullWhenUnset(t *testing.T) {
+	line := appendOne(t, "", "add", map[string]any{"id": "c1"})
 	if !strings.Contains(line, `"role":null`) {
 		t.Errorf("expected role:null, got: %s", line)
 	}
 }
 
 func TestRoleSetWhenEnvPresent(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "g.mmd.jsonl")
-
-	clk := fixedClock{t: time.Now()}
-	l := New(logPath, clk)
-
-	t.Setenv("TM_ROLE", "teacher")
-
-	l.Append(NewRow("add", map[string]any{"id": "c1"}))
-
-	data, _ := os.ReadFile(logPath)
-	line := strings.TrimSpace(string(data))
+	line := appendOne(t, "teacher", "add", map[string]any{"id": "c1"})
 	if !strings.Contains(line, `"role":"teacher"`) {
 		t.Errorf("expected role:teacher, got: %s", line)
 	}
 }
 
 func TestFieldsAreSorted(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "g.mmd.jsonl")
-
-	clk := fixedClock{t: time.Now()}
-	l := New(logPath, clk)
-
-	t.Setenv("TM_ROLE", "")
-
 	// Fields: z first, a second — result must be sorted a before z.
-	l.Append(NewRow("add", map[string]any{
+	line := appendOne(t, "", "add", map[string]any{
 		"z_field": "last",
 		"a_field": "first",
 		"m_field": "middle",
-	}))
-
-	data, _ := os.ReadFile(logPath)
-	line := strings.TrimSpace(string(data))
-
+	})
 	posA := strings.Index(line, `"a_field"`)
 	posM := strings.Index(line, `"m_field"`)
 	posZ := strings.Index(line, `"z_field"`)
-
 	if posA < 0 || posM < 0 || posZ < 0 {
 		t.Fatalf("fields missing in output: %s", line)
 	}
@@ -151,25 +130,12 @@ func TestFieldsAreSorted(t *testing.T) {
 }
 
 func TestFieldOrderCommonFirst(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "g.mmd.jsonl")
-
-	clk := fixedClock{t: time.Now()}
-	l := New(logPath, clk)
-
-	t.Setenv("TM_ROLE", "")
-
-	l.Append(NewRow("add", map[string]any{"id": "c1"}))
-
-	data, _ := os.ReadFile(logPath)
-	line := strings.TrimSpace(string(data))
-
 	// t must come before ev, ev before role, role before id.
+	line := appendOne(t, "", "add", map[string]any{"id": "c1"})
 	posT := strings.Index(line, `"t":`)
 	posEv := strings.Index(line, `"ev":`)
 	posRole := strings.Index(line, `"role":`)
 	posID := strings.Index(line, `"id":`)
-
 	if posT >= posEv || posEv >= posRole || posRole >= posID {
 		t.Errorf("wrong field order: t=%d ev=%d role=%d id=%d in: %s",
 			posT, posEv, posRole, posID, line)
