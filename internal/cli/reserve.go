@@ -69,7 +69,7 @@ func reserveRun(ctx *Context) int {
 			if reason == "" {
 				return nil, nil, &ops.Refusal{
 					Err:  concept + " has questions",
-					Fix:  usageLine,
+					Fix:  fmt.Sprintf("tm reserve %s --reason \"<why>\"", concept),
 					Exit: 1,
 				}
 			}
@@ -80,6 +80,7 @@ func reserveRun(ctx *Context) int {
 				if bs != state.BatchResolved {
 					return nil, nil, &ops.Refusal{
 						Err:  fmt.Sprintf("%s has an unresolved batch (%s)", concept, batchClass),
+						Fix:  fmt.Sprintf("answer and grade every question in %s, then reserve %s", batchClass, concept),
 						Exit: 1,
 					}
 				}

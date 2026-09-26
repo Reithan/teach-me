@@ -211,6 +211,7 @@ func gradeApply(g *graph.Graph, s *state.State, qid, verdict, summary string, gu
 				if rc.ID == conceptID {
 					return nil, nil, &ops.Refusal{
 						Err:  fmt.Sprintf("%s is in reserve and cannot be passed", conceptID),
+						Fix:  fmt.Sprintf("tm activate %s, then grade %s again", conceptID, qid),
 						Exit: 1,
 					}
 				}
