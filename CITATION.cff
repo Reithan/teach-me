@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+title: 'teach-me: an agent-driven tutor with a verified concept map'
+message: 'If you reference this project, please cite it as below.'
+type: software
+authors:
+  - given-names: Bryan
+    family-names: O'Malley
+    email: bryan@darkplanetgames.com
+repository-code: 'https://github.com/Reithan/teach-me'
+url: 'https://github.com/Reithan/teach-me'
+license: Apache-2.0
+abstract: >-
+  teach-me turns an AI coding agent into a tutor. A planner maps the
+  concepts a learning goal requires from sources the learner chooses,
+  the teacher quizzes and teaches one concept at a time, and a separate
+  grader agent scores each answer against the cited source. The tm CLI
+  records the concept graph and every graded answer in a Mermaid file
+  the learner can read.
+keywords:
+  - llm
+  - ai-agents
+  - tutoring
+  - education
+  - concept-map
+  - mermaid
+  - claude-code
+version: 0.4.0-beta.1
+date-released: '2026-09-25'
