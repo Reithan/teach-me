@@ -3,6 +3,7 @@ package cite_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/reithan/teach-me/internal/cite"
@@ -379,11 +380,11 @@ func TestResolve(t *testing.T) {
 	})
 
 	t.Run("absolute path returned as-is", func(t *testing.T) {
-		c := cite.Citation{File: "/home/me/doc.txt", Start: 1, End: 5}
-		got := cite.Resolve(c, "/root")
-		want := "/home/me/doc.txt"
-		if got != want {
-			t.Fatalf("Resolve: got %q, want %q", got, want)
+		absPath := filepath.Join(t.TempDir(), "doc.txt")
+		c := cite.Citation{File: absPath, Start: 1, End: 5}
+		got := cite.Resolve(c, t.TempDir())
+		if got != absPath {
+			t.Fatalf("Resolve: got %q, want %q", got, absPath)
 		}
 	})
 
@@ -581,6 +582,9 @@ func TestHashCitation(t *testing.T) {
 	})
 
 	t.Run("file with double-quote in name percent-encoded", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip(`'"' is not a valid filename character on Windows`)
+		}
 		// A file named a"b.txt must be stored as a%22b.txt in the citation
 		// because raw '"' is the Mermaid label delimiter.
 		dir := t.TempDir()
