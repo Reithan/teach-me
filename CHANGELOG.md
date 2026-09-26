@@ -7,7 +7,7 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
-Spec v0.27.
+Spec v0.28.
 
 ### Added
 
@@ -20,6 +20,15 @@ Spec v0.27.
 
 - `make version-sync` also requires `version` in `CITATION.cff` to match
   `internal/version/VERSION`.
+- `tm add --parent/--child` and `tm link` accept `reserve` concepts as
+  endpoints. A reserve parent still never blocks the frontier, so the planner
+  can wire a parked foundation to its children and `tm activate` wakes it
+  already linked. The cycle check now spans reserve concepts.
+
+### Fixed
+
+- `tm add` on an ID in reserve refuses with exit 1 and `fix: tm activate <id>`
+  instead of failing the post-write lint (duplicate declaration, exit 2).
 
 ## [0.4.0-beta.1] - 2026-09-25
 
