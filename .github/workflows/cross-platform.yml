@@ -4,6 +4,9 @@ name: Cross-Platform Tests
 # per-PR CI (ci.yml) runs Linux only. This workflow exercises the race suite on
 # macOS and Windows weekly -- but ONLY when main advanced in the past week (i.e.
 # a PR merged) -- and on demand via workflow_dispatch (which always runs).
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
