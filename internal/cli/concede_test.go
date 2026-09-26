@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/reithan/teach-me/internal/graph"
-	"github.com/reithan/teach-me/internal/lint"
 )
 
 // ── Unit tests ─────────────────────────────────────────────────────────────────
@@ -257,25 +256,6 @@ func TestConcede_GradeRefusesAfterConcede(t *testing.T) {
 
 // ── Lifecycle test ─────────────────────────────────────────────────────────────
 
-// lintConcede checks lint with the config used by the concede lifecycle test.
-func lintConcede(t *testing.T, file, srcRoot string) {
-	t.Helper()
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("read file for lint: %v", err)
-	}
-	viols := lint.Check(data, lint.Config{
-		SrcRoot:  srcRoot,
-		ProbeMin: 2,
-		ProbeMax: 5,
-		TeachMin: 1,
-		TeachMax: 8,
-	})
-	if len(viols) > 0 {
-		t.Errorf("graph fails lint: %v", viols)
-	}
-}
-
 // TestLifecycle_Concede_TeachingRoundThenGate drives the full concede path:
 //
 //  1. Start from lifecycleTeachReadyGraph: probe_1 already resolved fail,
@@ -390,5 +370,5 @@ func TestLifecycle_Concede_TeachingRoundThenGate(t *testing.T) {
 		}
 	}
 
-	lintConcede(t, file, dir)
+	lintM6(t, file, dir, 2)
 }
