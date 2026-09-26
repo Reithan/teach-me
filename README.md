@@ -10,7 +10,7 @@ teach-me turns an AI coding agent into a patient tutor: it maps what you need to
 2. The agent builds a concept map and quizzes you, one concept at a time.
 3. Every answer is graded against the source by a separate agent, so passes are earned, not assumed.
 
-**Contributing**: See [AGENTS.md](AGENTS.md) for development setup, make targets, and architecture.
+**Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md), and [AGENTS.md](AGENTS.md) for development setup, make targets, and architecture.
 
 > [!TIP]
 > Skip to the [Quick Start](#quick-start) if you want to just get started.
@@ -210,6 +210,9 @@ The teacher walks you through this the first time a source needs it. Details: [s
 - **Tell the teacher what you already know.** Known material is probed quickly instead of taught.
 - **Disagree with a grade?** Say so. The teacher re-asks with a fresh question and a fresh grader decides; it never overrules a grader itself.
 - **Sources change.** If a cited page changes, `tm` flags the drift and the teacher re-checks what it affects. Versioned URLs and pinned commits avoid this.
+
+## License
+teach-me is licensed under the [Apache License 2.0](LICENSE). To cite it, use GitHub's "Cite this repository" button or [CITATION.cff](CITATION.cff).
 
 ## More
 - [Specification](docs/spec.md): the full design of `tm`.
