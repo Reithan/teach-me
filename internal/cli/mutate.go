@@ -10,8 +10,8 @@ import (
 	"github.com/reithan/teach-me/internal/state"
 )
 
-// NodeSets holds the membership sets derived from a graph for fast ID lookup.
-type NodeSets struct {
+// nodeSets holds the ID membership sets that apply closures check against.
+type nodeSets struct {
 	AllConcepts map[string]bool // passed + untested + reserve
 	PassedSet   map[string]bool // passed concepts only
 	UntestedSet map[string]bool // untested concepts only
@@ -19,10 +19,8 @@ type NodeSets struct {
 	AllNodes    map[string]bool // AllConcepts + Q/A testing items
 }
 
-// graphNodeSets builds all five membership sets from g in a single pass.
-// Callers use only the fields they need; unused fields are still populated
-// so that adding reserve concepts to allNodes (for link validation) is free.
-func graphNodeSets(g *graph.Graph) NodeSets {
+// graphNodeSets builds every nodeSets field from g.
+func graphNodeSets(g *graph.Graph) nodeSets {
 	nc := len(g.PassedConcepts) + len(g.UntestedConcepts) + len(g.ReserveConcepts)
 	allConcepts := make(map[string]bool, nc)
 	passedSet := make(map[string]bool, len(g.PassedConcepts))
@@ -55,7 +53,7 @@ func graphNodeSets(g *graph.Graph) NodeSets {
 		}
 	}
 
-	return NodeSets{
+	return nodeSets{
 		AllConcepts: allConcepts,
 		PassedSet:   passedSet,
 		UntestedSet: untestedSet,

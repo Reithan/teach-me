@@ -27,17 +27,37 @@ func linkRun(ctx *Context) int {
 	usageLine := FindCommand("link").Usage()
 
 	apply := func(g *graph.Graph, _ *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		ns := graphNodeSets(g)
+		// Build concept and all-node membership sets.
+		concepts := make(map[string]bool)
+		for _, c := range g.PassedConcepts {
+			concepts[c.ID] = true
+		}
+		for _, c := range g.UntestedConcepts {
+			concepts[c.ID] = true
+		}
+
+		allNodes := make(map[string]bool)
+		for id := range concepts {
+			allNodes[id] = true
+		}
+		for _, item := range g.TestingItems {
+			if item.Q != nil {
+				allNodes[item.Q.ID] = true
+			}
+			if item.A != nil {
+				allNodes[item.A.ID] = true
+			}
+		}
 
 		// Unknown ID → exit 3.
-		if !ns.AllNodes[from] {
+		if !allNodes[from] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("unknown ID %q", from),
 				Fix:  usageLine,
 				Exit: 3,
 			}
 		}
-		if !ns.AllNodes[to] {
+		if !allNodes[to] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("unknown ID %q", to),
 				Fix:  usageLine,
@@ -46,13 +66,13 @@ func linkRun(ctx *Context) int {
 		}
 
 		// Non-concept endpoint → exit 1.
-		if !ns.AllConcepts[from] {
+		if !concepts[from] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("%s is not a concept", from),
 				Exit: 1,
 			}
 		}
-		if !ns.AllConcepts[to] {
+		if !concepts[to] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("%s is not a concept", to),
 				Exit: 1,
