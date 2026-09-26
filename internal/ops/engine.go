@@ -32,8 +32,7 @@ type Refusal struct {
 	Exit int
 }
 
-// Error implements the error interface so Refusal can be treated as an error
-// when convenient.
+// Error returns the refusal message.
 func (r *Refusal) Error() string { return r.Err }
 
 // Apply is a command-specific mutation. It receives the parsed current graph g
