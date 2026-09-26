@@ -171,49 +171,31 @@ func checkDriftRun(ctx *Context) int {
 		return 1
 	}
 
-	var b strings.Builder
-
+	entries := make([]driftGradeEntry, 0, len(grades))
 	for _, ge := range grades {
-		// Q <qid>: <question scope>
-		fmt.Fprintf(&b, "Q %s: %s\n", ge.qid, ge.scope)
-		// CITE <citation>
-		fmt.Fprintf(&b, "CITE %s\n", ge.citeStr)
-
-		// Check drift on the current citation.
 		drifted, _ := checkCiteDrift(ge.citeStr, srcRoot)
-		if drifted {
-			fmt.Fprintf(&b, "DRIFT %s\n", ge.citeStr)
-		}
 
-		// SRC_GRADED block (text at time of grading)
-		fmt.Fprintln(&b, "SRC_GRADED")
-		for _, l := range strings.Split(ge.srcText, "\n") {
-			fmt.Fprintf(&b, "  %s\n", l)
-		}
-
-		// SRC_CURRENT block (text now)
-		fmt.Fprintln(&b, "SRC_CURRENT")
-		currentText, readCiteErr := readCiteText(ge.citeStr, srcRoot)
-		if readCiteErr == nil {
-			for _, l := range strings.Split(currentText, "\n") {
-				fmt.Fprintf(&b, "  %s\n", l)
-			}
+		var currentLines []string
+		if currentText, readCiteErr := readCiteText(ge.citeStr, srcRoot); readCiteErr == nil {
+			currentLines = strings.Split(currentText, "\n")
 		} else {
-			fmt.Fprintf(&b, "  [citation unreadable: %v]\n", readCiteErr)
+			currentLines = []string{fmt.Sprintf("[citation unreadable: %v]", readCiteErr)}
 		}
 
-		// A: <raw answer>
-		fmt.Fprintf(&b, "A: %s\n", ge.raw)
-		// VERDICT: <recorded verdict>
-		fmt.Fprintf(&b, "VERDICT: %s\n", ge.verdict)
+		entries = append(entries, driftGradeEntry{
+			QID:          ge.qid,
+			Scope:        ge.scope,
+			CiteStr:      ge.citeStr,
+			Drifted:      drifted,
+			GradedLines:  strings.Split(ge.srcText, "\n"),
+			CurrentLines: currentLines,
+			Raw:          ge.raw,
+			Verdict:      ge.verdict,
+		})
 	}
 
-	// Grader rubric and grade command line (§9.1).
-	fmt.Fprintln(&b, "keep: every answer still holds against the current text (substance unchanged or delta does not affect the graded scope).")
-	fmt.Fprintln(&b, "reopen: at least one answer no longer holds, or the grader cannot tell.")
-	fmt.Fprintf(&b, "tm grade --drift %s keep|reopen \"<summary>\"\n", concept)
-
-	_, _ = fmt.Fprint(ctx.Out, b.String())
+	data := checkDriftData{Concept: concept, Grades: entries}
+	_ = renderPrompt(ctx.Out, "check_drift.txt", data)
 	return 0
 }
 

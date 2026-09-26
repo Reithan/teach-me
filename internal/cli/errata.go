@@ -213,27 +213,26 @@ func checkErrataRun(ctx *Context) int {
 
 	grades, _ := conceptGrades(logPath, concept)
 
-	var b strings.Builder
-	fmt.Fprintf(&b, "SCOPE_BEFORE %s\n", ee.before)
-	fmt.Fprintf(&b, "SCOPE_AFTER %s\n", ee.after)
-	fmt.Fprintf(&b, "REASON %s\n", ee.reason)
-
+	entries := make([]errataGradeEntry, 0, len(grades))
 	for _, ge := range grades {
-		fmt.Fprintf(&b, "Q %s: %s\n", ge.qid, ge.scope)
-		fmt.Fprintf(&b, "CITE %s\n", ge.citeStr)
-		fmt.Fprintln(&b, "SRC")
-		for _, l := range strings.Split(ge.srcText, "\n") {
-			fmt.Fprintf(&b, "  %s\n", l)
-		}
-		fmt.Fprintf(&b, "A: %s\n", ge.raw)
-		fmt.Fprintf(&b, "VERDICT: %s\n", ge.verdict)
+		entries = append(entries, errataGradeEntry{
+			QID:      ge.qid,
+			Scope:    ge.scope,
+			CiteStr:  ge.citeStr,
+			SrcLines: strings.Split(ge.srcText, "\n"),
+			Raw:      ge.raw,
+			Verdict:  ge.verdict,
+		})
 	}
 
-	fmt.Fprintln(&b, "keep: no logged question or verdict turns on the detail that differs between SCOPE_BEFORE and SCOPE_AFTER.")
-	fmt.Fprintln(&b, "reopen: a logged question or verdict turns on that detail, or the grader cannot tell.")
-	fmt.Fprintf(&b, "tm grade --errata %s keep|reopen \"<summary>\"\n", concept)
-
-	_, _ = fmt.Fprint(ctx.Out, b.String())
+	data := checkErrataData{
+		Concept:     concept,
+		ScopeBefore: ee.before,
+		ScopeAfter:  ee.after,
+		Reason:      ee.reason,
+		Grades:      entries,
+	}
+	_ = renderPrompt(ctx.Out, "check_errata.txt", data)
 	return 0
 }
 

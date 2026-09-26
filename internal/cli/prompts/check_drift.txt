@@ -1,0 +1,18 @@
+{{- /* Emitted by `tm check --drift <concept>`. Fields: Concept, Grades []driftGradeEntry. */ -}}
+{{range .Grades -}}
+Q {{.QID}}: {{.Scope}}
+CITE {{.CiteStr}}
+{{if .Drifted}}DRIFT {{.CiteStr}}
+{{end -}}
+SRC_GRADED
+{{range .GradedLines}}  {{.}}
+{{end -}}
+SRC_CURRENT
+{{range .CurrentLines}}  {{.}}
+{{end -}}
+A: {{.Raw}}
+VERDICT: {{.Verdict}}
+{{end -}}
+keep: every answer still holds against the current text (substance unchanged or delta does not affect the graded scope).
+reopen: at least one answer no longer holds, or the grader cannot tell.
+tm grade --drift {{.Concept}} keep|reopen "<summary>"

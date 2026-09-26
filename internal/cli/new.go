@@ -101,22 +101,12 @@ func newRun(ctx *Context) int {
 // titleVals is ctx.Flags["title"]; if non-empty, its first element is inserted
 // as a YAML scalar immediately after the opening "---" and before "config:".
 func buildNewFrontmatter(titleVals []string) string {
-	var b strings.Builder
-	b.WriteString("---\n")
+	var title string
 	if len(titleVals) > 0 && titleVals[0] != "" {
-		b.WriteString("title: ")
-		b.WriteString(yamlStringScalar(titleVals[0]))
-		b.WriteByte('\n')
+		title = yamlStringScalar(titleVals[0])
 	}
-	b.WriteString("config:\n")
-	b.WriteString("  look: classic\n")
-	b.WriteString("  darkMode: true\n")
-	b.WriteString("  theme: dark\n")
-	b.WriteString("  layout: elk\n")
-	b.WriteString("  elk:\n")
-	b.WriteString("    mergeEdges: true\n")
-	b.WriteString("    nodePlacementStrategy: NETWORK_SIMPLEX\n")
-	b.WriteString("---\n")
+	var b strings.Builder
+	_ = renderPrompt(&b, "frontmatter.txt", frontmatterData{Title: title})
 	return b.String()
 }
 

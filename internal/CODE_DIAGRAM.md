@@ -25,7 +25,7 @@ graph LR
     subgraph __3a52ce78["internal"]
         cite_f7064cd7["cite"]:::has_deps
         cli_2bd8e9c9["cli"]:::has_deps
-        config_1c2d3e4f["config"]:::no_deps
+        config_dfba7aad["config"]:::has_deps
         docver_6eba3a90["docver"]:::has_deps
         errlog_a6fd2db4["errlog"]:::has_deps
         eventlog_f5caa859["eventlog"]:::has_deps
@@ -44,9 +44,9 @@ graph LR
     end
 
     %% Import dependencies
-    cite_f7064cd7 -.-> config_1c2d3e4f
+    cite_f7064cd7 -.-> config_dfba7aad
     cli_2bd8e9c9 -.-> cite_f7064cd7
-    cli_2bd8e9c9 -.-> config_1c2d3e4f
+    cli_2bd8e9c9 -.-> config_dfba7aad
     cli_2bd8e9c9 -.-> docver_6eba3a90
     cli_2bd8e9c9 -.-> errlog_a6fd2db4
     cli_2bd8e9c9 -.-> eventlog_f5caa859
@@ -74,9 +74,9 @@ graph LR
     report_a27297bd -.-> graph_29a184b6
     report_a27297bd -.-> state_aa4a5f81
     source_828d338a -.-> cite_f7064cd7
-    source_828d338a -.-> config_1c2d3e4f
+    source_828d338a -.-> config_dfba7aad
     state_aa4a5f81 -.-> cite_f7064cd7
-    state_aa4a5f81 -.-> config_1c2d3e4f
+    state_aa4a5f81 -.-> config_dfba7aad
     state_aa4a5f81 -.-> graph_29a184b6
     tools_corpus_0198e50f -.-> graph_29a184b6
     tools_corpus_0198e50f -.-> tools_gen_568ea8cb
@@ -84,6 +84,6 @@ graph LR
     tools_gen_568ea8cb -.-> graph_29a184b6
 
     %% External dependencies
-    external["External Dependencies<br/><br/>bufio<br/>bytes<br/>context<br/>crypto/sha256<br/>embed<br/>encoding/hex<br/>encoding/json<br/>errors<br/>flag<br/>fmt<br/>io<br/>math/rand<br/>net/http<br/>os<br/>os/exec<br/>path/filepath<br/>regexp<br/>sort<br/>strconv<br/>strings<br/>sync<br/>time<br/>unicode/utf8"]:::external
+    external["External Dependencies<br/><br/>bufio<br/>bytes<br/>context<br/>crypto/sha256<br/>embed<br/>encoding/hex<br/>encoding/json<br/>errors<br/>flag<br/>fmt<br/>io<br/>math/rand<br/>net/http<br/>os<br/>os/exec<br/>path/filepath<br/>regexp<br/>sort<br/>strconv<br/>strings<br/>sync<br/>text/template<br/>time<br/>unicode/utf8"]:::external
     __3a52ce78 ~~~ external
 ```

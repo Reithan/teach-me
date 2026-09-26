@@ -1,0 +1,13 @@
+{{- /* Emitted by `tm new` for the YAML frontmatter block. Fields: Title (already YAML-escaped by yamlStringScalar; empty if no title). */ -}}
+---
+{{if .Title}}title: {{.Title}}
+{{end -}}
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---

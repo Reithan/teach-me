@@ -1,0 +1,16 @@
+{{- /* Emitted by `tm check --errata <concept>`. Fields: Concept, ScopeBefore, ScopeAfter, Reason, Grades []errataGradeEntry. */ -}}
+SCOPE_BEFORE {{.ScopeBefore}}
+SCOPE_AFTER {{.ScopeAfter}}
+REASON {{.Reason}}
+{{range .Grades -}}
+Q {{.QID}}: {{.Scope}}
+CITE {{.CiteStr}}
+SRC
+{{range .SrcLines}}  {{.}}
+{{end -}}
+A: {{.Raw}}
+VERDICT: {{.Verdict}}
+{{end -}}
+keep: no logged question or verdict turns on the detail that differs between SCOPE_BEFORE and SCOPE_AFTER.
+reopen: a logged question or verdict turns on that detail, or the grader cannot tell.
+tm grade --errata {{.Concept}} keep|reopen "<summary>"
