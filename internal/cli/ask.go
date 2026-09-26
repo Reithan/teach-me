@@ -72,21 +72,10 @@ func askRun(ctx *Context) int {
 
 	g := s.Graph()
 
-	// Build concept membership sets for fast lookup.
-	passedSet := make(map[string]bool, len(g.PassedConcepts))
-	for _, c := range g.PassedConcepts {
-		passedSet[c.ID] = true
-	}
-	allConceptSet := make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts))
-	for k := range passedSet {
-		allConceptSet[k] = true
-	}
-	for _, c := range g.UntestedConcepts {
-		allConceptSet[c.ID] = true
-	}
+	ns := graphNodeSets(g)
 
 	// Unknown concept → exit 3.
-	if !allConceptSet[conceptID] {
+	if !ns.AllConcepts[conceptID] {
 		ctx.ErrMsg = fmt.Sprintf("unknown concept %q", conceptID)
 		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
 		return 3
@@ -95,7 +84,7 @@ func askRun(ctx *Context) int {
 	// §7: refuse when any parent of the concept is outside passed.
 	// Walk edges to find the first non-passed concept parent (in file order).
 	for _, e := range g.Edges {
-		if e.To == conceptID && allConceptSet[e.From] && !passedSet[e.From] {
+		if e.To == conceptID && ns.UntestedSet[e.From] {
 			ctx.ErrMsg = fmt.Sprintf("parent %s is not passed", e.From)
 			ctx.FixMsg = fmt.Sprintf("pass %s first", e.From)
 			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
@@ -147,17 +136,7 @@ func askRun(ctx *Context) int {
 			return 3
 		}
 		g = s.Graph()
-		passedSet = make(map[string]bool, len(g.PassedConcepts))
-		for _, c := range g.PassedConcepts {
-			passedSet[c.ID] = true
-		}
-		allConceptSet = make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts))
-		for k := range passedSet {
-			allConceptSet[k] = true
-		}
-		for _, c := range g.UntestedConcepts {
-			allConceptSet[c.ID] = true
-		}
+		ns = graphNodeSets(g)
 		cs = s.ConceptStatus(conceptID)
 	}
 
@@ -413,23 +392,13 @@ func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code in
 	g := s.Graph()
 	cfg := s.Cfg()
 
-	passedSet := make(map[string]bool, len(g.PassedConcepts))
-	for _, c := range g.PassedConcepts {
-		passedSet[c.ID] = true
-	}
-	allConceptSet := make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts))
-	for k := range passedSet {
-		allConceptSet[k] = true
-	}
-	for _, c := range g.UntestedConcepts {
-		allConceptSet[c.ID] = true
-	}
+	ns := graphNodeSets(g)
 
-	if !allConceptSet[conceptID] {
+	if !ns.AllConcepts[conceptID] {
 		return 3, fmt.Sprintf("unknown concept %q", conceptID), ""
 	}
 	for _, e := range g.Edges {
-		if e.To == conceptID && allConceptSet[e.From] && !passedSet[e.From] {
+		if e.To == conceptID && ns.UntestedSet[e.From] {
 			return 1, fmt.Sprintf("parent %s is not passed", e.From),
 				fmt.Sprintf("pass %s first", e.From)
 		}

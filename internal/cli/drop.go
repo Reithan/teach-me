@@ -26,32 +26,10 @@ func dropRun(ctx *Context) int {
 	usageLine := FindCommand("drop").Usage()
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		// Build node membership sets.
-		allConcepts := make(map[string]bool)
-		passedSet := make(map[string]bool)
-		for _, c := range g.PassedConcepts {
-			allConcepts[c.ID] = true
-			passedSet[c.ID] = true
-		}
-		for _, c := range g.UntestedConcepts {
-			allConcepts[c.ID] = true
-		}
-
-		allNodes := make(map[string]bool)
-		for id := range allConcepts {
-			allNodes[id] = true
-		}
-		for _, item := range g.TestingItems {
-			if item.Q != nil {
-				allNodes[item.Q.ID] = true
-			}
-			if item.A != nil {
-				allNodes[item.A.ID] = true
-			}
-		}
+		ns := graphNodeSets(g)
 
 		// Unknown ID → exit 3.
-		if !allNodes[concept] {
+		if !ns.AllNodes[concept] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("unknown ID %q", concept),
 				Fix:  usageLine,
@@ -60,12 +38,12 @@ func dropRun(ctx *Context) int {
 		}
 
 		// Question ID: handle drift-drop path (§6, §7 drop-question row, §8 accounting).
-		if !allConcepts[concept] {
+		if !ns.AllConcepts[concept] {
 			return dropQuestionDrift(g, s, concept, usageLine)
 		}
 
 		// Passed concept → exit 1.
-		if passedSet[concept] {
+		if ns.PassedSet[concept] {
 			return nil, nil, &ops.Refusal{
 				Err:  concept + " is passed",
 				Exit: 1,
@@ -74,7 +52,7 @@ func dropRun(ctx *Context) int {
 
 		// Has children (dependents: outgoing concept→concept edges) → exit 1.
 		for _, e := range g.Edges {
-			if e.From == concept && allConcepts[e.To] {
+			if e.From == concept && ns.AllConcepts[e.To] {
 				return nil, nil, &ops.Refusal{
 					Err:  concept + " has children",
 					Exit: 1,
