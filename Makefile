@@ -5,7 +5,7 @@ GOLANGCI     := $(TOOLS_BIN)/golangci-lint
 GOLANGCI_VER := v2.13.2
 DIFFCOVER_VER := 10.5.1
 
-.PHONY: tools hooks precommit check lint test coverage diff-coverage fuzz vuln version-sync
+.PHONY: tools hooks precommit check lint test coverage diff-coverage fuzz conformance vuln version-sync
 
 ## tools: install golangci-lint, diff-cover, and (if present) conformance deps.
 tools:
