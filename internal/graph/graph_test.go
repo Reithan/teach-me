@@ -473,7 +473,7 @@ func TestIsAnswerClass(t *testing.T) {
 	}
 }
 
-// TestEdgeHomeBlockCases covers the corner cases of the 4.2 rule:
+// TestEdgeHomeBlockCases covers the corner cases of EdgeHomeBlock (the 4.2 rule):
 // both endpoints unknown, and only one endpoint known.
 func TestEdgeHomeBlockCases(t *testing.T) {
 	blocks := map[string]Block{
@@ -505,10 +505,9 @@ func TestEdgeHomeBlockCases(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			e := &Edge{From: tc.from, To: tc.to}
-			got := edgeHomeBlock(e, blocks)
+			got := EdgeHomeBlock(tc.from, tc.to, blocks)
 			if got != tc.want {
-				t.Errorf("edgeHomeBlock(%q->%q) = %v, want %v", tc.from, tc.to, got, tc.want)
+				t.Errorf("EdgeHomeBlock(%q->%q) = %v, want %v", tc.from, tc.to, got, tc.want)
 			}
 		})
 	}

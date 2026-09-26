@@ -48,7 +48,7 @@ func writePassedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 		writeConceptNode(b, cn)
 	}
 	for _, e := range g.Edges {
-		if edgeHomeBlock(e, blocks) == BlockPassed {
+		if EdgeHomeBlock(e.From, e.To, blocks) == BlockPassed {
 			writeLeadingComments(b, e.LeadingComments)
 			writeEdge(b, e)
 		}
@@ -79,7 +79,7 @@ func writeUntestedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 		writeConceptNode(b, cn)
 	}
 	for _, e := range g.Edges {
-		if edgeHomeBlock(e, blocks) == BlockUntested {
+		if EdgeHomeBlock(e.From, e.To, blocks) == BlockUntested {
 			writeLeadingComments(b, e.LeadingComments)
 			writeEdge(b, e)
 		}
@@ -102,7 +102,7 @@ func writeReserveBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 		writeConceptNode(b, cn)
 	}
 	for _, e := range g.Edges {
-		if edgeHomeBlock(e, blocks) == BlockReserve {
+		if EdgeHomeBlock(e.From, e.To, blocks) == BlockReserve {
 			writeLeadingComments(b, e.LeadingComments)
 			writeEdge(b, e)
 		}
@@ -124,7 +124,7 @@ func writeTestingBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 		}
 	}
 	for _, e := range g.Edges {
-		if edgeHomeBlock(e, blocks) == BlockTesting {
+		if EdgeHomeBlock(e.From, e.To, blocks) == BlockTesting {
 			writeLeadingComments(b, e.LeadingComments)
 			writeEdge(b, e)
 		}

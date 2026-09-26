@@ -69,66 +69,86 @@ func parseAndCheckAids(t *testing.T, src string, checkFn func(t *testing.T, g *G
 
 // ── Parse / write round-trip ──────────────────────────────────────────────────
 
-func TestAidMeta_PassedConceptRoundTrip(t *testing.T) {
-	src := aidGraphSrc("passed", "%% tm:aid cp aids/cp-notes.txt")
-	parseAndCheckAids(t, src, func(t *testing.T, g *Graph) {
-		t.Helper()
-		if len(g.PassedConcepts) == 0 {
-			t.Fatal("no passed concepts")
-		}
-		cn := g.PassedConcepts[0]
-		if len(cn.Aids) != 1 || cn.Aids[0] != "aids/cp-notes.txt" {
-			t.Errorf("PassedConcept.Aids: want [aids/cp-notes.txt], got %v", cn.Aids)
-		}
-	})
-}
+// TestAidMeta_RoundTrip verifies that a single tm:aid line for each node type
+// survives parse → checkFn → Write → re-parse unchanged.
+func TestAidMeta_RoundTrip(t *testing.T) {
+	cases := []struct {
+		name     string
+		aidBlock string
+		aidLine  string
+		wantPath string
+		// getAids returns the Aids slice for the node under test, fataling if the node is absent.
+		getAids func(t *testing.T, g *Graph) []string
+	}{
+		{
+			"passed concept",
+			"passed",
+			"%% tm:aid cp aids/cp-notes.txt",
+			"aids/cp-notes.txt",
+			func(t *testing.T, g *Graph) []string {
+				t.Helper()
+				if len(g.PassedConcepts) == 0 {
+					t.Fatal("no passed concepts")
+				}
+				return g.PassedConcepts[0].Aids
+			},
+		},
+		{
+			"untested concept",
+			"untested",
+			"%% tm:aid cu aids/cu.md",
+			"aids/cu.md",
+			func(t *testing.T, g *Graph) []string {
+				t.Helper()
+				if len(g.UntestedConcepts) == 0 {
+					t.Fatal("no untested concepts")
+				}
+				return g.UntestedConcepts[0].Aids
+			},
+		},
+		{
+			"reserve concept",
+			"reserve",
+			"%% tm:aid cr aids/cr.txt",
+			"aids/cr.txt",
+			func(t *testing.T, g *Graph) []string {
+				t.Helper()
+				if len(g.ReserveConcepts) == 0 {
+					t.Fatal("no reserve concepts")
+				}
+				return g.ReserveConcepts[0].Aids
+			},
+		},
+		{
+			"question",
+			"testing",
+			"%% tm:aid q1 aids/q1.txt",
+			"aids/q1.txt",
+			func(t *testing.T, g *Graph) []string {
+				t.Helper()
+				for _, item := range g.TestingItems {
+					if item.Q != nil {
+						return item.Q.Aids
+					}
+				}
+				t.Fatal("no question in testing block")
+				return nil
+			},
+		},
+	}
 
-func TestAidMeta_UntestedConceptRoundTrip(t *testing.T) {
-	src := aidGraphSrc("untested", "%% tm:aid cu aids/cu.md")
-	parseAndCheckAids(t, src, func(t *testing.T, g *Graph) {
-		t.Helper()
-		if len(g.UntestedConcepts) == 0 {
-			t.Fatal("no untested concepts")
-		}
-		cn := g.UntestedConcepts[0]
-		if len(cn.Aids) != 1 || cn.Aids[0] != "aids/cu.md" {
-			t.Errorf("UntestedConcept.Aids: want [aids/cu.md], got %v", cn.Aids)
-		}
-	})
-}
-
-func TestAidMeta_ReserveConceptRoundTrip(t *testing.T) {
-	src := aidGraphSrc("reserve", "%% tm:aid cr aids/cr.txt")
-	parseAndCheckAids(t, src, func(t *testing.T, g *Graph) {
-		t.Helper()
-		if len(g.ReserveConcepts) == 0 {
-			t.Fatal("no reserve concepts")
-		}
-		cn := g.ReserveConcepts[0]
-		if len(cn.Aids) != 1 || cn.Aids[0] != "aids/cr.txt" {
-			t.Errorf("ReserveConcept.Aids: want [aids/cr.txt], got %v", cn.Aids)
-		}
-	})
-}
-
-func TestAidMeta_QuestionRoundTrip(t *testing.T) {
-	src := aidGraphSrc("testing", "%% tm:aid q1 aids/q1.txt")
-	parseAndCheckAids(t, src, func(t *testing.T, g *Graph) {
-		t.Helper()
-		var q *QuestionNode
-		for _, item := range g.TestingItems {
-			if item.Q != nil {
-				q = item.Q
-				break
-			}
-		}
-		if q == nil {
-			t.Fatal("no question in testing block")
-		}
-		if len(q.Aids) != 1 || q.Aids[0] != "aids/q1.txt" {
-			t.Errorf("Question.Aids: want [aids/q1.txt], got %v", q.Aids)
-		}
-	})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := aidGraphSrc(tc.aidBlock, tc.aidLine)
+			parseAndCheckAids(t, src, func(t *testing.T, g *Graph) {
+				t.Helper()
+				aids := tc.getAids(t, g)
+				if len(aids) != 1 || aids[0] != tc.wantPath {
+					t.Errorf("Aids: want [%s], got %v", tc.wantPath, aids)
+				}
+			})
+		})
+	}
 }
 
 func TestAidMeta_MultipleAidsPreservesOrder(t *testing.T) {

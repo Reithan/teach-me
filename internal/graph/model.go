@@ -184,11 +184,11 @@ func (g *Graph) nodeBlocks() map[string]Block {
 	return m
 }
 
-// edgeHomeBlock returns the block an edge belongs to per the 4.2 rule:
+// EdgeHomeBlock returns the block an edge belongs to per the 4.2 rule:
 // the home block of whichever endpoint's block comes later in file order.
-func edgeHomeBlock(e *Edge, blocks map[string]Block) Block {
-	fb, fok := blocks[e.From]
-	tb, tok := blocks[e.To]
+func EdgeHomeBlock(from, to string, blocks map[string]Block) Block {
+	fb, fok := blocks[from]
+	tb, tok := blocks[to]
 	if !fok && !tok {
 		return BlockPassed
 	}
