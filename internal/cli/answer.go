@@ -55,18 +55,7 @@ func answerRun(ctx *Context) int {
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		cfg := s.Cfg()
 
-		// Build concept membership sets.
-		passedSet := make(map[string]bool, len(g.PassedConcepts))
-		for _, c := range g.PassedConcepts {
-			passedSet[c.ID] = true
-		}
-		allConceptSet := make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts))
-		for k := range passedSet {
-			allConceptSet[k] = true
-		}
-		for _, c := range g.UntestedConcepts {
-			allConceptSet[c.ID] = true
-		}
+		ns := graphNodeSets(g, false)
 
 		// Exit 3: unknown qid.
 		var qn *graph.QuestionNode
@@ -120,7 +109,7 @@ func answerRun(ctx *Context) int {
 
 		// Exit 1: any parent of the concept is outside passed (§7, shared with ask).
 		for _, e := range g.Edges {
-			if e.To == conceptID && allConceptSet[e.From] && !passedSet[e.From] {
+			if e.To == conceptID && ns.UntestedSet[e.From] {
 				return nil, nil, &ops.Refusal{
 					Err:  fmt.Sprintf("parent %s is not passed", e.From),
 					Fix:  fmt.Sprintf("pass %s first", e.From),

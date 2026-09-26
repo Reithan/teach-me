@@ -46,24 +46,10 @@ func pruneRun(ctx *Context) int {
 	var movedCount int
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		// Build node membership sets.
-		allConcepts := make(map[string]bool)
-		untestedSet := make(map[string]bool)
-		reserveSet := make(map[string]bool)
-		for _, c := range g.PassedConcepts {
-			allConcepts[c.ID] = true
-		}
-		for _, c := range g.UntestedConcepts {
-			allConcepts[c.ID] = true
-			untestedSet[c.ID] = true
-		}
-		for _, c := range g.ReserveConcepts {
-			allConcepts[c.ID] = true
-			reserveSet[c.ID] = true
-		}
+		ns := graphNodeSets(g, true)
 
 		// Unknown goal → exit 3.
-		if !allConcepts[goal] {
+		if !ns.AllConcepts[goal] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("unknown ID %q", goal),
 				Fix:  usageLine,
@@ -73,9 +59,9 @@ func pruneRun(ctx *Context) int {
 
 		// Goal not in untested → exit 1.
 		// Spec §7: fix is "tm activate <goal>" only when goal is in reserve.
-		if !untestedSet[goal] {
+		if !ns.UntestedSet[goal] {
 			var fix string
-			if reserveSet[goal] {
+			if ns.ReserveSet[goal] {
 				fix = fmt.Sprintf("tm activate %s", goal)
 			}
 			return nil, nil, &ops.Refusal{

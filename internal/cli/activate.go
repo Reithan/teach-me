@@ -26,35 +26,10 @@ func activateRun(ctx *Context) int {
 	usageLine := FindCommand("activate").Usage()
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		// Build node membership sets.
-		allConcepts := make(map[string]bool)
-		reserveSet := make(map[string]bool)
-		for _, c := range g.PassedConcepts {
-			allConcepts[c.ID] = true
-		}
-		for _, c := range g.UntestedConcepts {
-			allConcepts[c.ID] = true
-		}
-		for _, c := range g.ReserveConcepts {
-			allConcepts[c.ID] = true
-			reserveSet[c.ID] = true
-		}
-
-		allNodes := make(map[string]bool)
-		for id := range allConcepts {
-			allNodes[id] = true
-		}
-		for _, item := range g.TestingItems {
-			if item.Q != nil {
-				allNodes[item.Q.ID] = true
-			}
-			if item.A != nil {
-				allNodes[item.A.ID] = true
-			}
-		}
+		ns := graphNodeSets(g, true)
 
 		// Unknown ID → exit 3.
-		if !allNodes[concept] {
+		if !ns.AllNodes[concept] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("unknown ID %q", concept),
 				Fix:  usageLine,
@@ -63,7 +38,7 @@ func activateRun(ctx *Context) int {
 		}
 
 		// Not in reserve → exit 1.
-		if !reserveSet[concept] {
+		if !ns.ReserveSet[concept] {
 			return nil, nil, &ops.Refusal{
 				Err:  concept + " is not in reserve",
 				Exit: 1,
@@ -106,7 +81,7 @@ func activateRun(ctx *Context) int {
 		rows := make([]eventlog.Row, 0)
 		currentG := &newG
 		for _, e := range g.Edges {
-			if e.From != concept || !allConcepts[e.To] {
+			if e.From != concept || !ns.AllConcepts[e.To] {
 				continue
 			}
 			childID := e.To

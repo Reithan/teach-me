@@ -721,3 +721,41 @@ func TestUpgradeThreeBlockOnMutation(t *testing.T) {
 
 	lintFile(t, path, dir)
 }
+
+// TestReserveIDTreatedAsUnknown pins that commands other than activate,
+// prune, and reserve do not see reserve concepts: they refuse the ID instead
+// of acting on it (edit and gap only search untested when rewriting a node).
+func TestReserveIDTreatedAsUnknown(t *testing.T) {
+	for _, args := range [][]string{
+		{"edit", "rr", "new scope"},
+		{"gap", "rr", "a gap"},
+		{"link", "rr", "cb", "requires"},
+		{"drop", "rr"},
+		{"reopen", "rr", "a gap"},
+		{"ask", "rr"},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			tempErrlog(t)
+			setupSrcFile(t, dir)
+			path := writeGraph(t, dir, activateTestGraph)
+			t.Setenv("TM_FILE", path)
+
+			_, errOut, code := run(t, args...)
+			if code == 0 {
+				t.Fatalf("want refusal, got exit 0")
+			}
+			if !strings.Contains(errOut, `"rr"`) && !strings.Contains(errOut, "rr is not") {
+				t.Errorf("stderr should name rr; got %q", errOut)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != activateTestGraph {
+				t.Errorf("graph changed on refusal")
+			}
+		})
+	}
+}

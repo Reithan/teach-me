@@ -109,21 +109,10 @@ func qRun(ctx *Context) int {
 		cfg := s.Cfg()
 		logPath := eventlog.Path(file)
 
-		// Build concept membership sets.
-		passedSet := make(map[string]bool, len(g.PassedConcepts))
-		for _, c := range g.PassedConcepts {
-			passedSet[c.ID] = true
-		}
-		allConcepts := make(map[string]bool, len(g.PassedConcepts)+len(g.UntestedConcepts))
-		for k := range passedSet {
-			allConcepts[k] = true
-		}
-		for _, c := range g.UntestedConcepts {
-			allConcepts[c.ID] = true
-		}
+		ns := graphNodeSets(g, false)
 
 		// Exit 3: unknown concept.
-		if !allConcepts[conceptID] {
+		if !ns.AllConcepts[conceptID] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("unknown concept %q", conceptID),
 				Fix:  usageLine,
@@ -150,7 +139,7 @@ func qRun(ctx *Context) int {
 		}
 
 		// Exit 1: concept is passed.
-		if passedSet[conceptID] {
+		if ns.PassedSet[conceptID] {
 			return nil, nil, &ops.Refusal{
 				Err:  conceptID + " is passed",
 				Fix:  fmt.Sprintf("tm reopen %s \"<gap>\"", conceptID),
