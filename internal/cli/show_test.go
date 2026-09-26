@@ -353,7 +353,3 @@ func TestShow_Concept_Reserve(t *testing.T) {
 	}
 }
 
-// ── Shared fixture helpers for status tests ──────────────────────────────────
-
-// raftFixtureWithSrc duplicated here to confirm it is available cross-file.
-// (It is defined in status_test.go; this is a compile-check comment only.)
