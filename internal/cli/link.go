@@ -11,7 +11,8 @@ import (
 
 // linkRun is the Run handler for `tm link <from> <to> "<rel>"`.
 //
-// Adds an edge between two existing concepts.
+// Adds an edge between two existing concepts, reserve included: a reserve
+// parent never blocks the frontier, and the edge lets activate unpark it later.
 //
 // Exit codes:
 //
@@ -27,7 +28,7 @@ func linkRun(ctx *Context) int {
 	usageLine := FindCommand("link").Usage()
 
 	apply := func(g *graph.Graph, _ *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		ns := graphNodeSets(g, false)
+		ns := graphNodeSets(g, true)
 
 		// Unknown ID → exit 3.
 		if !ns.AllNodes[from] {
