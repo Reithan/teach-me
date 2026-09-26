@@ -771,10 +771,10 @@ func check10(g *graph.Graph, concepts map[string]bool) []Violation {
 	return viols
 }
 
-// forEachConceptCite calls fn with the node ID and each citation string for
+// forEachCite calls fn with the node ID and each citation string for
 // every concept in all four blocks and for every question in TestingItems.
 // Empty question Cite fields are skipped.
-func forEachConceptCite(g *graph.Graph, fn func(nodeID, citeStr string)) {
+func forEachCite(g *graph.Graph, fn func(nodeID, citeStr string)) {
 	for _, cn := range g.PassedConcepts {
 		for _, citeStr := range cn.Cites {
 			fn(cn.ID, citeStr)
@@ -827,7 +827,7 @@ func check11(g *graph.Graph, _ Config) []Violation {
 		}
 	}
 
-	forEachConceptCite(g, checkCite)
+	forEachCite(g, checkCite)
 	return viols
 }
 
@@ -970,6 +970,6 @@ func check16(g *graph.Graph, cfg Config) []Violation {
 		}
 	}
 
-	forEachConceptCite(g, checkCite)
+	forEachCite(g, checkCite)
 	return viols
 }
