@@ -58,22 +58,6 @@ func repoGetBranch(t *testing.T, dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// repoSetupXDG writes a source config to $tmpdir/tm/config and sets
-// XDG_CONFIG_HOME to point at that directory.
-func repoSetupXDG(t *testing.T, cfgContent string) {
-	t.Helper()
-	xdgDir := t.TempDir()
-	tmDir := filepath.Join(xdgDir, "tm")
-	if err := os.MkdirAll(tmDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfgPath := filepath.Join(tmDir, "config")
-	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XDG_CONFIG_HOME", xdgDir)
-}
-
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 // TestRepo_AddList_Rm verifies the basic add/list/rm lifecycle.
@@ -242,7 +226,7 @@ func TestRepo_AddSHARewriting(t *testing.T) {
 	branch := repoGetBranch(t, repoDir)
 
 	// Set up XDG config with git + alias.
-	repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
 
 	// Create a graph in a temp dir.
 	graphDir := t.TempDir()
@@ -311,7 +295,7 @@ func TestRepo_QGitLocator(t *testing.T) {
 	sha12 := fullSHA[:12]
 	branch := repoGetBranch(t, repoDir)
 
-	repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
 
 	graphDir := t.TempDir()
 	t.Chdir(graphDir)
@@ -512,7 +496,7 @@ func TestRepo_AddNotGitRepo(t *testing.T) {
 	t.Chdir(dir)
 
 	// Set up user config with git configured so the git-repo check runs.
-	repoSetupXDG(t, fmt.Sprintf("git=%s\n", gitBin))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\n", gitBin))
 
 	_, errOut, code := run(t, "repo", "add", "r", notGitDir)
 	if code != 3 {
