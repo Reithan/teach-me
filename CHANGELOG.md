@@ -21,6 +21,13 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 - CI and cross-platform workflow tokens are limited to `contents: read`.
 
+### Fixed
+
+- `tm ask` and the `tm status --concept` chain now emit the locked fallback
+  probe batch once the latest teach batch resolves all pass (or teaching is
+  spent). Before, they printed nothing and exited 0, leaving the concept stuck.
+  (#94)
+
 ## [0.5.0-beta.1] - 2026-09-25
 
 Spec v0.30. Skill `tm-version` is `0.5`.
