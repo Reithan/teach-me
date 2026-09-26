@@ -5,6 +5,22 @@ All notable changes to `tm` and the `teach-me` skill tree. The format follows
 [Semantic Versioning](https://semver.org/) with prerelease tags while the CLI is
 in beta. Each release names the `docs/spec.md` revision it implements.
 
+## [Unreleased]
+
+Spec v0.27.
+
+### Added
+
+- `LICENSE` (Apache-2.0) and `NOTICE`.
+- `CITATION.cff`, `CONTRIBUTING.md`, and `THIRD_PARTY_NOTICES.md` (the Go
+  standard library license). Release archives now include `LICENSE`, `NOTICE`,
+  `THIRD_PARTY_NOTICES.md`, and `CITATION.cff`.
+
+### Changed
+
+- `make version-sync` also requires `version` in `CITATION.cff` to match
+  `internal/version/VERSION`.
+
 ## [0.4.0-beta.1] - 2026-09-25
 
 Spec v0.26. Graphs written by earlier versions carry format 1; run `tm migrate`
@@ -122,6 +138,7 @@ with content hashes, source resolution and converters, drift and recheck,
 `tm report`), the release pipeline, and the teacher, grader, and planner
 adapters under `skill/teach-me/`. (#1 through #39)
 
+[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.4.0-beta.1...HEAD
 [0.4.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.3.0-beta.1...v0.4.0-beta.1
 [0.3.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.2.1-beta.2...v0.3.0-beta.1
 [0.2.1-beta.2]: https://github.com/Reithan/teach-me/compare/v0.2.1-beta.1...v0.2.1-beta.2
