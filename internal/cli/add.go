@@ -76,48 +76,33 @@ func addRun(ctx *Context) int {
 
 	// ── Apply closure ────────────────────────────────────────────────────────
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		// Build the set of all existing concepts for lookup.
-		existsInPassed := false
-		existsInUntested := false
-		for _, c := range g.PassedConcepts {
-			if c.ID == id {
-				existsInPassed = true
-				break
-			}
-		}
-		for _, c := range g.UntestedConcepts {
-			if c.ID == id {
-				existsInUntested = true
-				break
-			}
-		}
+		ns := graphNodeSets(g, true)
 
-		if existsInPassed {
-			refusal := &ops.Refusal{
+		if ns.PassedSet[id] {
+			return nil, nil, &ops.Refusal{
 				Err:  id + " already exists",
 				Fix:  fmt.Sprintf("tm reopen %s \"<gap>\"", id),
 				Exit: 1,
 			}
-			return nil, nil, refusal
 		}
-		if existsInUntested {
+		if ns.ReserveSet[id] {
+			return nil, nil, &ops.Refusal{
+				Err:  id + " is in reserve",
+				Fix:  "tm activate " + id,
+				Exit: 1,
+			}
+		}
+		if ns.UntestedSet[id] {
 			return nil, nil, &ops.Refusal{
 				Err:  id + " already exists",
 				Exit: 1,
 			}
 		}
 
-		// Validate that named parents/children exist as concepts.
-		allConcepts := make(map[string]bool)
-		for _, c := range g.PassedConcepts {
-			allConcepts[c.ID] = true
-		}
-		for _, c := range g.UntestedConcepts {
-			allConcepts[c.ID] = true
-		}
-
+		// Parents and children may be reserve concepts: a reserve parent never
+		// blocks the frontier, and the edge lets activate unpark it later.
 		for _, p := range parents {
-			if !allConcepts[p.endpointID] {
+			if !ns.AllConcepts[p.endpointID] {
 				return nil, nil, &ops.Refusal{
 					Err:  fmt.Sprintf("unknown ID %q", p.endpointID),
 					Fix:  usageLine,
@@ -126,7 +111,7 @@ func addRun(ctx *Context) int {
 			}
 		}
 		for _, ch := range childPairs {
-			if !allConcepts[ch.endpointID] {
+			if !ns.AllConcepts[ch.endpointID] {
 				return nil, nil, &ops.Refusal{
 					Err:  fmt.Sprintf("unknown ID %q", ch.endpointID),
 					Fix:  usageLine,
