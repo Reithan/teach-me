@@ -1022,7 +1022,7 @@ Hooks can be skipped with `--no-verify`. That is acceptable for human users, and
 6. GoReleaser writes `checksums.txt` and publishes the GitHub release with notes grouped by Conventional Commit type. Tags with a prerelease suffix publish as prereleases.
 7. `actions/attest-build-provenance` attests every archive; the step is skipped while the repository is private, since GitHub refuses attestations there. The workflow needs `contents: write`, `id-token: write`, and `attestations: write`.
 
-Install is a file copy from the release archive, or `go install <module>/cmd/tm@v<VERSION>`. While the repository is private, releases are visible only to the owner and `go install` needs `GOPRIVATE` set for the module.
+Install is a file copy from the release archive, or `go install <module>/cmd/tm@v<VERSION>`.
 
 ### 16.10 Build order
 

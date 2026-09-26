@@ -698,6 +698,10 @@ func TestLink_DuplicateEdge(t *testing.T) {
 // TestAdd_NoLeakedFiles verifies no .tmconfig or ERRORS.jsonl is left in
 // the working directory after a series of add/link operations.
 func TestAdd_NoLeakedFiles(t *testing.T) {
+	pkgDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir, errlogPath := qSetupDir(t)
 
 	_ = newGraph(t, dir)
@@ -712,12 +716,12 @@ func TestAdd_NoLeakedFiles(t *testing.T) {
 		t.Logf("note: errlog exists at %s (only unexpected if add succeeded)", errlogPath)
 	}
 
-	// Specifically verify no stray files at repo root patterns.
+	// Specifically verify no stray files in the package dir the test started in.
 	for _, name := range []string{".tmconfig", "ERRORS.jsonl"} {
-		// These should only exist inside dir (where we chdir'd), not at repo root.
-		repoRootPath := filepath.Join("/home/reithan/projects/teach-me", name)
-		if _, err := os.Stat(repoRootPath); err == nil {
-			t.Errorf("leaked file at repo root: %s", repoRootPath)
+		// These should only exist inside dir (where we chdir'd).
+		leakPath := filepath.Join(pkgDir, name)
+		if _, err := os.Stat(leakPath); err == nil {
+			t.Errorf("leaked file in package dir: %s", leakPath)
 		}
 	}
 }

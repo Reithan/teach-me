@@ -1,7 +1,5 @@
 # Teach-Me Repo
 
-<!-- TODO -->
-
 ## Getting started
 
 After a fresh clone, run:
