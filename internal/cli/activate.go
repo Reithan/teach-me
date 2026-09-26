@@ -45,7 +45,6 @@ func activateRun(ctx *Context) int {
 			}
 		}
 
-		// Find the target node in reserve.
 		var targetNode *graph.ConceptNode
 		for _, c := range g.ReserveConcepts {
 			if c.ID == concept {
@@ -54,11 +53,9 @@ func activateRun(ctx *Context) int {
 			}
 		}
 
-		// Build new node (copy-on-write): move to untested block.
 		newNode := *targetNode
 		newNode.Block = graph.BlockUntested
 
-		// Build new graph: remove from reserve, prepend to untested.
 		newG := *g
 
 		newReserve := make([]*graph.ConceptNode, 0, len(g.ReserveConcepts)-1)

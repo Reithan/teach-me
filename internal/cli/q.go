@@ -247,7 +247,6 @@ func qRun(ctx *Context) int {
 				edgeFrom = fmt.Sprintf("a%d", reN)
 			}
 
-			// Build new graph (copy-on-write).
 			newG := *g
 			newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
 				Q: &graph.QuestionNode{
@@ -414,7 +413,6 @@ func qRun(ctx *Context) int {
 		reN := graph.QuestionN(reQID)
 		edgeFrom := fmt.Sprintf("a%d", reN)
 
-		// Build new graph (copy-on-write).
 		newG := *g
 		newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
 			Q: &graph.QuestionNode{

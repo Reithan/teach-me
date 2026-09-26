@@ -89,7 +89,6 @@ func editRun(ctx *Context) int {
 			}
 		}
 
-		// Find the target node in untested.
 		var targetNode *graph.ConceptNode
 		for _, c := range g.UntestedConcepts {
 			if c.ID == concept {
@@ -100,7 +99,6 @@ func editRun(ctx *Context) int {
 
 		oldScope := targetNode.Scope
 
-		// Build new node (copy-on-write).
 		newNode := *targetNode
 		newNode.Scope = scope
 		if citeStr != "" {

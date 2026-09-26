@@ -52,7 +52,6 @@ func loadRun(ctx *Context) int {
 	file := ctx.Positionals[0]
 	ctx.GraphFile = file
 
-	// Validate: the file must exist and parse successfully.
 	cfg := state.ConfigFromEnv()
 	s, loadErr := state.Load(file, cfg)
 	if loadErr != nil {

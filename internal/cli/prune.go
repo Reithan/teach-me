@@ -158,7 +158,6 @@ func pruneRun(ctx *Context) int {
 		}
 		movedCount = len(moved)
 
-		// Build new graph: remove moved from untested, append to reserve.
 		newG := *g
 
 		newUntested := make([]*graph.ConceptNode, 0, len(g.UntestedConcepts)-len(moved))
