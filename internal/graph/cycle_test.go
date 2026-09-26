@@ -73,37 +73,3 @@ func TestHasConceptCycle_IgnoresTestingEdges(t *testing.T) {
 		t.Error("want no cycle for concept→testing edge")
 	}
 }
-
-func TestConceptReaches_DirectEdge(t *testing.T) {
-	g := buildConceptGraph([]string{"a", "b"}, [][2]string{{"a", "b"}})
-	if !ConceptReaches(g, "a", "b") {
-		t.Error("ConceptReaches(a,b): want true for direct edge")
-	}
-}
-
-func TestConceptReaches_NoEdge(t *testing.T) {
-	g := buildConceptGraph([]string{"a", "b"}, nil)
-	if ConceptReaches(g, "a", "b") {
-		t.Error("ConceptReaches(a,b): want false for no edge")
-	}
-}
-
-func TestConceptReaches_TransitivePath(t *testing.T) {
-	g := buildConceptGraph([]string{"a", "b", "c"}, [][2]string{{"a", "b"}, {"b", "c"}})
-	if !ConceptReaches(g, "a", "c") {
-		t.Error("ConceptReaches(a,c): want true via a→b→c")
-	}
-	if ConceptReaches(g, "c", "a") {
-		t.Error("ConceptReaches(c,a): want false (no back path)")
-	}
-}
-
-func TestConceptReaches_UnknownID(t *testing.T) {
-	g := buildConceptGraph([]string{"a"}, nil)
-	if ConceptReaches(g, "a", "z") {
-		t.Error("ConceptReaches(a,z): want false for unknown 'to'")
-	}
-	if ConceptReaches(g, "z", "a") {
-		t.Error("ConceptReaches(z,a): want false for unknown 'from'")
-	}
-}

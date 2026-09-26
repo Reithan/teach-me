@@ -156,10 +156,7 @@ for (const mmdFile of mmdFiles) {
     ['mermaid12', mermaid12],
   ]) {
     totalChecks++;
-    const ok = await checkOne(label, mermaid, mmdFile);
-    if (!ok) {
-      // failures already logged inside checkOne
-    }
+    await checkOne(label, mermaid, mmdFile);
   }
 }
 

@@ -22,8 +22,6 @@ var (
 	testClock = fixedClock{t: testTime}
 )
 
-func ptr(s string) *string { return &s }
-
 func TestPath_EnvOverride(t *testing.T) {
 	t.Setenv("TM_ERRORS", "/custom/errors.jsonl")
 	got := errlog.Path("/some/dir")
@@ -264,12 +262,5 @@ func TestRealClock_IsUTC(t *testing.T) {
 	now := errlog.RealClock.Now()
 	if now.Location() != time.UTC {
 		t.Errorf("RealClock.Now() not UTC: %v", now.Location())
-	}
-}
-
-func TestPtr_Helper(t *testing.T) {
-	s := ptr("hello")
-	if *s != "hello" {
-		t.Errorf("ptr = %q, want 'hello'", *s)
 	}
 }

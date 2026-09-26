@@ -39,8 +39,8 @@ func seedNextMeta(g *Graph, logPath string) {
 	fileQMax := maxQuestionNInFile(g)
 	fileBMax := maxBatchNInFile(g)
 	logQMax, logBMax := maxFromLog(logPath)
-	qNext := intMax(fileQMax, logQMax) + 1
-	bNext := intMax(fileBMax, logBMax) + 1
+	qNext := max(fileQMax, logQMax) + 1
+	bNext := max(fileBMax, logBMax) + 1
 	g.NextMeta = &NextMeta{Q: qNext, Batch: bNext}
 }
 
@@ -131,12 +131,4 @@ func scanLogValue(v any, qMax, bMax *int) {
 			scanLogValue(elem, qMax, bMax)
 		}
 	}
-}
-
-// intMax returns the larger of a and b.
-func intMax(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
