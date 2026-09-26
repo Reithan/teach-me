@@ -771,6 +771,32 @@ func check10(g *graph.Graph, concepts map[string]bool) []Violation {
 	return viols
 }
 
+// forEachConceptCite calls fn with the node ID and each citation string for
+// every concept in all four blocks and for every question in TestingItems.
+// Empty question Cite fields are skipped.
+func forEachConceptCite(g *graph.Graph, fn func(nodeID, citeStr string)) {
+	for _, cn := range g.PassedConcepts {
+		for _, citeStr := range cn.Cites {
+			fn(cn.ID, citeStr)
+		}
+	}
+	for _, cn := range g.UntestedConcepts {
+		for _, citeStr := range cn.Cites {
+			fn(cn.ID, citeStr)
+		}
+	}
+	for _, cn := range g.ReserveConcepts {
+		for _, citeStr := range cn.Cites {
+			fn(cn.ID, citeStr)
+		}
+	}
+	for _, item := range g.TestingItems {
+		if item.Q != nil && item.Q.Cite != "" {
+			fn(item.Q.ID, item.Q.Cite)
+		}
+	}
+}
+
 // check11 is a static citation check (§11): it verifies citation syntax,
 // requires a hash on every citation, and rejects raw '"' in locators.
 // No file I/O is performed; file existence and bounds are checked at
@@ -778,51 +804,30 @@ func check10(g *graph.Graph, concepts map[string]bool) []Violation {
 func check11(g *graph.Graph, _ Config) []Violation {
 	var viols []Violation
 
-	checkCite := func(prefix, citeStr string) {
+	checkCite := func(nodeID, citeStr string) {
+		pfx := fmt.Sprintf("concept %q", nodeID)
+		if graph.ValidQuestionID(nodeID) {
+			pfx = fmt.Sprintf("question %q", nodeID)
+		}
 		c, err := cite.Parse(citeStr)
 		if err != nil {
-			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: %v", prefix, err)})
+			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: %v", pfx, err)})
 			return
 		}
 		// §11: every citation must carry a content hash.
 		if c.Hash == "" {
-			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: citation %q is missing a hash; use tm rehash or supply <hash>@<locator>:START-END", prefix, citeStr)})
+			viols = append(viols, Violation{Msg: fmt.Sprintf("%s: citation %q is missing a hash; use tm rehash or supply <hash>@<locator>:START-END", pfx, citeStr)})
 		}
 		// §11: raw '"' in a locator is rejected by Parse, so it cannot reach here.
 		// §11.14: for git: locators, check for structural errors including raw ":".
 		if cite.IsGit(c.File) {
 			if _, gitErr := cite.ParseGit(c.File); gitErr != nil {
-				viols = append(viols, Violation{Msg: fmt.Sprintf("%s: citation %q: %s", prefix, citeStr, gitErr.Error())})
+				viols = append(viols, Violation{Msg: fmt.Sprintf("%s: citation %q: %s", pfx, citeStr, gitErr.Error())})
 			}
 		}
 	}
 
-	for _, c := range g.PassedConcepts {
-		pfx := fmt.Sprintf("concept %q", c.ID)
-		for _, citeStr := range c.Cites {
-			checkCite(pfx, citeStr)
-		}
-	}
-	for _, c := range g.UntestedConcepts {
-		pfx := fmt.Sprintf("concept %q", c.ID)
-		for _, citeStr := range c.Cites {
-			checkCite(pfx, citeStr)
-		}
-	}
-	for _, c := range g.ReserveConcepts {
-		pfx := fmt.Sprintf("concept %q", c.ID)
-		for _, citeStr := range c.Cites {
-			checkCite(pfx, citeStr)
-		}
-	}
-	for _, item := range g.TestingItems {
-		if item.Q != nil {
-			q := item.Q
-			if q.Cite != "" {
-				checkCite(fmt.Sprintf("question %q", q.ID), q.Cite)
-			}
-		}
-	}
+	forEachConceptCite(g, checkCite)
 	return viols
 }
 
@@ -946,7 +951,8 @@ func check16(g *graph.Graph, cfg Config) []Violation {
 	}
 	aidsDir := filepath.Clean(cfg.AidsDir)
 
-	checkCite := func(nodeID, citeStr string, violations *[]Violation) {
+	var viols []Violation
+	checkCite := func(nodeID, citeStr string) {
 		c, err := cite.Parse(citeStr)
 		if err != nil {
 			return
@@ -957,33 +963,13 @@ func check16(g *graph.Graph, cfg Config) []Violation {
 		path := filepath.Clean(cite.Resolve(c, cfg.SrcRoot))
 		inAids := path == aidsDir || strings.HasPrefix(path, aidsDir+string(filepath.Separator))
 		if inAids {
-			*violations = append(*violations, Violation{Msg: fmt.Sprintf(
+			viols = append(viols, Violation{Msg: fmt.Sprintf(
 				"%s cites aid %s; fix: cite the primary source; link the aid with tm aid %s %s",
 				nodeID, c.File, nodeID, c.File,
 			)})
 		}
 	}
 
-	var viols []Violation
-	for _, cn := range g.PassedConcepts {
-		for _, cite := range cn.Cites {
-			checkCite(cn.ID, cite, &viols)
-		}
-	}
-	for _, cn := range g.UntestedConcepts {
-		for _, c := range cn.Cites {
-			checkCite(cn.ID, c, &viols)
-		}
-	}
-	for _, cn := range g.ReserveConcepts {
-		for _, c := range cn.Cites {
-			checkCite(cn.ID, c, &viols)
-		}
-	}
-	for _, item := range g.TestingItems {
-		if item.Q != nil {
-			checkCite(item.Q.ID, item.Q.Cite, &viols)
-		}
-	}
+	forEachConceptCite(g, checkCite)
 	return viols
 }
