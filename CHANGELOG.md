@@ -27,6 +27,9 @@ Spec v0.30. Skill `tm-version` is `0.5`.
 
 ### Changed
 
+- GitHub release notes are now this file's section for the release, not a
+  list of commits. The release workflow refuses a tag with no matching
+  `CHANGELOG.md` entry.
 - `make version-sync` also requires `version` in `CITATION.cff` to match
   `internal/version/VERSION`.
 - `tm add --parent/--child` and `tm link` accept `reserve` concepts as
