@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -261,6 +262,9 @@ func TestResolveFile_UserConfigFallback(t *testing.T) {
 func TestResolveFile_UnreadableTmConfig(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores file modes")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not enforced on Windows")
 	}
 	orig, _ := os.Getwd()
 	dir := t.TempDir()

@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/reithan/teach-me/internal/config"
@@ -68,6 +69,9 @@ func TestLookup(t *testing.T) {
 func TestLookup_UnreadableIsError(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores file modes")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not enforced on Windows")
 	}
 	userPath := isolate(t)
 	write(t, userPath, "file = /x\n")

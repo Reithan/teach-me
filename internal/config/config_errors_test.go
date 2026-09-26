@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ func TestUserPath_HomeFallback(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads USERPROFILE on Windows
 	want := filepath.Join(home, ".config", "tm", "config")
 	if got := config.UserPath(); got != want {
 		t.Errorf("UserPath = %q, want %q", got, want)
@@ -48,8 +50,9 @@ func TestLookup_OverlongLineIsError(t *testing.T) {
 func TestSet_Errors(t *testing.T) {
 	skipIfRoot(t)
 	tests := []struct {
-		name  string
-		setup func(t *testing.T, base string) (path string)
+		name      string
+		posixOnly bool
+		setup     func(t *testing.T, base string) (path string)
 	}{
 		{
 			name: "existing file unreadable",
@@ -63,7 +66,8 @@ func TestSet_Errors(t *testing.T) {
 			},
 		},
 		{
-			name: "parent not writable so mkdir fails",
+			name:      "parent not writable so mkdir fails",
+			posixOnly: true,
 			setup: func(t *testing.T, base string) string {
 				ro := filepath.Join(base, "ro")
 				if err := os.Mkdir(ro, 0o500); err != nil {
@@ -74,7 +78,8 @@ func TestSet_Errors(t *testing.T) {
 			},
 		},
 		{
-			name: "directory not writable so temp file fails",
+			name:      "directory not writable so temp file fails",
+			posixOnly: true,
 			setup: func(t *testing.T, base string) string {
 				dir := filepath.Join(base, "ro")
 				if err := os.Mkdir(dir, 0o500); err != nil {
@@ -87,6 +92,9 @@ func TestSet_Errors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.posixOnly && runtime.GOOS == "windows" {
+				t.Skip("file permission bits are not enforced on Windows")
+			}
 			base := t.TempDir()
 			path := tc.setup(t, base)
 			if err := config.Set(path, map[string]string{"file": "/g.mmd"}); err == nil {
