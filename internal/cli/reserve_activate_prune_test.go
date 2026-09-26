@@ -853,6 +853,10 @@ func TestReserve_ProbedConceptWithReason(t *testing.T) {
 	setupSrcFile(t, dir)
 	path := writeGraph(t, dir, probedParentGraph)
 	t.Setenv("TM_FILE", path)
+	before, _, _ := run(t, "status", "--concept", "cc")
+	if !strings.Contains(before, "probe_1") {
+		t.Fatalf("status --concept cc shows no round state:\n%s", before)
+	}
 
 	_, errOut, code := run(t, "reserve", "cc", "--reason", "outside the goal's domain")
 	if code != 0 {
@@ -877,6 +881,18 @@ func TestReserve_ProbedConceptWithReason(t *testing.T) {
 	if out, _, _ := run(t, "status"); !strings.Contains(out, "blocked 0") {
 		t.Errorf("reserved cc still blocks cd; status:\n%s", out)
 	}
+
+	// Parking is non-destructive: activate restores the round state and the block.
+	if _, errOut, code := run(t, "activate", "cc"); code != 0 {
+		t.Fatalf("activate: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	if after, _, _ := run(t, "status", "--concept", "cc"); after != before {
+		t.Errorf("round state changed across reserve/activate:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+	if out, _, _ := run(t, "status"); !strings.Contains(out, "blocked 1") {
+		t.Errorf("activated cc no longer blocks cd; status:\n%s", out)
+	}
+	lintFile(t, path, dir)
 }
 
 // TestUnlink pins that a prerequisite edge can be removed (#75).
