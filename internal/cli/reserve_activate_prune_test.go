@@ -807,3 +807,99 @@ func TestReserveEndpoints(t *testing.T) {
 		})
 	}
 }
+
+// probedParentGraph has "cc" probed with a failed batch and a recorded gap,
+// and "cc" --"requires"--> "cd" (issue #75).
+const probedParentGraph = `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
+        cc["Concept C<br/>GAP: missed the point<br/>f5ca3875b379@src.txt:1-5"]
+        cd["Concept D<br/>f5ca3875b379@src.txt:1-5"]
+        cc --"requires"--> cd
+    end
+    subgraph reserve["Concepts held in reserve"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["Probe one<br/>f5ca3875b379@src.txt:1-2"]:::probe_1
+        a1["wrong answer"]:::fail
+        q2["Probe two<br/>f5ca3875b379@src.txt:3-4"]:::probe_1
+        a2["right answer"]:::pass
+        cc --> q1
+        q1 --> a1
+        cc --> q2
+        q2 --> a2
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+// TestReserve_ProbedConceptWithReason pins that a concept found out of scope
+// after probing can leave the active graph without losing its history (#75).
+func TestReserve_ProbedConceptWithReason(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	setupSrcFile(t, dir)
+	path := writeGraph(t, dir, probedParentGraph)
+	t.Setenv("TM_FILE", path)
+
+	_, errOut, code := run(t, "reserve", "cc", "--reason", "outside the goal's domain")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	rows := readEventLog(t, path)
+	last := rows[len(rows)-1]
+	if last["ev"] != "reserve" || last["concept"] != "cc" || last["reason"] != "outside the goal's domain" {
+		t.Errorf("event: want reserve{cc, reason}, got %v", last)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, node := range []string{`q1["Probe one`, `a1["wrong answer"]:::fail`, `q2["Probe two`, `a2["right answer"]:::pass`} {
+		if !strings.Contains(string(data), node) {
+			t.Errorf("history lost: %s missing", node)
+		}
+	}
+	lintFile(t, path, dir)
+
+	if out, _, _ := run(t, "status"); !strings.Contains(out, "blocked 0") {
+		t.Errorf("reserved cc still blocks cd; status:\n%s", out)
+	}
+}
+
+// TestUnlink pins that a prerequisite edge can be removed (#75).
+func TestUnlink(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	setupSrcFile(t, dir)
+	path := writeGraph(t, dir, probedParentGraph)
+	t.Setenv("TM_FILE", path)
+
+	out, errOut, code := run(t, "unlink", "cc", "cd")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	if strings.TrimSpace(out) != "ok" {
+		t.Errorf("want 'ok', got %q", out)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `cc --"requires"--> cd`) {
+		t.Error("edge cc -> cd still present")
+	}
+	rows := readEventLog(t, path)
+	last := rows[len(rows)-1]
+	if last["ev"] != "unlink" || last["from"] != "cc" || last["to"] != "cd" {
+		t.Errorf("event: want unlink{cc, cd}, got %v", last)
+	}
+	lintFile(t, path, dir)
+}
