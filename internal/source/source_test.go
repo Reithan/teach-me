@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -165,6 +166,9 @@ func TestLoadConfig(t *testing.T) {
 				if os.Getuid() == 0 {
 					t.Skip("running as root")
 				}
+				if runtime.GOOS == "windows" {
+					t.Skip("file permission bits are not enforced on Windows")
+				}
 				dir := t.TempDir()
 				p := filepath.Join(dir, "config")
 				if err := os.WriteFile(p, []byte("x\n"), 0o000); err != nil {
@@ -181,6 +185,9 @@ func TestLoadConfig(t *testing.T) {
 			check: func(t *testing.T, _ *source.Config) {
 				if os.Getuid() == 0 {
 					t.Skip("running as root")
+				}
+				if runtime.GOOS == "windows" {
+					t.Skip("file permission bits are not enforced on Windows")
 				}
 				dir := t.TempDir()
 				p := filepath.Join(dir, ".tmconfig")
@@ -310,6 +317,7 @@ func TestLoadConfig(t *testing.T) {
 func TestConverter(t *testing.T) {
 	tests := []struct {
 		name      string
+		posixOnly bool
 		convBody  string
 		cfgPin    string // version pin in config; "" → no version key
 		verOutput string // what version script prints
@@ -321,14 +329,16 @@ func TestConverter(t *testing.T) {
 		wantInErr string
 	}{
 		{
-			name:     "converter runs and slices output",
-			convBody: "sed 's/<[^>]*>//g'", cfgPin: "1.0", verOutput: "1.0",
+			name:      "converter runs and slices output",
+			posixOnly: true,
+			convBody:  "sed 's/<[^>]*>//g'", cfgPin: "1.0", verOutput: "1.0",
 			docHTML: "<p>alpha</p>\n<p>beta</p>\n",
 			start:   1, end: 2, wantText: "alpha\nbeta",
 		},
 		{
-			name:     "version mismatch produces RefusalError",
-			convBody: "cat", cfgPin: "1.0", verOutput: "2.0",
+			name:      "version mismatch produces RefusalError",
+			posixOnly: true,
+			convBody:  "cat", cfgPin: "1.0", verOutput: "2.0",
 			docHTML: "x\n",
 			wantErr: true, wantInErr: "2.0",
 		},
@@ -339,7 +349,8 @@ func TestConverter(t *testing.T) {
 			wantErr: true, wantInErr: "no version pin",
 		},
 		{
-			name: "non-zero exit with stderr produces RefusalError citing stderr",
+			name:      "non-zero exit with stderr produces RefusalError citing stderr",
+			posixOnly: true,
 			convBody: `echo "bad input" >&2
 exit 1`, cfgPin: "1.0", verOutput: "1.0",
 			docHTML: "x\n",
@@ -351,8 +362,9 @@ exit 1`, cfgPin: "1.0", verOutput: "1.0",
 			docHTML: "x\n", wantErr: true,
 		},
 		{
-			name:     "multi-line version output uses first line for pin check",
-			convBody: "cat", cfgPin: "1.0", verOutput: `1.0\nextra`,
+			name:      "multi-line version output uses first line for pin check",
+			posixOnly: true,
+			convBody:  "cat", cfgPin: "1.0", verOutput: `1.0\nextra`,
 			docHTML: "line\n",
 			start:   1, end: 1, wantText: "line",
 		},
@@ -360,6 +372,9 @@ exit 1`, cfgPin: "1.0", verOutput: "1.0",
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.posixOnly && runtime.GOOS == "windows" {
+				t.Skip("shell-script converters need a POSIX shell")
+			}
 			dir, cfg := makeConvFixture(t, tc.convBody, tc.cfgPin, tc.verOutput, tc.docHTML)
 			r := resolverFrom(loadCfg(t, cfg, ""), dir)
 			start, end := 1, 1
@@ -386,6 +401,9 @@ exit 1`, cfgPin: "1.0", verOutput: "1.0",
 	}
 
 	t.Run("version check is cached: same resolver skips re-exec", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell-script converters need a POSIX shell")
+		}
 		dir, cfg := makeConvFixture(t, "cat", "1.0", "1.0", "line\n")
 		r := resolverFrom(loadCfg(t, cfg, ""), dir)
 		for i := range 3 {
@@ -450,6 +468,7 @@ func TestURIFetch(t *testing.T) {
 
 	tests := []struct {
 		name, url, cfgExtra string
+		posixOnly           bool
 		start, end          int
 		wantText, wantMIME  string
 		wantURL             string
@@ -462,13 +481,16 @@ func TestURIFetch(t *testing.T) {
 		{name: "non-2xx produces RefusalError", url: srvURL + "/notfound", start: 1, end: 1, wantErr: true, wantInErr: "fetch"},
 		{name: "oversize body produces RefusalError", url: srvURL + "/big", start: 1, end: 1, wantErr: true, wantInErr: "16 MiB"},
 		{name: "unknown MIME with no converter produces RefusalError", url: srvURL + "/pdf", start: 1, end: 1, wantErr: true, wantInErr: "no converter for application/pdf"},
-		{name: "converter matched by MIME sets meta", url: srvURL + "/html", cfgExtra: htmlCfg, start: 1, end: 1, wantMIME: "text/html"},
+		{name: "converter matched by MIME sets meta", posixOnly: true, url: srvURL + "/html", cfgExtra: htmlCfg, start: 1, end: 1, wantMIME: "text/html"},
 		{name: "whitespace CT falls back to URL extension", url: srvURL + "/doc.md", cfgExtra: "ext .md=text/markdown\n", start: 1, end: 2, wantText: "# T\nC", wantMIME: "text/markdown"},
 		{name: "no CT and no extension treated as plain text", url: srvURL + "/doc", start: 1, end: 1, wantText: "plain"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.posixOnly && runtime.GOOS == "windows" {
+				t.Skip("shell-script converters need a POSIX shell")
+			}
 			r := resolverFrom(loadCfg(t, tc.cfgExtra, ""), t.TempDir())
 			text, meta, err := r.Read(makeCitation(tc.url, tc.start, tc.end))
 			if tc.wantErr {

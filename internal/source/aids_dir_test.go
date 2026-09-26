@@ -32,7 +32,7 @@ func TestAidsDir_ConfiguredRelative(t *testing.T) {
 }
 
 func TestAidsDir_ConfiguredAbsolute(t *testing.T) {
-	absDir := "/tmp/absaids"
+	absDir := filepath.Join(t.TempDir(), "absaids")
 	cfg := &source.Config{AidsDir: absDir}
 	got := source.AidsDir(cfg, t.TempDir())
 	if got != filepath.Clean(absDir) {

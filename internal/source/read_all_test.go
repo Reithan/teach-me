@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -47,12 +48,13 @@ func TestReadAll(t *testing.T) {
 		cv, cv, cv, vr)
 
 	tests := []struct {
-		name    string
-		setup   func(t *testing.T) (dir string, cfg string, locator string)
-		wantAll string // full text ReadAll must return
-		wantURL string // meta.URL from ReadAll (URI redirect check)
-		wantErr bool
-		wantRef bool // expect RefusalError
+		name      string
+		posixOnly bool
+		setup     func(t *testing.T) (dir string, cfg string, locator string)
+		wantAll   string // full text ReadAll must return
+		wantURL   string // meta.URL from ReadAll (URI redirect check)
+		wantErr   bool
+		wantRef   bool // expect RefusalError
 	}{
 		{
 			name: "plain file full text",
@@ -67,7 +69,8 @@ func TestReadAll(t *testing.T) {
 			wantAll: "alpha\nbeta\ngamma",
 		},
 		{
-			name: "converted file full text",
+			name:      "converted file full text",
+			posixOnly: true,
 			setup: func(t *testing.T) (string, string, string) {
 				dir := t.TempDir()
 				f := filepath.Join(dir, "doc.html")
@@ -117,6 +120,9 @@ func TestReadAll(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.posixOnly && runtime.GOOS == "windows" {
+				t.Skip("shell-script converters need a POSIX shell")
+			}
 			dir, cfgStr, locator := tc.setup(t)
 			r := resolverFrom(loadCfg(t, cfgStr, ""), dir)
 			r.GraphDir = dir

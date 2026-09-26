@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -346,6 +347,9 @@ func TestGitLocator_ConverterCases(t *testing.T) {
 
 	// Case 1: file-at-ref → converter applied; sliced text is the stripped output.
 	t.Run("file at ref with converter: text is converted", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell-script converters need a POSIX shell")
+		}
 		c := cite.Citation{File: "git:r@" + s2 + ":file.txt", Start: 1, End: 2}
 		text, meta, err := r.Read(c)
 		if err != nil {
