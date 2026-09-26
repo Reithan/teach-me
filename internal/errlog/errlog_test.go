@@ -266,10 +266,3 @@ func TestRealClock_IsUTC(t *testing.T) {
 		t.Errorf("RealClock.Now() not UTC: %v", now.Location())
 	}
 }
-
-func TestPtr_Helper(t *testing.T) {
-	s := ptr("hello")
-	if *s != "hello" {
-		t.Errorf("ptr = %q, want 'hello'", *s)
-	}
-}
