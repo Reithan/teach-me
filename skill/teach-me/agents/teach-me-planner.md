@@ -74,6 +74,8 @@ more; when it does, state why in the completion paragraph.
 **Reuse before adding.** Before any `tm add`, run `tm find "<name>"`. If a hit
 covers the concept in any state, reuse its id; for a hit in reserve, name it in
 the completion paragraph, since activation is the teacher's or pruner's call.
+You may still link a reserve concept with `tm link` or `--parent`/`--child`;
+the edge does not wake it and does not block its children.
 
 **Learner-known concepts.** Map only what the learner does not already know.
 When the source requires a known concept as a parent of a kept one, add it,
