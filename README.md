@@ -1,6 +1,7 @@
 [![CI](https://github.com/Reithan/teach-me/actions/workflows/ci.yml/badge.svg)](https://github.com/Reithan/teach-me/actions/workflows/ci.yml)
 [![Cross-Platform Tests](https://github.com/Reithan/teach-me/actions/workflows/cross-platform.yml/badge.svg)](https://github.com/Reithan/teach-me/actions/workflows/cross-platform.yml)
 [![Release](https://github.com/Reithan/teach-me/actions/workflows/release.yml/badge.svg)](https://github.com/Reithan/teach-me/releases)
+[![Dependabot Updates](https://github.com/Reithan/teach-me/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/Reithan/teach-me/actions/workflows/dependabot/dependabot-updates)
 
 # teach-me
 teach-me turns an AI coding agent into a patient tutor: it maps what you need to learn from sources you choose, quizzes you on it, and teaches each gap your answers reveal until you reach your goal.
