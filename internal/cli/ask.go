@@ -134,52 +134,12 @@ func askRun(ctx *Context) int {
 	// TestingItems. We avoid touching unexported state fields.
 	batches := askConceptBatches(g, s, conceptID)
 
-	// §8 batch selection:
-	// 1. Unresolved teach batch (lowest N first).
-	// 2. Otherwise, unanswered probe batch (checking refusals first).
-	selectedBatch := ""
-	for _, b := range batches {
-		if graph.IsTeachClass(b) && s.BatchStateOf(b) != state.BatchResolved {
-			selectedBatch = b
-			break
-		}
-	}
-
-	if selectedBatch == "" {
-		// No unresolved teach batch — try probe selection.
-		// §7: refuse when failed probe batches remain above base, teaching is
-		// not spent, and the latest teach batch above base is not all-pass (§8.6–8.9).
-		// Uses LatestTeachNotAllPass rather than OpenTargets to key on the latest
-		// batch status, not on a stale per-target accounting (Fix 2).
-		// Exempt: when a failed probe batch is still open, ask emits its remaining
-		// question(s) so the batch can close normally (issue #78; openFailedProbeBatch).
-		if len(cs.FailedProbeBatches) > 0 && !cs.TeachingSpent && cs.LatestTeachNotAllPass &&
-			openFailedProbeBatch(cs, s) == "" {
-			var openTarget string
-			if len(cs.OpenTargets) > 0 {
-				openTarget = cs.OpenTargets[0]
-			}
-			ctx.ErrMsg = fmt.Sprintf("teaching round for %s is not complete", conceptID)
-			if openTarget != "" {
-				ctx.FixMsg = fmt.Sprintf("add a teach question for %s with tm q %s ... --teach --re %s",
-					openTarget, conceptID, openTarget)
-			}
-			writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
-			return 1
-		}
-
-		// Find the lowest-N probe batch that is Draft (not locked) or Open.
-		for _, b := range batches {
-			if !graph.IsProbeClass(b) {
-				continue
-			}
-			status := s.BatchStateOf(b)
-			if status == state.BatchLocked || status == state.BatchResolved {
-				continue
-			}
-			selectedBatch = b
-			break
-		}
+	selectedBatch, errMsg, fixMsg := askSelectBatch(s, cs, batches, conceptID)
+	if errMsg != "" {
+		ctx.ErrMsg = errMsg
+		ctx.FixMsg = fixMsg
+		writeErrFix(ctx.ErrOut, errMsg, fixMsg)
+		return 1
 	}
 
 	// Nothing to ask — no suitable batch found; exit 0 with no output.
@@ -402,32 +362,9 @@ func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code in
 			buildGateFixMsg(conceptID, s)
 	}
 	batches := askConceptBatches(g, s, conceptID)
-	selectedBatch := ""
-	for _, b := range batches {
-		if graph.IsTeachClass(b) && s.BatchStateOf(b) != state.BatchResolved {
-			selectedBatch = b
-			break
-		}
-	}
-	if selectedBatch == "" {
-		if len(cs.OpenTargets) > 0 && !cs.TeachingSpent {
-			openTarget := cs.OpenTargets[0]
-			return 1,
-				fmt.Sprintf("teaching round for %s is not complete", conceptID),
-				fmt.Sprintf("add a teach question for %s with tm q %s ... --teach --re %s",
-					openTarget, conceptID, openTarget)
-		}
-		for _, b := range batches {
-			if !graph.IsProbeClass(b) {
-				continue
-			}
-			bst := s.BatchStateOf(b)
-			if bst == state.BatchLocked || bst == state.BatchResolved {
-				continue
-			}
-			selectedBatch = b
-			break
-		}
+	selectedBatch, errMsg, fixMsg := askSelectBatch(s, cs, batches, conceptID)
+	if errMsg != "" {
+		return 1, errMsg, fixMsg
 	}
 	if selectedBatch == "" {
 		return 0, "", ""
@@ -468,4 +405,41 @@ func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code in
 		_, _ = fmt.Fprintln(out, line)
 	}
 	return 0, "", ""
+}
+
+// askSelectBatch runs §8 batch selection for conceptID over batches (sorted by
+// N ascending). It returns the concept's lowest unresolved teach batch if one
+// exists, otherwise its lowest unresolved probe batch. A locked probe batch is
+// eligible: locking closes a batch to additions only (§5), and the fallback
+// probes stay locked for good once the first teach question exists. Returns
+// ("", err, fix) when the teaching round is incomplete, and ("", "", "") when
+// there is nothing to ask.
+func askSelectBatch(s *state.State, cs state.ConceptStatusResult, batches []string, conceptID string) (batch, errMsg, fixMsg string) {
+	for _, b := range batches {
+		if graph.IsTeachClass(b) && s.BatchStateOf(b) != state.BatchResolved {
+			return b, "", ""
+		}
+	}
+
+	// §7: refuse when failed probe batches remain above base, teaching is not
+	// spent, and the latest teach batch above base is not all-pass (§8.6–8.9).
+	// Keyed on the latest batch status, not on a stale per-target accounting
+	// (Fix 2). Exempt: when a failed probe batch is still open, its remaining
+	// questions are emitted so the batch can close normally (issue #78).
+	if len(cs.FailedProbeBatches) > 0 && !cs.TeachingSpent && cs.LatestTeachNotAllPass &&
+		openFailedProbeBatch(cs, s) == "" {
+		errMsg = fmt.Sprintf("teaching round for %s is not complete", conceptID)
+		if len(cs.OpenTargets) > 0 {
+			t := cs.OpenTargets[0]
+			fixMsg = fmt.Sprintf("add a teach question for %s with tm q %s ... --teach --re %s", t, conceptID, t)
+		}
+		return "", errMsg, fixMsg
+	}
+
+	for _, b := range batches {
+		if graph.IsProbeClass(b) && s.BatchStateOf(b) != state.BatchResolved {
+			return b, "", ""
+		}
+	}
+	return "", "", ""
 }
