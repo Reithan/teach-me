@@ -40,32 +40,8 @@ archives:
 checksum:
   name_template: checksums.txt
 
-changelog:
-  sort: asc
-  groups:
-    - title: Features
-      regexp: '^.*feat(\(.+\))?\!?:.*'
-      order: 0
-    - title: Bug Fixes
-      regexp: '^.*fix(\(.+\))?\!?:.*'
-      order: 1
-    - title: Documentation
-      regexp: '^.*docs(\(.+\))?\!?:.*'
-      order: 2
-    - title: Tests
-      regexp: '^.*test(\(.+\))?\!?:.*'
-      order: 3
-    - title: CI
-      regexp: '^.*ci(\(.+\))?\!?:.*'
-      order: 4
-    - title: Refactoring
-      regexp: '^.*refactor(\(.+\))?\!?:.*'
-      order: 5
-    - title: Chore
-      regexp: '^.*chore(\(.+\))?\!?:.*'
-      order: 6
-    - title: Others
-      order: 999
+# Release notes come from CHANGELOG.md via --release-notes in release.yml,
+# which skips GoReleaser's commit-based changelog.
 
 release:
   prerelease: auto

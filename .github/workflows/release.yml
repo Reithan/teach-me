@@ -20,6 +20,8 @@ jobs:
           fetch-depth: 0
       - name: Verify tag matches VERSION
         run: test "v$(cat internal/version/VERSION)" = "$GITHUB_REF_NAME"
+      - name: Verify CHANGELOG entry exists
+        run: .github/scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > /dev/null
 
   ci:
     name: CI
@@ -36,11 +38,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - name: Extract release notes from CHANGELOG.md
+        run: .github/scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/release-notes.md"
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: v2.18.2
-          args: release --clean
+          args: release --clean --release-notes ${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Attest build provenance
