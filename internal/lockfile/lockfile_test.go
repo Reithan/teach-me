@@ -1,6 +1,7 @@
 package lockfile
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -223,4 +224,69 @@ func TestWriteTempAndRenameOverwrites(t *testing.T) {
 	if string(got) != string(newData) {
 		t.Errorf("content = %q, want %q", got, newData)
 	}
+}
+
+// TestReleaseRetriesBlockedRemove simulates Windows refusing to delete the
+// lock file while a waiter has it open: Release must keep trying rather than
+// strand the lock until it goes stale.
+func TestReleaseRetriesBlockedRemove(t *testing.T) {
+	cases := []struct {
+		name     string
+		failures int
+		wantErr  bool
+		wantGone bool
+	}{
+		{"succeeds after transient failures", 3, false, true},
+		{"gives up after removeRetries", removeRetries, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			graph := filepath.Join(t.TempDir(), "g.mmd")
+			lk, err := Acquire(graph, &fixedClock{t: time.Now()})
+			if err != nil {
+				t.Fatalf("Acquire: %v", err)
+			}
+			calls := 0
+			removeFile = func(name string) error {
+				calls++
+				if calls <= tc.failures {
+					return &os.PathError{Op: "remove", Path: name, Err: errors.New("sharing violation")}
+				}
+				return os.Remove(name)
+			}
+			t.Cleanup(func() { removeFile = os.Remove })
+
+			err = lk.Release()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Release err = %v, wantErr %v", err, tc.wantErr)
+			}
+			_, statErr := os.Stat(LockPath(graph))
+			if gone := os.IsNotExist(statErr); gone != tc.wantGone {
+				t.Fatalf("lock file gone = %v, want %v", gone, tc.wantGone)
+			}
+		})
+	}
+}
+
+// TestAcquireRetriesTransientOpenError simulates Windows returning access
+// denied for an O_EXCL create while the previous lock file's deletion is
+// pending: Acquire must keep polling instead of failing.
+func TestAcquireRetriesTransientOpenError(t *testing.T) {
+	// The graph's directory does not exist yet, so the create fails with a
+	// not-exist error, which the hook reports as transient until the
+	// directory appears.
+	dir := filepath.Join(t.TempDir(), "later")
+	graph := filepath.Join(dir, "g.mmd")
+	orig := transientOpenErr
+	transientOpenErr = os.IsNotExist
+	t.Cleanup(func() { transientOpenErr = orig })
+	go func() {
+		time.Sleep(60 * time.Millisecond)
+		_ = os.Mkdir(dir, 0o755)
+	}()
+	lk, err := Acquire(graph, &fixedClock{t: time.Now()})
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	_ = lk.Release()
 }
