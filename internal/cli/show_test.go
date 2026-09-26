@@ -352,4 +352,3 @@ func TestShow_Concept_Reserve(t *testing.T) {
 		t.Errorf("reserve concept should have no batch output; got:\n%s", out)
 	}
 }
-

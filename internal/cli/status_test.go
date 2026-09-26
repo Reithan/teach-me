@@ -252,4 +252,3 @@ func TestStatus_Concept_Blocked_NoBatches(t *testing.T) {
 		t.Errorf("no chain expected for blocked concept; got:\n%s", out)
 	}
 }
-
