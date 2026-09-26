@@ -111,11 +111,7 @@ func lintFile(t *testing.T, file, srcRoot string) {
 // the graph round-trips and passes lint, the output is "ok", and an add event
 // is logged with correct parents/children (empty when none given).
 func TestAdd_HappyPath(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 
@@ -196,11 +192,7 @@ func TestAdd_HappyPath(t *testing.T) {
 // TestAdd_HappyPath_WithParentChild verifies that --parent and --child flags
 // create edges in the correct directions and are recorded in the event log.
 func TestAdd_HappyPath_WithParentChild(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 
@@ -277,11 +269,7 @@ func TestAdd_HappyPath_WithParentChild(t *testing.T) {
 // TestAdd_IDExists_Untested verifies that adding an already-existing untested
 // concept exits 1 with "already exists" and no fix line.
 func TestAdd_IDExists_Untested(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 	_ = file
@@ -309,11 +297,7 @@ func TestAdd_IDExists_Untested(t *testing.T) {
 // TestAdd_IDExists_Passed verifies that adding a concept that exists in the
 // passed block exits 1 with "already exists" and a "fix: tm reopen <id>" hint.
 func TestAdd_IDExists_Passed(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	// Build a graph with a passed concept.
 	buildMinimalGraph(t, dir)
@@ -333,11 +317,7 @@ func TestAdd_IDExists_Passed(t *testing.T) {
 // TestAdd_ReservedID verifies that a reserved ID (q1, end, etc.) exits 3 with
 // the usage line as the fix.
 func TestAdd_ReservedID(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	cases := []string{"q1", "a5", "end", "passed", "untested", "testing"}
@@ -361,11 +341,7 @@ func TestAdd_ReservedID(t *testing.T) {
 // TestAdd_BadCitation_Parse verifies that a citation that fails to parse
 // (missing line range) exits 3 with the usage line as the fix.
 func TestAdd_BadCitation_Parse(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, errOut, code := run(t, "add", "mycon", "src.txt", "scope")
@@ -383,11 +359,7 @@ func TestAdd_BadCitation_Parse(t *testing.T) {
 // TestAdd_BadCitation_OutOfBounds verifies that a citation referencing
 // out-of-bounds lines exits 3.
 func TestAdd_BadCitation_OutOfBounds(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	// src.txt has 10 lines; request line 100.
@@ -406,11 +378,7 @@ func TestAdd_BadCitation_OutOfBounds(t *testing.T) {
 // TestAdd_UnknownParent verifies that a --parent referencing a non-existent
 // concept ID exits 3 with the usage line as fix.
 func TestAdd_UnknownParent(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, errOut, code := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope",
@@ -426,11 +394,7 @@ func TestAdd_UnknownParent(t *testing.T) {
 // TestAdd_UnknownChild verifies that a --child referencing a non-existent
 // concept ID exits 3.
 func TestAdd_UnknownChild(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, errOut, code := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope",
@@ -447,11 +411,7 @@ func TestAdd_UnknownChild(t *testing.T) {
 // to a concept that already has a path back to the new concept exits 1 with
 // "edge would close a cycle".
 func TestAdd_CycleViaChild(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 	_ = file
@@ -489,11 +449,7 @@ func TestAdd_CycleViaChild(t *testing.T) {
 // TestAdd_MissingColonInFlag verifies that a --parent or --child value missing
 // a colon exits 3 with the usage line.
 func TestAdd_MissingColonInFlag(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, errOut, code := run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope",
@@ -514,11 +470,7 @@ func TestAdd_MissingColonInFlag(t *testing.T) {
 // TestLink_HappyPath verifies that tm link adds an edge, graph lints, and
 // one "link" event is logged with correct from/to/rel.
 func TestLink_HappyPath(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 
@@ -585,11 +537,7 @@ func TestLink_HappyPath(t *testing.T) {
 
 // TestLink_UnknownFrom verifies that linking from an unknown ID exits 3.
 func TestLink_UnknownFrom(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	_ = newGraph(t, dir)
 	_, _, c1 := run(t, "add", "b", "f5ca3875b379@src.txt:1-5", "concept b")
@@ -608,11 +556,7 @@ func TestLink_UnknownFrom(t *testing.T) {
 
 // TestLink_UnknownTo verifies that linking to an unknown ID exits 3.
 func TestLink_UnknownTo(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	_ = newGraph(t, dir)
 	_, _, c1 := run(t, "add", "a", "f5ca3875b379@src.txt:1-5", "concept a")
@@ -634,11 +578,7 @@ func TestLink_NonConceptFrom(t *testing.T) {
 	// Resolve fixture path before Chdir so relative resolution works.
 	probeFixture := checkProbeFixture(t)
 
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	// Copy to temp dir to avoid leaking event log.
 	data, err := os.ReadFile(probeFixture)
@@ -672,11 +612,7 @@ func TestLink_NonConceptTo(t *testing.T) {
 	// Resolve fixture path before Chdir so relative resolution works.
 	probeFixture := checkProbeFixture(t)
 
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	// Copy to temp dir to avoid leaking event log.
 	data, err := os.ReadFile(probeFixture)
@@ -702,11 +638,7 @@ func TestLink_NonConceptTo(t *testing.T) {
 // TestLink_Cycle verifies that adding a back edge exits 1 with "edge would
 // close a cycle".
 func TestLink_Cycle(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	_ = newGraph(t, dir)
 
@@ -737,11 +669,7 @@ func TestLink_Cycle(t *testing.T) {
 // TestLink_DuplicateEdge verifies that adding an identical duplicate edge
 // exits 1 with a friendly error.
 func TestLink_DuplicateEdge(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	_ = newGraph(t, dir)
 
@@ -770,11 +698,7 @@ func TestLink_DuplicateEdge(t *testing.T) {
 // TestAdd_NoLeakedFiles verifies no .tmconfig or ERRORS.jsonl is left in
 // the working directory after a series of add/link operations.
 func TestAdd_NoLeakedFiles(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	errlogPath := tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, errlogPath := qSetupDir(t)
 
 	_ = newGraph(t, dir)
 	_, _, c1 := run(t, "add", "x", "f5ca3875b379@src.txt:1-5", "concept x")
