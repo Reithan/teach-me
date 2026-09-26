@@ -53,7 +53,6 @@ func askRun(ctx *Context) int {
 		overrideReason = v[0]
 	}
 
-	// Resolve graph file.
 	s, file, code := loadStateCtx(ctx)
 	if code != 0 {
 		return code

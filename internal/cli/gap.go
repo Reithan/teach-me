@@ -54,7 +54,6 @@ func gapRun(ctx *Context) int {
 			}
 		}
 
-		// Find the target node in untested.
 		var targetNode *graph.ConceptNode
 		for _, c := range g.UntestedConcepts {
 			if c.ID == concept {
@@ -65,7 +64,6 @@ func gapRun(ctx *Context) int {
 
 		oldGAP := targetNode.GAP
 
-		// Build new node (copy-on-write).
 		newNode := *targetNode
 		newNode.GAP = gap
 

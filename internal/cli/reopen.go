@@ -45,7 +45,6 @@ func reopenApply(
 		}
 	}
 
-	// Find the target node in passed.
 	var targetNode *graph.ConceptNode
 	for _, c := range g.PassedConcepts {
 		if c.ID == concept {
@@ -54,7 +53,6 @@ func reopenApply(
 		}
 	}
 
-	// Build new node (copy-on-write): move to untested, set GAP.
 	newNode := *targetNode
 	newNode.Block = graph.BlockUntested
 	newNode.GAP = gap
@@ -85,7 +83,6 @@ func reopenApply(
 		srcAfter = hashedSrc
 	}
 
-	// Build new graph: remove from passed, prepend to untested.
 	newG := *g
 
 	// New passed list without the reopened concept.

@@ -74,7 +74,6 @@ func dropRun(ctx *Context) int {
 			}
 		}
 
-		// Find the target node.
 		var targetNode *graph.ConceptNode
 		for _, c := range g.UntestedConcepts {
 			if c.ID == concept {
@@ -94,7 +93,6 @@ func dropRun(ctx *Context) int {
 			}
 		}
 
-		// Build new graph (copy-on-write).
 		newG := *g
 		newConcepts := make([]*graph.ConceptNode, 0, len(g.UntestedConcepts)-1)
 		for _, c := range g.UntestedConcepts {
