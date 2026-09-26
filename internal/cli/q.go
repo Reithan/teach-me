@@ -169,286 +169,20 @@ func qRun(ctx *Context) int {
 		}
 
 		if !isTeach {
-			// ── Probe question ────────────────────────────────────────────────
-
-			// Exit 1: any probe batch is locked or open.
-			for _, b := range allBatches {
-				if !graph.IsProbeClass(b) {
-					continue
-				}
-				switch s.BatchStateOf(b) {
-				case state.BatchLocked:
-					lockingTeach := qFindLockingTeach(allBatches, b)
-					if lockingTeach != "" {
-						return nil, nil, &ops.Refusal{
-							Err:  fmt.Sprintf("%s is locked by %s", b, lockingTeach),
-							Fix:  fmt.Sprintf("finish %s, then answer %s", lockingTeach, b),
-							Exit: 1,
-						}
-					}
-					return nil, nil, &ops.Refusal{
-						Err:  fmt.Sprintf("%s is locked", b),
-						Exit: 1,
-					}
-				case state.BatchOpen:
-					return nil, nil, &ops.Refusal{
-						Err:  fmt.Sprintf("%s is open (answers in progress)", b),
-						Fix:  fmt.Sprintf("finish answering %s before adding new questions", b),
-						Exit: 1,
-					}
-				}
+			ng, rows, ref, qid := qProbeApply(g, s, cfg, logPath, allBatches, cs,
+				conceptID, reQID, scope, citeStr, overrideReason, citeMeta)
+			if ref == nil {
+				newQID = qid
 			}
+			return ng, rows, ref
+		}
 
-			// Exit 1: --re target belongs to a different concept.
-			if reQID != "" {
-				if c, ok := s.ConceptOf(reQID); !ok || c != conceptID {
-					msg := fmt.Sprintf("%s does not belong to %s", reQID, conceptID)
-					if ok {
-						msg = fmt.Sprintf("%s belongs to %s, not %s", reQID, c, conceptID)
-					}
-					return nil, nil, &ops.Refusal{
-						Err:  msg,
-						Exit: 1,
-					}
-				}
-			}
-
-			// Exit 1: --re on a probe whose target is not an unclear probe.
-			if reQID != "" && !s.ProbeReplacesUnclear(reQID) {
-				return nil, nil, &ops.Refusal{
-					Err:  fmt.Sprintf("%s is not an unclear probe", reQID),
-					Fix:  "--re requires a probe question whose answer graded unclear",
-					Exit: 1,
-				}
-			}
-
-			// Exit 1: draft probe batch is at max.
-			draftBatch, hasDraft := s.DraftProbeBatch(conceptID)
-			if hasDraft && len(s.BatchQuestions(draftBatch)) >= cfg.ProbeMax {
-				return nil, nil, &ops.Refusal{
-					Err:  fmt.Sprintf("batch %s is at maximum size (%d)", draftBatch, cfg.ProbeMax),
-					Exit: 1,
-				}
-			}
-
-			// Allocate new question N and batch class.
-			qN := graph.NextQuestionN(g, logPath)
-			qid := fmt.Sprintf("q%d", qN)
-			batchClass := draftBatch
-			if !hasDraft {
-				bN := graph.NextBatchN(g, logPath)
-				batchClass = fmt.Sprintf("probe_%d", bN)
-			}
-
-			// Determine edge source: concept for regular probe, a<N(re)> for replacement.
-			edgeFrom := conceptID
-			if reQID != "" {
-				reN := graph.QuestionN(reQID)
-				edgeFrom = fmt.Sprintf("a%d", reN)
-			}
-
-			newG := *g
-			newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
-				Q: &graph.QuestionNode{
-					ID:    qid,
-					Scope: scope,
-					Cite:  citeStr,
-					Class: batchClass,
-				},
-			})
-			newG.Edges = append(append([]*graph.Edge{}, g.Edges...), &graph.Edge{
-				From: edgeFrom,
-				To:   qid,
-			})
-
+		ng, rows, ref, qid := qTeachApply(g, s, cfg, logPath, allBatches, cs, conceptNode,
+			conceptID, reQID, scope, citeStr, overrideReason, citeMeta)
+		if ref == nil {
 			newQID = qid
-			re := reQID // "" when no --re
-			probeFields := map[string]any{
-				"q":       qid,
-				"concept": conceptID,
-				"batch":   batchClass,
-				"kind":    "probe",
-				"scope":   scope,
-				"src":     citeStr,
-				"re":      re,
-			}
-			source.ApplyMeta(probeFields, citeMeta)
-			row := eventlog.NewRow("q", probeFields)
-			// Gate clearing via --override (spec §7 line 278, Q3/Q7).
-			rows := []eventlog.Row{row}
-			finalG := &newG
-			if overrideReason != "" && cs.Gated {
-				if clearedG, gateRow, ok := ops.ClearGate(finalG, s, conceptID, "override", overrideReason); ok {
-					finalG = clearedG
-					rows = append([]eventlog.Row{gateRow}, rows...)
-				}
-			}
-			return finalG, rows, nil
 		}
-
-		// ── Teach question ────────────────────────────────────────────────────
-
-		// Exit 1: --teach without --re.
-		if reQID == "" {
-			return nil, nil, &ops.Refusal{
-				Err:  "--teach requires --re",
-				Fix:  fmt.Sprintf("tm q %s <cite> \"<scope>\" --teach --re <qid>", conceptID),
-				Exit: 1,
-			}
-		}
-
-		// Exit 1: teaching is spent.
-		if cs.TeachingSpent {
-			return nil, nil, &ops.Refusal{
-				Err:  fmt.Sprintf("teaching is spent for %s", conceptID),
-				Exit: 1,
-			}
-		}
-
-		// Exit 1: concept has no GAP.
-		if conceptNode == nil || conceptNode.GAP == "" {
-			return nil, nil, &ops.Refusal{
-				Err:  conceptID + " has no GAP",
-				Fix:  fmt.Sprintf("tm gap %s \"<gap>\"", conceptID),
-				Exit: 1,
-			}
-		}
-
-		// Exit 1: no failed probe batch above base.
-		if len(cs.FailedProbeBatches) == 0 {
-			return nil, nil, &ops.Refusal{
-				Err:  fmt.Sprintf("no failed probe batch above base for %s", conceptID),
-				Exit: 1,
-			}
-		}
-
-		// Exit 1: no fallback probe batch at minimum size with no answers yet.
-		hasFallback := false
-		for _, fp := range cs.FallbackProbes {
-			if len(s.BatchQuestions(fp)) >= cfg.ProbeMin {
-				hasFallback = true
-				break
-			}
-		}
-		if !hasFallback {
-			return nil, nil, &ops.Refusal{
-				Err: fmt.Sprintf(
-					"no fallback probe batch at minimum size (%d) for %s",
-					cfg.ProbeMin, conceptID,
-				),
-				Fix: fmt.Sprintf(
-					"add at least %d probe questions to a fallback batch with tm q %s",
-					cfg.ProbeMin, conceptID,
-				),
-				Exit: 1,
-			}
-		}
-
-		// Exit 1: any teach batch is open.
-		for _, b := range allBatches {
-			if !graph.IsTeachClass(b) {
-				continue
-			}
-			if s.BatchStateOf(b) == state.BatchOpen {
-				return nil, nil, &ops.Refusal{
-					Err:  fmt.Sprintf("%s is open (answers in progress)", b),
-					Fix:  fmt.Sprintf("finish answering %s before adding new teach questions", b),
-					Exit: 1,
-				}
-			}
-		}
-
-		// Exit 1: --re target belongs to a different concept.
-		if c, ok := s.ConceptOf(reQID); !ok || c != conceptID {
-			msg := fmt.Sprintf("%s does not belong to %s", reQID, conceptID)
-			if ok {
-				msg = fmt.Sprintf("%s belongs to %s, not %s", reQID, c, conceptID)
-			}
-			return nil, nil, &ops.Refusal{
-				Err:  msg,
-				Exit: 1,
-			}
-		}
-
-		// Exit 1: --re target answer is not fail/unclear or is flagged OOS.
-		targetAnswer, hasTargetAnswer := s.TeachTargetAnswer(reQID)
-		if !hasTargetAnswer {
-			return nil, nil, &ops.Refusal{
-				Err:  fmt.Sprintf("%s has no answer (--teach --re requires a graded fail or unclear answer)", reQID),
-				Exit: 1,
-			}
-		}
-		if targetAnswer.Class != "fail" && targetAnswer.Class != "unclear" {
-			return nil, nil, &ops.Refusal{
-				Err:  fmt.Sprintf("%s answer is %q, not fail or unclear", reQID, targetAnswer.Class),
-				Exit: 1,
-			}
-		}
-		if targetAnswer.OOS {
-			return nil, nil, &ops.Refusal{
-				Err:  fmt.Sprintf("%s answer is flagged OOS", reQID),
-				Exit: 1,
-			}
-		}
-
-		// Exit 1: draft teach batch is at max.
-		draftBatch, hasDraft := s.DraftTeachBatch(conceptID)
-		if hasDraft && len(s.BatchQuestions(draftBatch)) >= cfg.TeachMax {
-			return nil, nil, &ops.Refusal{
-				Err:  fmt.Sprintf("batch %s is at maximum size (%d)", draftBatch, cfg.TeachMax),
-				Exit: 1,
-			}
-		}
-
-		// Allocate new question N and batch class.
-		qN := graph.NextQuestionN(g, logPath)
-		qid := fmt.Sprintf("q%d", qN)
-		batchClass := draftBatch
-		if !hasDraft {
-			bN := graph.NextBatchN(g, logPath)
-			batchClass = fmt.Sprintf("teach_%d", bN)
-		}
-
-		// Edge from a<N(re)>.
-		reN := graph.QuestionN(reQID)
-		edgeFrom := fmt.Sprintf("a%d", reN)
-
-		newG := *g
-		newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
-			Q: &graph.QuestionNode{
-				ID:    qid,
-				Scope: scope,
-				Cite:  citeStr,
-				Class: batchClass,
-			},
-		})
-		newG.Edges = append(append([]*graph.Edge{}, g.Edges...), &graph.Edge{
-			From: edgeFrom,
-			To:   qid,
-		})
-
-		newQID = qid
-		teachFields := map[string]any{
-			"q":       qid,
-			"concept": conceptID,
-			"batch":   batchClass,
-			"kind":    "teach",
-			"scope":   scope,
-			"src":     citeStr,
-			"re":      reQID,
-		}
-		source.ApplyMeta(teachFields, citeMeta)
-		row := eventlog.NewRow("q", teachFields)
-		// Gate clearing via --override (spec §7 line 278, Q3/Q7).
-		rows := []eventlog.Row{row}
-		finalG := &newG
-		if overrideReason != "" && cs.Gated {
-			if clearedG, gateRow, ok := ops.ClearGate(finalG, s, conceptID, "override", overrideReason); ok {
-				finalG = clearedG
-				rows = append([]eventlog.Row{gateRow}, rows...)
-			}
-		}
-		return finalG, rows, nil
+		return ng, rows, ref
 	}
 
 	stateCfg := state.ConfigFromEnv()
@@ -488,4 +222,296 @@ func qFindLockingTeach(allBatches []string, probeClass string) string {
 		}
 	}
 	return result
+}
+
+// qProbeApply handles the probe-question branch of qRun's apply closure.
+// Returns the updated graph, event rows, any refusal, and the new question ID.
+func qProbeApply(
+	g *graph.Graph, s *state.State, cfg state.Config, logPath string,
+	allBatches []string, cs state.ConceptStatusResult,
+	conceptID, reQID, scope, citeStr, overrideReason string,
+	citeMeta source.Meta,
+) (*graph.Graph, []eventlog.Row, *ops.Refusal, string) {
+	// Exit 1: any probe batch is locked or open.
+	for _, b := range allBatches {
+		if !graph.IsProbeClass(b) {
+			continue
+		}
+		switch s.BatchStateOf(b) {
+		case state.BatchLocked:
+			lockingTeach := qFindLockingTeach(allBatches, b)
+			if lockingTeach != "" {
+				return nil, nil, &ops.Refusal{
+					Err:  fmt.Sprintf("%s is locked by %s", b, lockingTeach),
+					Fix:  fmt.Sprintf("finish %s, then answer %s", lockingTeach, b),
+					Exit: 1,
+				}, ""
+			}
+			return nil, nil, &ops.Refusal{
+				Err:  fmt.Sprintf("%s is locked", b),
+				Exit: 1,
+			}, ""
+		case state.BatchOpen:
+			return nil, nil, &ops.Refusal{
+				Err:  fmt.Sprintf("%s is open (answers in progress)", b),
+				Fix:  fmt.Sprintf("finish answering %s before adding new questions", b),
+				Exit: 1,
+			}, ""
+		}
+	}
+
+	// Exit 1: --re target belongs to a different concept.
+	if reQID != "" {
+		if c, ok := s.ConceptOf(reQID); !ok || c != conceptID {
+			msg := fmt.Sprintf("%s does not belong to %s", reQID, conceptID)
+			if ok {
+				msg = fmt.Sprintf("%s belongs to %s, not %s", reQID, c, conceptID)
+			}
+			return nil, nil, &ops.Refusal{
+				Err:  msg,
+				Exit: 1,
+			}, ""
+		}
+	}
+
+	// Exit 1: --re on a probe whose target is not an unclear probe.
+	if reQID != "" && !s.ProbeReplacesUnclear(reQID) {
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("%s is not an unclear probe", reQID),
+			Fix:  "--re requires a probe question whose answer graded unclear",
+			Exit: 1,
+		}, ""
+	}
+
+	// Exit 1: draft probe batch is at max.
+	draftBatch, hasDraft := s.DraftProbeBatch(conceptID)
+	if hasDraft && len(s.BatchQuestions(draftBatch)) >= cfg.ProbeMax {
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("batch %s is at maximum size (%d)", draftBatch, cfg.ProbeMax),
+			Exit: 1,
+		}, ""
+	}
+
+	// Allocate new question N and batch class.
+	qN := graph.NextQuestionN(g, logPath)
+	qid := fmt.Sprintf("q%d", qN)
+	batchClass := draftBatch
+	if !hasDraft {
+		bN := graph.NextBatchN(g, logPath)
+		batchClass = fmt.Sprintf("probe_%d", bN)
+	}
+
+	// Determine edge source: concept for regular probe, a<N(re)> for replacement.
+	edgeFrom := conceptID
+	if reQID != "" {
+		reN := graph.QuestionN(reQID)
+		edgeFrom = fmt.Sprintf("a%d", reN)
+	}
+
+	newG := *g
+	newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
+		Q: &graph.QuestionNode{
+			ID:    qid,
+			Scope: scope,
+			Cite:  citeStr,
+			Class: batchClass,
+		},
+	})
+	newG.Edges = append(append([]*graph.Edge{}, g.Edges...), &graph.Edge{
+		From: edgeFrom,
+		To:   qid,
+	})
+
+	re := reQID // "" when no --re
+	probeFields := map[string]any{
+		"q":       qid,
+		"concept": conceptID,
+		"batch":   batchClass,
+		"kind":    "probe",
+		"scope":   scope,
+		"src":     citeStr,
+		"re":      re,
+	}
+	source.ApplyMeta(probeFields, citeMeta)
+	row := eventlog.NewRow("q", probeFields)
+	// Gate clearing via --override (spec §7 line 278, Q3/Q7).
+	rows := []eventlog.Row{row}
+	finalG := &newG
+	if overrideReason != "" && cs.Gated {
+		if clearedG, gateRow, ok := ops.ClearGate(finalG, s, conceptID, "override", overrideReason); ok {
+			finalG = clearedG
+			rows = append([]eventlog.Row{gateRow}, rows...)
+		}
+	}
+	return finalG, rows, nil, qid
+}
+
+// qTeachApply handles the teach-question branch of qRun's apply closure.
+// Returns the updated graph, event rows, any refusal, and the new question ID.
+func qTeachApply(
+	g *graph.Graph, s *state.State, cfg state.Config, logPath string,
+	allBatches []string, cs state.ConceptStatusResult, conceptNode *graph.ConceptNode,
+	conceptID, reQID, scope, citeStr, overrideReason string,
+	citeMeta source.Meta,
+) (*graph.Graph, []eventlog.Row, *ops.Refusal, string) {
+	// Exit 1: --teach without --re.
+	if reQID == "" {
+		return nil, nil, &ops.Refusal{
+			Err:  "--teach requires --re",
+			Fix:  fmt.Sprintf("tm q %s <cite> \"<scope>\" --teach --re <qid>", conceptID),
+			Exit: 1,
+		}, ""
+	}
+
+	// Exit 1: teaching is spent.
+	if cs.TeachingSpent {
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("teaching is spent for %s", conceptID),
+			Exit: 1,
+		}, ""
+	}
+
+	// Exit 1: concept has no GAP.
+	if conceptNode == nil || conceptNode.GAP == "" {
+		return nil, nil, &ops.Refusal{
+			Err:  conceptID + " has no GAP",
+			Fix:  fmt.Sprintf("tm gap %s \"<gap>\"", conceptID),
+			Exit: 1,
+		}, ""
+	}
+
+	// Exit 1: no failed probe batch above base.
+	if len(cs.FailedProbeBatches) == 0 {
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("no failed probe batch above base for %s", conceptID),
+			Exit: 1,
+		}, ""
+	}
+
+	// Exit 1: no fallback probe batch at minimum size with no answers yet.
+	hasFallback := false
+	for _, fp := range cs.FallbackProbes {
+		if len(s.BatchQuestions(fp)) >= cfg.ProbeMin {
+			hasFallback = true
+			break
+		}
+	}
+	if !hasFallback {
+		return nil, nil, &ops.Refusal{
+			Err: fmt.Sprintf(
+				"no fallback probe batch at minimum size (%d) for %s",
+				cfg.ProbeMin, conceptID,
+			),
+			Fix: fmt.Sprintf(
+				"add at least %d probe questions to a fallback batch with tm q %s",
+				cfg.ProbeMin, conceptID,
+			),
+			Exit: 1,
+		}, ""
+	}
+
+	// Exit 1: any teach batch is open.
+	for _, b := range allBatches {
+		if !graph.IsTeachClass(b) {
+			continue
+		}
+		if s.BatchStateOf(b) == state.BatchOpen {
+			return nil, nil, &ops.Refusal{
+				Err:  fmt.Sprintf("%s is open (answers in progress)", b),
+				Fix:  fmt.Sprintf("finish answering %s before adding new teach questions", b),
+				Exit: 1,
+			}, ""
+		}
+	}
+
+	// Exit 1: --re target belongs to a different concept.
+	if c, ok := s.ConceptOf(reQID); !ok || c != conceptID {
+		msg := fmt.Sprintf("%s does not belong to %s", reQID, conceptID)
+		if ok {
+			msg = fmt.Sprintf("%s belongs to %s, not %s", reQID, c, conceptID)
+		}
+		return nil, nil, &ops.Refusal{
+			Err:  msg,
+			Exit: 1,
+		}, ""
+	}
+
+	// Exit 1: --re target answer is not fail/unclear or is flagged OOS.
+	targetAnswer, hasTargetAnswer := s.TeachTargetAnswer(reQID)
+	if !hasTargetAnswer {
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("%s has no answer (--teach --re requires a graded fail or unclear answer)", reQID),
+			Exit: 1,
+		}, ""
+	}
+	if targetAnswer.Class != "fail" && targetAnswer.Class != "unclear" {
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("%s answer is %q, not fail or unclear", reQID, targetAnswer.Class),
+			Exit: 1,
+		}, ""
+	}
+	if targetAnswer.OOS {
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("%s answer is flagged OOS", reQID),
+			Exit: 1,
+		}, ""
+	}
+
+	// Exit 1: draft teach batch is at max.
+	draftBatch, hasDraft := s.DraftTeachBatch(conceptID)
+	if hasDraft && len(s.BatchQuestions(draftBatch)) >= cfg.TeachMax {
+		return nil, nil, &ops.Refusal{
+			Err:  fmt.Sprintf("batch %s is at maximum size (%d)", draftBatch, cfg.TeachMax),
+			Exit: 1,
+		}, ""
+	}
+
+	// Allocate new question N and batch class.
+	qN := graph.NextQuestionN(g, logPath)
+	qid := fmt.Sprintf("q%d", qN)
+	batchClass := draftBatch
+	if !hasDraft {
+		bN := graph.NextBatchN(g, logPath)
+		batchClass = fmt.Sprintf("teach_%d", bN)
+	}
+
+	// Edge from a<N(re)>.
+	reN := graph.QuestionN(reQID)
+	edgeFrom := fmt.Sprintf("a%d", reN)
+
+	newG := *g
+	newG.TestingItems = append(append([]graph.TestingItem{}, g.TestingItems...), graph.TestingItem{
+		Q: &graph.QuestionNode{
+			ID:    qid,
+			Scope: scope,
+			Cite:  citeStr,
+			Class: batchClass,
+		},
+	})
+	newG.Edges = append(append([]*graph.Edge{}, g.Edges...), &graph.Edge{
+		From: edgeFrom,
+		To:   qid,
+	})
+
+	teachFields := map[string]any{
+		"q":       qid,
+		"concept": conceptID,
+		"batch":   batchClass,
+		"kind":    "teach",
+		"scope":   scope,
+		"src":     citeStr,
+		"re":      reQID,
+	}
+	source.ApplyMeta(teachFields, citeMeta)
+	row := eventlog.NewRow("q", teachFields)
+	// Gate clearing via --override (spec §7 line 278, Q3/Q7).
+	rows := []eventlog.Row{row}
+	finalG := &newG
+	if overrideReason != "" && cs.Gated {
+		if clearedG, gateRow, ok := ops.ClearGate(finalG, s, conceptID, "override", overrideReason); ok {
+			finalG = clearedG
+			rows = append([]eventlog.Row{gateRow}, rows...)
+		}
+	}
+	return finalG, rows, nil, qid
 }
