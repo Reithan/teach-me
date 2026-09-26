@@ -24,8 +24,8 @@ import (
 // question writes the answer node as class=fail with label "conceded" and
 // the graph passes lint.
 func TestConcede_HappyPath_Probe(t *testing.T) {
-	dir, _ := answerSetupDir(t)
-	file := answerWriteGraph(t, dir, answerProbeGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerProbeGraph())
 
 	out, errOut, code := run(t, "answer", "q1", "I don't know", "--concede")
 	if code != 0 {
@@ -80,8 +80,8 @@ func TestConcede_HappyPath_Probe(t *testing.T) {
 // TestConcede_EventFields verifies both the answer and grade events are
 // written in one mutation with the correct §10 fields.
 func TestConcede_EventFields(t *testing.T) {
-	dir, _ := answerSetupDir(t)
-	file := answerWriteGraph(t, dir, answerProbeGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerProbeGraph())
 
 	rawText := "I don't know this at all"
 	askedText := "how does X work?"
@@ -150,8 +150,8 @@ func TestConcede_EventFields(t *testing.T) {
 // TestConcede_NormalAnswer_NoConcede verifies that a plain answer (without
 // --concede) does NOT gain the concede field in the answer event.
 func TestConcede_NormalAnswer_NoConcede(t *testing.T) {
-	dir, _ := answerSetupDir(t)
-	file := answerWriteGraph(t, dir, answerProbeGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerProbeGraph())
 
 	_, _, code := run(t, "answer", "q1", "my answer")
 	if code != 0 {
@@ -209,11 +209,11 @@ func TestConcede_Refusals_TableDriven(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			dir, errPath := answerSetupDir(t)
+			dir, errPath := qSetupDir(t)
 			if tc.name == "already has an answer" {
-				answerWriteGraph(t, dir, answerAlreadyAnsweredGraph())
+				qWriteGraph(t, dir, answerAlreadyAnsweredGraph())
 			} else {
-				answerWriteGraph(t, dir, answerProbeGraph())
+				qWriteGraph(t, dir, answerProbeGraph())
 			}
 			tc.setup(t)
 			_, errOut, code := run(t, tc.args...)
@@ -235,8 +235,8 @@ func TestConcede_Refusals_TableDriven(t *testing.T) {
 // recorded via --concede (answer class=fail), tm grade refuses with exit 1
 // because there is no pending answer.
 func TestConcede_GradeRefusesAfterConcede(t *testing.T) {
-	dir, _ := answerSetupDir(t)
-	answerWriteGraph(t, dir, answerProbeGraph())
+	dir, _ := qSetupDir(t)
+	qWriteGraph(t, dir, answerProbeGraph())
 
 	// Concede q1.
 	_, _, code := run(t, "answer", "q1", "I don't know", "--concede")
