@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -118,6 +119,7 @@ func TestSourceCitationWiring(t *testing.T) {
 
 	tests := []struct {
 		name       string
+		posixOnly  bool
 		xdgCfg     string // source config; "" = empty config
 		citeArg    string // "locator:start-end"; non-http locators get dir prepended
 		wantCode   int
@@ -145,16 +147,18 @@ func TestSourceCitationWiring(t *testing.T) {
 		},
 		{
 			name:      "version mismatch exits 1",
+			posixOnly: true,
 			xdgCfg:    fmt.Sprintf("convert text/html=%s\nversion %s=1.0\nversion-cmd %s=%s\n", cv, cv, cv, wrongVr),
 			citeArg:   srv.URL + "/doc.html:1-1",
 			wantCode:  1,
 			wantInErr: "2.0",
 		},
 		{
-			name:     "successful URI add records url/mime/converter/converter_version/fetched_at",
-			xdgCfg:   fmt.Sprintf("convert text/html=%s\nversion %s=1.0\nversion-cmd %s=%s\n", cv, cv, cv, vr),
-			citeArg:  srv.URL + "/doc.html:1-1",
-			wantCode: 0,
+			name:      "successful URI add records url/mime/converter/converter_version/fetched_at",
+			posixOnly: true,
+			xdgCfg:    fmt.Sprintf("convert text/html=%s\nversion %s=1.0\nversion-cmd %s=%s\n", cv, cv, cv, vr),
+			citeArg:   srv.URL + "/doc.html:1-1",
+			wantCode:  0,
 			checkEvent: func(t *testing.T, mmdFile string) {
 				fields := srcEventFields(t, mmdFile, "add")
 				for _, key := range []string{"url", "mime", "converter", "converter_version", "fetched_at"} {
@@ -185,6 +189,9 @@ func TestSourceCitationWiring(t *testing.T) {
 				if _, err := exec.LookPath("git"); err != nil {
 					t.Skip("git not on PATH")
 				}
+			}
+			if tc.posixOnly && runtime.GOOS == "windows" {
+				t.Skip("shell-script converters need a POSIX shell")
 			}
 
 			// Fresh graph file per sub-test.
@@ -238,6 +245,9 @@ func TestSourceCitationWiring(t *testing.T) {
 func TestCLIResolverConfigError(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("running as root; file-permission check not applicable")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not enforced on Windows")
 	}
 
 	xdg := t.TempDir()
