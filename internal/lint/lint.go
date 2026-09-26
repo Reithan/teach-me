@@ -161,28 +161,6 @@ func buildBlockMap(g *graph.Graph) map[string]graph.Block {
 	return m
 }
 
-// edgeHomeBlock returns the block an edge belongs to per §4.2: the block of
-// whichever endpoint comes later in file order (passed < untested < testing).
-// If an endpoint is unknown the other endpoint's block is used; if both are
-// unknown BlockPassed is returned.
-func edgeHomeBlock(from, to string, blocks map[string]graph.Block) graph.Block {
-	fb, fok := blocks[from]
-	tb, tok := blocks[to]
-	if !fok && !tok {
-		return graph.BlockPassed
-	}
-	if !fok {
-		return tb
-	}
-	if !tok {
-		return fb
-	}
-	if tb > fb {
-		return tb
-	}
-	return fb
-}
-
 // blockName returns the subgraph name string for a block constant.
 func blockName(b graph.Block) string {
 	switch b {
@@ -309,7 +287,7 @@ func check5(data []byte, blocks map[string]graph.Block) []Violation {
 			}
 			// Only check placement when both endpoints are known.
 			if fok && tok {
-				home := edgeHomeBlock(from, to, blocks)
+				home := graph.EdgeHomeBlock(from, to, blocks)
 				if blk != home {
 					viols = append(viols, Violation{Line: lineNum, Msg: fmt.Sprintf("edge %s --> %s belongs in block %s", from, to, blockName(home))})
 				}
