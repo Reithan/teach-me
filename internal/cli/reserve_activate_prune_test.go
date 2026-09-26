@@ -909,3 +909,109 @@ func TestUnlink(t *testing.T) {
 	}
 	lintFile(t, path, dir)
 }
+
+// TestUnlink_Refusals covers the error paths for tm unlink.
+func TestUnlink_Refusals(t *testing.T) {
+	tests := []struct {
+		name            string
+		args            []string
+		wantErrContains string
+		wantExit        int
+	}{
+		{
+			name:            "unknown from",
+			args:            []string{"unlink", "zzz", "cd"},
+			wantErrContains: `err: unknown ID "zzz"`,
+			wantExit:        3,
+		},
+		{
+			name:            "unknown to",
+			args:            []string{"unlink", "cc", "zzz"},
+			wantErrContains: `err: unknown ID "zzz"`,
+			wantExit:        3,
+		},
+		{
+			name:            "non-concept from",
+			args:            []string{"unlink", "q1", "cd"},
+			wantErrContains: "err: q1 is not a concept",
+			wantExit:        1,
+		},
+		{
+			name:            "non-concept to",
+			args:            []string{"unlink", "cc", "q1"},
+			wantErrContains: "err: q1 is not a concept",
+			wantExit:        1,
+		},
+		{
+			name:            "edge does not exist",
+			args:            []string{"unlink", "cd", "cc"},
+			wantErrContains: "err: no edge from cd to cc",
+			wantExit:        1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			tempErrlog(t)
+			setupSrcFile(t, dir)
+			path := writeGraph(t, dir, probedParentGraph)
+			t.Setenv("TM_FILE", path)
+
+			_, errOut, code := run(t, tc.args...)
+			if code != tc.wantExit {
+				t.Errorf("exit: want %d got %d; stderr=%q", tc.wantExit, code, errOut)
+			}
+			if !strings.Contains(errOut, tc.wantErrContains) {
+				t.Errorf("stderr: want %q in %q", tc.wantErrContains, errOut)
+			}
+		})
+	}
+}
+
+// reserveConceptPendingProbeGraph is a hand-crafted graph with "cc" in reserve
+// and a single pending probe answer — simulating an old-format graph that the
+// v0.30 open-batch guard on tm grade must defend against.
+const reserveConceptPendingProbeGraph = `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
+        cd["Concept D<br/>f5ca3875b379@src.txt:1-5"]
+    end
+    subgraph reserve["Concepts held in reserve"]
+        cc["Concept C<br/>f5ca3875b379@src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["Probe one<br/>f5ca3875b379@src.txt:1-2"]:::probe_1
+        a1["pending answer"]:::pending
+        cc --> q1
+        q1 --> a1
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+// TestGrade_ReserveConceptGuard verifies that grading a reserve concept's probe
+// to all-pass is refused rather than silently failing to move the concept.
+func TestGrade_ReserveConceptGuard(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	setupSrcFile(t, dir)
+	path := writeGraph(t, dir, reserveConceptPendingProbeGraph)
+	t.Setenv("TM_FILE", path)
+	t.Setenv("TM_PROBE_MIN", "1") // single-question batch satisfies min
+
+	_, errOut, code := run(t, "grade", "q1", "pass", "good")
+	if code != 1 {
+		t.Fatalf("want exit 1 for reserve guard, got %d; stderr:\n%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "is in reserve and cannot be passed") {
+		t.Errorf("want reserve guard err; got:\n%s", errOut)
+	}
+}
