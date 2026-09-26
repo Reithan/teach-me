@@ -13,6 +13,9 @@ func HasConceptCycle(g *Graph) bool {
 	for _, c := range g.UntestedConcepts {
 		concepts[c.ID] = true
 	}
+	for _, c := range g.ReserveConcepts {
+		concepts[c.ID] = true
+	}
 
 	// Build adjacency list for concept→concept edges only.
 	adj := make(map[string][]string, len(concepts))
