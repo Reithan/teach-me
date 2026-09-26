@@ -402,11 +402,11 @@ func TestConceptOf(t *testing.T) {
 		wantConcept string
 		wantOK      bool
 	}{
-		{"q1", "log_matching", true},  // probe_1 under log_matching
-		{"q2", "log_matching", true},  // probe_1 under log_matching
-		{"q5", "log_matching", true},  // teach_3 chain via a2 → q2
-		{"q6", "log_matching", true},  // teach_3 chain via a2 → q2
-		{"q99", "", false},            // unknown question
+		{"q1", "log_matching", true}, // probe_1 under log_matching
+		{"q2", "log_matching", true}, // probe_1 under log_matching
+		{"q5", "log_matching", true}, // teach_3 chain via a2 → q2
+		{"q6", "log_matching", true}, // teach_3 chain via a2 → q2
+		{"q99", "", false},           // unknown question
 	}
 	for _, tc := range tests {
 		c, ok := s.ConceptOf(tc.qid)
@@ -439,7 +439,7 @@ func TestBatchStateOf(t *testing.T) {
 		batchClass string
 		want       BatchStatus
 	}{
-		{"resolved", "", "probe_1", BatchResolved},  // q1(pass), q2(fail) — all graded
+		{"resolved", "", "probe_1", BatchResolved},   // q1(pass), q2(fail) — all graded
 		{"locked", "", "probe_2", BatchLocked},       // probe_2 unanswered; teach_3 (N=3>2) exists
 		{"open", "", "teach_3", BatchOpen},           // q5 answered, q6 unanswered
 		{"draft", draftGraph, "probe_1", BatchDraft}, // no answers, no higher teach batch

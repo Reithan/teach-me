@@ -83,29 +83,29 @@ func TestCommonFieldsPresent(t *testing.T) {
 	}
 }
 
-// appendOne writes one event row with the given role env value and returns the
-// trimmed log line. Extracted to eliminate repeated scaffold across role/field tests.
-func appendOne(t *testing.T, role, ev string, fields map[string]any) string {
+// appendOne writes one "add" event row with the given role env value and returns
+// the trimmed log line. Extracted to eliminate repeated scaffold across role/field tests.
+func appendOne(t *testing.T, role string, fields map[string]any) string {
 	t.Helper()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "g.mmd.jsonl")
 	clk := fixedClock{t: time.Now()}
 	l := New(logPath, clk)
 	t.Setenv("TM_ROLE", role)
-	l.Append(NewRow(ev, fields))
+	l.Append(NewRow("add", fields))
 	data, _ := os.ReadFile(logPath)
 	return strings.TrimSpace(string(data))
 }
 
 func TestRoleNullWhenUnset(t *testing.T) {
-	line := appendOne(t, "", "add", map[string]any{"id": "c1"})
+	line := appendOne(t, "", map[string]any{"id": "c1"})
 	if !strings.Contains(line, `"role":null`) {
 		t.Errorf("expected role:null, got: %s", line)
 	}
 }
 
 func TestRoleSetWhenEnvPresent(t *testing.T) {
-	line := appendOne(t, "teacher", "add", map[string]any{"id": "c1"})
+	line := appendOne(t, "teacher", map[string]any{"id": "c1"})
 	if !strings.Contains(line, `"role":"teacher"`) {
 		t.Errorf("expected role:teacher, got: %s", line)
 	}
@@ -113,7 +113,7 @@ func TestRoleSetWhenEnvPresent(t *testing.T) {
 
 func TestFieldsAreSorted(t *testing.T) {
 	// Fields: z first, a second — result must be sorted a before z.
-	line := appendOne(t, "", "add", map[string]any{
+	line := appendOne(t, "", map[string]any{
 		"z_field": "last",
 		"a_field": "first",
 		"m_field": "middle",
@@ -131,7 +131,7 @@ func TestFieldsAreSorted(t *testing.T) {
 
 func TestFieldOrderCommonFirst(t *testing.T) {
 	// t must come before ev, ev before role, role before id.
-	line := appendOne(t, "", "add", map[string]any{"id": "c1"})
+	line := appendOne(t, "", map[string]any{"id": "c1"})
 	posT := strings.Index(line, `"t":`)
 	posEv := strings.Index(line, `"ev":`)
 	posRole := strings.Index(line, `"role":`)
