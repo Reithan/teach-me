@@ -73,14 +73,11 @@ func isLowerHex12(s string) bool {
 // CRLF to LF, trailing whitespace stripped per line, lines LF-joined,
 // at most one trailing newline removed. Internal whitespace is preserved.
 func Normalize(text string) string {
-	// CRLF → LF
 	s := strings.ReplaceAll(text, "\r\n", "\n")
-	// Strip trailing whitespace per line
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
 		lines[i] = strings.TrimRight(l, " \t")
 	}
-	// Join with LF, remove at most one trailing newline
 	result := strings.Join(lines, "\n")
 	return strings.TrimSuffix(result, "\n")
 }
