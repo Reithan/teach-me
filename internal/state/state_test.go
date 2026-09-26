@@ -395,72 +395,31 @@ func TestFrontier_NoParents(t *testing.T) {
 
 // --- ConceptOf ---
 
-func TestConceptOf_ProbeQuestion(t *testing.T) {
+func TestConceptOf(t *testing.T) {
 	s := mustLoad(t, raftGraph, defaultCfg())
-	// q1 is probe_1 under log_matching (direct edge log_matching → q1).
-	c, ok := s.ConceptOf("q1")
-	if !ok || c != "log_matching" {
-		t.Errorf("ConceptOf(q1) = (%q, %v), want (log_matching, true)", c, ok)
+	tests := []struct {
+		qid         string
+		wantConcept string
+		wantOK      bool
+	}{
+		{"q1", "log_matching", true},  // probe_1 under log_matching
+		{"q2", "log_matching", true},  // probe_1 under log_matching
+		{"q5", "log_matching", true},  // teach_3 chain via a2 → q2
+		{"q6", "log_matching", true},  // teach_3 chain via a2 → q2
+		{"q99", "", false},            // unknown question
 	}
-	c, ok = s.ConceptOf("q2")
-	if !ok || c != "log_matching" {
-		t.Errorf("ConceptOf(q2) = (%q, %v), want (log_matching, true)", c, ok)
-	}
-}
-
-func TestConceptOf_TeachQuestion(t *testing.T) {
-	s := mustLoad(t, raftGraph, defaultCfg())
-	// q5 is teach_3; chain: a2 → q5 → a2 from q2 → log_matching.
-	c, ok := s.ConceptOf("q5")
-	if !ok || c != "log_matching" {
-		t.Errorf("ConceptOf(q5) = (%q, %v), want (log_matching, true)", c, ok)
-	}
-	c, ok = s.ConceptOf("q6")
-	if !ok || c != "log_matching" {
-		t.Errorf("ConceptOf(q6) = (%q, %v), want (log_matching, true)", c, ok)
-	}
-}
-
-func TestConceptOf_UnknownQuestion(t *testing.T) {
-	s := mustLoad(t, raftGraph, defaultCfg())
-	_, ok := s.ConceptOf("q99")
-	if ok {
-		t.Error("ConceptOf(q99) should return false for unknown question")
+	for _, tc := range tests {
+		c, ok := s.ConceptOf(tc.qid)
+		if ok != tc.wantOK || c != tc.wantConcept {
+			t.Errorf("ConceptOf(%q) = (%q, %v), want (%q, %v)", tc.qid, c, ok, tc.wantConcept, tc.wantOK)
+		}
 	}
 }
 
 // --- BatchStateOf ---
 
-func TestBatchStateOf_Resolved(t *testing.T) {
-	s := mustLoad(t, raftGraph, defaultCfg())
-	// probe_1: q1 (a1=pass), q2 (a2=fail) — all answered and graded.
-	got := s.BatchStateOf("probe_1")
-	if got != BatchResolved {
-		t.Errorf("probe_1 BatchState = %v, want BatchResolved", got)
-	}
-}
-
-func TestBatchStateOf_Locked(t *testing.T) {
-	s := mustLoad(t, raftGraph, defaultCfg())
-	// probe_2: q3, q4 unanswered; teach_3 (N=3 > N=2) exists → locked.
-	got := s.BatchStateOf("probe_2")
-	if got != BatchLocked {
-		t.Errorf("probe_2 BatchState = %v, want BatchLocked", got)
-	}
-}
-
-func TestBatchStateOf_Open(t *testing.T) {
-	s := mustLoad(t, raftGraph, defaultCfg())
-	// teach_3: q5 (a5=pass) answered, q6 unanswered → open (has answer, not resolved).
-	got := s.BatchStateOf("teach_3")
-	if got != BatchOpen {
-		t.Errorf("teach_3 BatchState = %v, want BatchOpen", got)
-	}
-}
-
-func TestBatchStateOf_Draft(t *testing.T) {
-	// A probe batch with no answers and no higher teach batch is draft.
-	g := `flowchart TB
+func TestBatchStateOf(t *testing.T) {
+	const draftGraph = `flowchart TB
     subgraph passed["Passed"]
     end
     subgraph untested["Untested"]
@@ -474,18 +433,28 @@ func TestBatchStateOf_Draft(t *testing.T) {
     end
     classDef probe_1 stroke:#4aa3ff
 `
-	s := mustLoad(t, g, defaultCfg())
-	got := s.BatchStateOf("probe_1")
-	if got != BatchDraft {
-		t.Errorf("probe_1 BatchState = %v, want BatchDraft", got)
+	tests := []struct {
+		name       string
+		graphStr   string // "" → raftGraph
+		batchClass string
+		want       BatchStatus
+	}{
+		{"resolved", "", "probe_1", BatchResolved},  // q1(pass), q2(fail) — all graded
+		{"locked", "", "probe_2", BatchLocked},       // probe_2 unanswered; teach_3 (N=3>2) exists
+		{"open", "", "teach_3", BatchOpen},           // q5 answered, q6 unanswered
+		{"draft", draftGraph, "probe_1", BatchDraft}, // no answers, no higher teach batch
+		{"unknown", "", "probe_99", BatchDraft},      // unknown batch returns BatchDraft
 	}
-}
-
-func TestBatchStateOf_Unknown(t *testing.T) {
-	s := mustLoad(t, raftGraph, defaultCfg())
-	got := s.BatchStateOf("probe_99")
-	if got != BatchDraft {
-		t.Errorf("unknown batch should return BatchDraft, got %v", got)
+	for _, tc := range tests {
+		g := tc.graphStr
+		if g == "" {
+			g = raftGraph
+		}
+		s := mustLoad(t, g, defaultCfg())
+		got := s.BatchStateOf(tc.batchClass)
+		if got != tc.want {
+			t.Errorf("%s: BatchStateOf(%q) = %v, want %v", tc.name, tc.batchClass, got, tc.want)
+		}
 	}
 }
 
