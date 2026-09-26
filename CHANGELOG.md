@@ -7,6 +7,10 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Added
+
+- `SECURITY.md` with a private vulnerability-reporting path.
+
 ## [0.5.0-beta.1] - 2026-09-25
 
 Spec v0.30. Skill `tm-version` is `0.5`.
