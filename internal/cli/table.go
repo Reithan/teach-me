@@ -152,8 +152,20 @@ var Table = []Command{
 		PosArgs: []PosArg{
 			{Name: "<concept>"},
 		},
+		Flags: []FlagSpec{
+			{Name: "reason", TakesValue: true, ValueName: `"<text>"`},
+		},
 		ForbidGrader: true,
 		Run:          reserveRun,
+	},
+	{
+		Name: "unlink",
+		PosArgs: []PosArg{
+			{Name: "<from>"},
+			{Name: "<to>"},
+		},
+		ForbidGrader: true,
+		Run:          unlinkRun,
 	},
 	{
 		Name: "activate",

@@ -204,6 +204,18 @@ func gradeApply(g *graph.Graph, s *state.State, qid, verdict, summary string, gu
 		}
 
 		if allPass {
+			// Guard: a reserve concept cannot be passed. This should be
+			// unreachable because reserve requires all batches resolved, but
+			// defend explicitly.
+			for _, rc := range g.ReserveConcepts {
+				if rc.ID == conceptID {
+					return nil, nil, &ops.Refusal{
+						Err:  fmt.Sprintf("%s is in reserve and cannot be passed", conceptID),
+						Exit: 1,
+					}
+				}
+			}
+
 			// UnblockedBy uses the pre-pass state (conceptID still untested).
 			// Normalize nil to a non-nil empty slice so the pass event's
 			// unblocked field serializes as [] (matching the add event's

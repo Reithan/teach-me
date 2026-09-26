@@ -9,19 +9,26 @@ import (
 	"github.com/reithan/teach-me/internal/state"
 )
 
-// reserveRun is the Run handler for `tm reserve <concept>`.
+// reserveRun is the Run handler for `tm reserve <concept> [--reason "<text>"]`.
 //
-// Moves an untested concept with no questions to the reserve block. Its edges
-// stay; its children stop being blocked by it. Outputs "ok".
+// Moves an untested concept to the reserve block. If the concept has questions,
+// --reason is required and all of the concept's batches must be resolved
+// (every question has a non-pending answer). Question-less concepts still work
+// without --reason (the pruner relies on this).
+// Edges stay; children stop being blocked. Outputs "ok".
 //
 // Exit codes:
 //
 //	0  ok
-//	1  invariant refusal (not untested, has questions)
+//	1  invariant refusal (not untested; questions without --reason; open batch)
 //	2  output fails lint (internal error)
 //	3  usage error, unknown ID
 func reserveRun(ctx *Context) int {
 	concept := ctx.Positionals[0]
+	reason := ""
+	if v := ctx.Flags["reason"]; len(v) > 0 {
+		reason = v[0]
+	}
 	usageLine := FindCommand("reserve").Usage()
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
@@ -44,16 +51,37 @@ func reserveRun(ctx *Context) int {
 			}
 		}
 
-		// Has questions → exit 1.
+		// Check whether the concept has any questions.
+		hasQuestions := false
 		for _, item := range g.TestingItems {
 			if item.Q == nil {
 				continue
 			}
 			cid, ok := s.ConceptOf(item.Q.ID)
 			if ok && cid == concept {
+				hasQuestions = true
+				break
+			}
+		}
+
+		if hasQuestions {
+			// --reason is required when the concept has questions.
+			if reason == "" {
 				return nil, nil, &ops.Refusal{
 					Err:  concept + " has questions",
+					Fix:  usageLine,
 					Exit: 1,
+				}
+			}
+
+			// All batches must be resolved (no unanswered or ungraded questions).
+			for _, batchClass := range s.ConceptBatches(concept) {
+				bs := s.BatchStateOf(batchClass)
+				if bs != state.BatchResolved {
+					return nil, nil, &ops.Refusal{
+						Err:  fmt.Sprintf("%s has an unresolved batch (%s)", concept, batchClass),
+						Exit: 1,
+					}
 				}
 			}
 		}
@@ -84,9 +112,13 @@ func reserveRun(ctx *Context) int {
 		newReserve[len(g.ReserveConcepts)] = &newNode
 		newG.ReserveConcepts = newReserve
 
-		row := eventlog.NewRow("reserve", map[string]any{
+		fields := map[string]any{
 			"concept": concept,
-		})
+		}
+		if reason != "" {
+			fields["reason"] = reason
+		}
+		row := eventlog.NewRow("reserve", fields)
 		return &newG, []eventlog.Row{row}, nil
 	}
 

@@ -156,9 +156,15 @@ func TestReserve(t *testing.T) {
 			wantExit: 0,
 		},
 		{
-			name:     "refuse: concept has questions",
+			name:     "refuse: concept has questions, no --reason",
 			args:     []string{"reserve", "cc"},
 			wantErr:  "err: cc has questions",
+			wantExit: 1,
+		},
+		{
+			name:     "refuse: concept has questions, --reason but batch not resolved",
+			args:     []string{"reserve", "cc", "--reason", "skip it"},
+			wantErr:  "err: cc has an unresolved batch",
 			wantExit: 1,
 		},
 		{
