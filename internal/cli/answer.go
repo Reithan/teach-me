@@ -176,7 +176,11 @@ func answerRun(ctx *Context) int {
 
 			// Exit 1: latest teach batch not all pass and teaching not spent (§7,
 			// §8.6–8.9). Mirrors the condition in ask.go (Fix 2).
-			if len(cs.FailedProbeBatches) > 0 && !cs.TeachingSpent && cs.LatestTeachNotAllPass {
+			// Exempt: the question's own probe batch is still open-and-failed —
+			// the remaining questions must be answered to close it; refusing
+			// would deadlock the concept (issue #78; openFailedProbeBatch).
+			if len(cs.FailedProbeBatches) > 0 && !cs.TeachingSpent && cs.LatestTeachNotAllPass &&
+				openFailedProbeBatch(cs, s) != batchClass {
 				var openTarget string
 				if len(cs.OpenTargets) > 0 {
 					openTarget = cs.OpenTargets[0]
@@ -283,6 +287,20 @@ func answerRun(ctx *Context) int {
 	}
 
 	return runMutation(ctx, apply)
+}
+
+// openFailedProbeBatch returns the batch class of the first probe batch in
+// cs.FailedProbeBatches that is still BatchOpen (has at least one answer but
+// is not yet resolved), or "" if none exists. Both answer.go and ask.go use
+// this to exempt the remaining questions of an open-but-partially-failed probe
+// batch from the teaching-incomplete refusal (issue #78).
+func openFailedProbeBatch(cs state.ConceptStatusResult, s *state.State) string {
+	for _, fb := range cs.FailedProbeBatches {
+		if s.BatchStateOf(fb) == state.BatchOpen {
+			return fb
+		}
+	}
+	return ""
 }
 
 // answerBatchIsReplacement reports whether the probe batch batchClass contains

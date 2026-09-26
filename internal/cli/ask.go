@@ -151,7 +151,10 @@ func askRun(ctx *Context) int {
 		// not spent, and the latest teach batch above base is not all-pass (§8.6–8.9).
 		// Uses LatestTeachNotAllPass rather than OpenTargets to key on the latest
 		// batch status, not on a stale per-target accounting (Fix 2).
-		if len(cs.FailedProbeBatches) > 0 && !cs.TeachingSpent && cs.LatestTeachNotAllPass {
+		// Exempt: when a failed probe batch is still open, ask emits its remaining
+		// question(s) so the batch can close normally (issue #78; openFailedProbeBatch).
+		if len(cs.FailedProbeBatches) > 0 && !cs.TeachingSpent && cs.LatestTeachNotAllPass &&
+			openFailedProbeBatch(cs, s) == "" {
 			var openTarget string
 			if len(cs.OpenTargets) > 0 {
 				openTarget = cs.OpenTargets[0]
