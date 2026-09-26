@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/reithan/teach-me/internal/graph"
-	"github.com/reithan/teach-me/internal/lint"
 )
 
 // buildPassedDescendantGraph writes a .mmd with two passed concepts where
@@ -47,16 +46,20 @@ flowchart TB
 
 // ── tm reopen tests ────────────────────────────────────────────────────────────
 
+// reopenSetupDir creates a temp dir, sets up src, errlog, and TM_FILE="", and
+// builds the minimal graph. Returns (dir, errlogPath).
+func reopenSetupDir(t *testing.T) (string, string) {
+	t.Helper()
+	dir, errPath := qSetupDir(t)
+	buildMinimalGraph(t, dir)
+	return dir, errPath
+}
+
 // TestReopen_HappyPath verifies that reopen moves a passed concept to the top
 // of untested with the given GAP, round-trips, lints clean, and logs a
 // "reopen" event with {concept, gap}.
 func TestReopen_HappyPath(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
-	buildMinimalGraph(t, dir)
+	dir, _ := reopenSetupDir(t)
 	file := filepath.Join(dir, "g.mmd")
 
 	out, errOut, code := run(t, "reopen", "passed_c", "missed the key property")
@@ -131,12 +134,7 @@ func TestReopen_HappyPath(t *testing.T) {
 // TestReopen_PrependToUntested verifies that the reopened concept is prepended
 // to the front of the untested list, not appended.
 func TestReopen_PrependToUntested(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
-	buildMinimalGraph(t, dir)
+	dir, _ := reopenSetupDir(t)
 	file := filepath.Join(dir, "g.mmd")
 
 	// buildMinimalGraph has untested_c already in untested.
@@ -208,23 +206,13 @@ func TestReopen_PassedDescendant(t *testing.T) {
 	}
 
 	// Lint must be clean: untested-prereq → passed-dependent is valid.
-	viols := lint.Check(data, lint.Config{
-		SrcRoot: dir, ProbeMin: 2, ProbeMax: 5, TeachMin: 1, TeachMax: 3,
-	})
-	if len(viols) > 0 {
-		t.Errorf("graph with passed descendant fails lint: %v", viols)
-	}
+	lintFile(t, file, dir)
 }
 
 // TestReopen_UnknownID verifies that reopening an unknown ID exits 3 with a
 // fix hint pointing at the usage line.
 func TestReopen_UnknownID(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
-	buildMinimalGraph(t, dir)
+	reopenSetupDir(t)
 
 	_, errOut, code := run(t, "reopen", "nonexistent_id", "some gap")
 	if code != 3 {
@@ -241,12 +229,7 @@ func TestReopen_UnknownID(t *testing.T) {
 // TestReopen_UntestedConcept verifies that reopening an untested concept exits
 // 1 with "is not passed".
 func TestReopen_UntestedConcept(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
-	buildMinimalGraph(t, dir)
+	reopenSetupDir(t)
 
 	_, errOut, code := run(t, "reopen", "untested_c", "some gap")
 	if code != 1 {
