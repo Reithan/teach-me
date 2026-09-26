@@ -790,3 +790,81 @@ func TestAnswer_EventLogFieldsMatchSpec(t *testing.T) {
 		t.Errorf("asked: want '', got %v", last2["asked"])
 	}
 }
+
+// teachPassedFallbackLockedGraph reproduces issue #94: probe_1 failed, the
+// fallback probe_2 is locked by the teach batches, teach_3 failed, and the
+// latest teach batch teach_4 resolved all pass.
+const teachPassedFallbackLockedGraph = `---
+config:
+  look: classic
+  darkMode: true
+  theme: dark
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: NETWORK_SIMPLEX
+---
+flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
+        con["Con scope<br/>f5ca3875b379@src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
+        a1["fail answer"]:::fail
+        q2["probe scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
+        a2["pass answer"]:::pass
+        q3["fallback scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_2
+        q4["fallback scope<br/>f5ca3875b379@src.txt:1-5"]:::probe_2
+        q5["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_3
+        a5["fail answer"]:::fail
+        q6["teach scope<br/>f5ca3875b379@src.txt:1-5"]:::teach_4
+        a6["pass answer"]:::pass
+        con --> q1
+        con --> q2
+        con --> q3
+        con --> q4
+        q1 --> a1
+        q2 --> a2
+        a1 --> q5
+        q5 --> a5
+        a5 --> q6
+        q6 --> a6
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef probe_2 stroke:#4aa3ff
+    classDef teach_3 stroke:#c9a227
+    classDef teach_4 stroke:#c9a227
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
+// TestAsk_LockedFallbackEmitted_AfterTeachPass covers issue #94: once the
+// latest teach batch resolves all pass, both tm ask and the tm status
+// --concept chain emit the locked fallback probe batch.
+func TestAsk_LockedFallbackEmitted_AfterTeachPass(t *testing.T) {
+	for _, args := range [][]string{{"ask", "con"}, {"status", "--concept", "con"}} {
+		t.Run(args[0], func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			tempErrlog(t)
+			t.Setenv("TM_FILE", "")
+			setupSrcFile(t, dir)
+			buildGatedGraph(t, dir, teachPassedFallbackLockedGraph)
+
+			out, errOut, code := run(t, args...)
+			if code != 0 {
+				t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+			}
+			for _, want := range []string{"\nprobe_2\n", "q3 | fallback scope", "q4 | fallback scope"} {
+				if !strings.Contains("\n"+out, want) {
+					t.Errorf("want %q in output, got:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
