@@ -182,29 +182,34 @@ func TestRehash(t *testing.T) {
 			wantCode: 1,
 			wantErr:  "err: ",
 		},
-		{
-			name: "already hashed noop",
-			setup: func(t *testing.T) string {
-				driftSetup(t)
-				t.Setenv("TM_FILE", "")
-				return checkProbeFixture(t)
-			},
-			wantCode: 0,
-			wantOut:  "ok",
-			extraAssert: func(t *testing.T, graphPath, _ string) {
-				before, err := os.ReadFile(graphPath)
-				if err != nil {
-					t.Fatal(err)
-				}
-				after, err := os.ReadFile(graphPath)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if string(before) != string(after) {
-					t.Error("rehash must not modify a file that is already fully hashed")
-				}
-			},
-		},
+		func() tc {
+			var before []byte
+			return tc{
+				name: "already hashed noop",
+				setup: func(t *testing.T) string {
+					driftSetup(t)
+					t.Setenv("TM_FILE", "")
+					path := checkProbeFixture(t)
+					var err error
+					before, err = os.ReadFile(path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return path
+				},
+				wantCode: 0,
+				wantOut:  "ok",
+				extraAssert: func(t *testing.T, graphPath, _ string) {
+					after, err := os.ReadFile(graphPath)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if string(before) != string(after) {
+						t.Error("rehash must not modify a file that is already fully hashed")
+					}
+				},
+			}
+		}(),
 		{
 			// Legacy graph: untested concept with hashless citation.
 			// hash of "line 1\nline 2\nline 3\nline 4\nline 5" = f5ca3875b379

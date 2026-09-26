@@ -64,14 +64,14 @@ func TestMigrateRule1_Rewrite(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	sha12 := fullSHA[:12]
 
 	// Hash the content of lines 1-2 of the file.
 	contentHash := icite.Hash("line1\nline2")
 
 	// Set up XDG config with git and repo alias.
-	repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
 
 	// Set TM_SRC_ROOT so the relative citation resolves.
 	t.Setenv("TM_SRC_ROOT", repoDir)
@@ -144,7 +144,7 @@ func TestMigrateRule1_Table(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	contentHash := icite.Hash("line1\nline2")
 	wrongHash := icite.Hash("content that does not match line1 or line2")
 
@@ -210,7 +210,7 @@ func TestMigrateRule1_Table(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			freshConfig(t)
 			tempErrlog(t)
-			repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
+			srcSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
 			t.Setenv("TM_SRC_ROOT", repoDir)
 
 			relFile := "file.txt"
@@ -254,7 +254,7 @@ func TestMigrateRule1_SymlinkedRepoPath(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	sha12 := fullSHA[:12]
 	contentHash := icite.Hash("line1\nline2")
 
@@ -264,7 +264,7 @@ func TestMigrateRule1_SymlinkedRepoPath(t *testing.T) {
 		t.Skip("symlink not supported:", err)
 	}
 
-	repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, symlinkDir))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, symlinkDir))
 	t.Setenv("TM_SRC_ROOT", repoDir) // source root uses the real path
 
 	relFile := "file.txt"
@@ -305,10 +305,10 @@ func TestMigrateRule1_NoAlias(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 
 	// Set up XDG config with git but NO repo alias.
-	repoSetupXDG(t, fmt.Sprintf("git=%s\n", gitBin))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\n", gitBin))
 	t.Setenv("TM_SRC_ROOT", repoDir)
 
 	contentHash := icite.Hash("line1\nline2")

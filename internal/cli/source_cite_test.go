@@ -32,20 +32,6 @@ func srcWriteScript(t *testing.T, dir, name, body string) string {
 	return p
 }
 
-// srcSetupXDG writes a source config to $dir/tm/config and sets XDG_CONFIG_HOME.
-func srcSetupXDG(t *testing.T, cfgContent string) {
-	t.Helper()
-	xdgDir := t.TempDir()
-	tmDir := filepath.Join(xdgDir, "tm")
-	if err := os.MkdirAll(tmDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(tmDir, "config"), []byte(cfgContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XDG_CONFIG_HOME", xdgDir)
-}
-
 // srcEventFields reads the .mmd.jsonl for mmdFile and returns the fields map
 // of the first event whose "ev" key matches evName.
 func srcEventFields(t *testing.T, mmdFile, evName string) map[string]any {

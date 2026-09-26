@@ -92,8 +92,6 @@ func readMigrateEvent(t *testing.T, graphPath string) []map[string]any {
 	return rows
 }
 
-// ── TestMigrate table-driven suite ───────────────────────────────────────────
-
 func TestMigrate(t *testing.T) {
 	tests := []struct {
 		name        string

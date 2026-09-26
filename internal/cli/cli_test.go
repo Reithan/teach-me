@@ -68,6 +68,20 @@ func tempErrlog(t *testing.T) string {
 	return path
 }
 
+// srcSetupXDG writes a source config to $dir/tm/config and sets XDG_CONFIG_HOME.
+func srcSetupXDG(t *testing.T, cfgContent string) {
+	t.Helper()
+	xdgDir := t.TempDir()
+	tmDir := filepath.Join(xdgDir, "tm")
+	if err := os.MkdirAll(tmDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmDir, "config"), []byte(cfgContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+}
+
 // ── Baseline help tests ───────────────────────────────────────────────────────
 
 func TestBaselineHelp_NoTMDOC_NoArgs(t *testing.T) {

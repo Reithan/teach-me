@@ -103,8 +103,6 @@ func qidFromAsk(t *testing.T) string {
 	return strings.Fields(lines[1])[0]
 }
 
-// ── TestDrift_AnswerAndCheckRefusal ───────────────────────────────────────────
-
 // TestDrift_AnswerAndCheckRefusal verifies that both tm answer and tm check
 // refuse with exit 1 when the question's citation has drifted, and pass
 // through normally when it has not.
@@ -186,8 +184,6 @@ func TestDrift_AnswerAndCheckRefusal(t *testing.T) {
 		})
 	}
 }
-
-// ── TestDrift_DropQuestion ────────────────────────────────────────────────────
 
 // TestDrift_DropQuestion covers every row of the drop-question-drift spec
 // (§7): accept on drifted+ungraded, refuse on graded or non-drifted, and
@@ -403,8 +399,6 @@ func TestDrift_DropQuestion_ReplacementUnclear(t *testing.T) {
 	}
 }
 
-// ── TestDrift_Recite ──────────────────────────────────────────────────────────
-
 // TestDrift_Recite covers all recite behaviors: hash match on an untested and a
 // passed concept, mismatch, multi-citation selection, unknown concept, and hash
 // error on a nonexistent file.
@@ -535,8 +529,6 @@ func TestDrift_Recite(t *testing.T) {
 	}
 }
 
-// ── TestDrift_ReopenSrc ───────────────────────────────────────────────────────
-
 // TestDrift_ReopenSrc verifies that reopen --src updates the citation and
 // logs src_before/src_after, while reopen without --src logs neither field.
 func TestDrift_ReopenSrc(t *testing.T) {
@@ -600,8 +592,6 @@ func TestDrift_ReopenSrc(t *testing.T) {
 		})
 	}
 }
-
-// ── TestDrift_CheckDrift ──────────────────────────────────────────────────────
 
 // TestDrift_CheckDrift verifies the §9.1 recheck payload produced by
 // tm check --drift, including missing-log and unknown-concept refusals.
@@ -674,8 +664,6 @@ func TestDrift_CheckDrift(t *testing.T) {
 		})
 	}
 }
-
-// ── TestDrift_GradeDrift ──────────────────────────────────────────────────────
 
 // TestDrift_GradeDrift covers all grade --drift behaviors: keep and reopen on
 // passed and untested concepts, verdict validation, and role/unknown-concept refusals.
@@ -773,18 +761,7 @@ func TestDrift_GradeDrift(t *testing.T) {
 		{
 			name: "keep on untested concept succeeds and logs recheck event",
 			setup: func(t *testing.T) string {
-				dir := t.TempDir()
-				content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-				os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644) //nolint:errcheck
-				t.Setenv("TM_SRC_ROOT", dir)
-				t.Setenv("TM_PROBE_MIN", "1")
-				gfile := filepath.Join(dir, "g.mmd")
-				t.Chdir(dir)
-				run(t, "new", gfile)
-				t.Setenv("TM_FILE", gfile)
-				run(t, "add", "mycon", "src.txt:1-5", "My concept")
-				run(t, "q", "mycon", "src.txt:1-3", "Q1")
-				qid := qidFromAsk(t)
+				gfile, dir, qid := driftQuestionFixture(t)
 				run(t, "answer", qid, "My answer")
 				run(t, "grade", qid, "fail", "Wrong")
 				driftSrc(t, dir)
@@ -818,18 +795,7 @@ func TestDrift_GradeDrift(t *testing.T) {
 		{
 			name: "reopen on untested concept refuses with exit 1 not-passed",
 			setup: func(t *testing.T) string {
-				dir := t.TempDir()
-				content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-				os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644) //nolint:errcheck
-				t.Setenv("TM_SRC_ROOT", dir)
-				t.Setenv("TM_PROBE_MIN", "1")
-				gfile := filepath.Join(dir, "g.mmd")
-				t.Chdir(dir)
-				run(t, "new", gfile)
-				t.Setenv("TM_FILE", gfile)
-				run(t, "add", "mycon", "src.txt:1-5", "My concept")
-				run(t, "q", "mycon", "src.txt:1-3", "Q1")
-				qid := qidFromAsk(t)
+				gfile, _, qid := driftQuestionFixture(t)
 				run(t, "answer", qid, "My answer")
 				run(t, "grade", qid, "fail", "Wrong")
 				return gfile
@@ -840,18 +806,7 @@ func TestDrift_GradeDrift(t *testing.T) {
 		{
 			name: "verdict keep without --drift exits 3 with invalid-verdict message",
 			setup: func(t *testing.T) string {
-				dir := t.TempDir()
-				content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
-				os.WriteFile(filepath.Join(dir, "src.txt"), []byte(content), 0o644) //nolint:errcheck
-				t.Setenv("TM_SRC_ROOT", dir)
-				t.Setenv("TM_PROBE_MIN", "1")
-				gfile := filepath.Join(dir, "g.mmd")
-				t.Chdir(dir)
-				run(t, "new", gfile)
-				t.Setenv("TM_FILE", gfile)
-				run(t, "add", "mycon", "src.txt:1-5", "My concept")
-				run(t, "q", "mycon", "src.txt:1-3", "Q1")
-				qid := qidFromAsk(t)
+				gfile, _, qid := driftQuestionFixture(t)
 				run(t, "answer", qid, "My answer")
 				return gfile
 			},

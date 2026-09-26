@@ -17,37 +17,6 @@ import (
 
 const repoFileContent = "line1\nline2\nline3\n"
 
-// repoInitGit initialises a real git repo in dir, commits file.txt with
-// repoFileContent, and returns the full HEAD commit SHA.
-func repoInitGit(t *testing.T, dir string) string {
-	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not on PATH")
-	}
-	for _, args := range [][]string{
-		{"init"}, {"config", "user.email", "t@t"}, {"config", "user.name", "T"},
-	} {
-		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte(repoFileContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for _, args := range [][]string{{"add", "file.txt"}, {"commit", "-m", "init"}} {
-		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		t.Fatalf("rev-parse HEAD: %v", err)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // repoGetBranch returns the current branch name.
 func repoGetBranch(t *testing.T, dir string) string {
 	t.Helper()
@@ -56,22 +25,6 @@ func repoGetBranch(t *testing.T, dir string) string {
 		t.Fatalf("rev-parse --abbrev-ref HEAD: %v", err)
 	}
 	return strings.TrimSpace(string(out))
-}
-
-// repoSetupXDG writes a source config to $tmpdir/tm/config and sets
-// XDG_CONFIG_HOME to point at that directory.
-func repoSetupXDG(t *testing.T, cfgContent string) {
-	t.Helper()
-	xdgDir := t.TempDir()
-	tmDir := filepath.Join(xdgDir, "tm")
-	if err := os.MkdirAll(tmDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfgPath := filepath.Join(tmDir, "config")
-	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XDG_CONFIG_HOME", xdgDir)
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -237,12 +190,12 @@ func TestRepo_AddSHARewriting(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	sha12 := fullSHA[:12]
 	branch := repoGetBranch(t, repoDir)
 
 	// Set up XDG config with git + alias.
-	repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
 
 	// Create a graph in a temp dir.
 	graphDir := t.TempDir()
@@ -307,11 +260,11 @@ func TestRepo_QGitLocator(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	sha12 := fullSHA[:12]
 	branch := repoGetBranch(t, repoDir)
 
-	repoSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\nrepo r = %s\n", gitBin, repoDir))
 
 	graphDir := t.TempDir()
 	t.Chdir(graphDir)
@@ -512,7 +465,7 @@ func TestRepo_AddNotGitRepo(t *testing.T) {
 	t.Chdir(dir)
 
 	// Set up user config with git configured so the git-repo check runs.
-	repoSetupXDG(t, fmt.Sprintf("git=%s\n", gitBin))
+	srcSetupXDG(t, fmt.Sprintf("git=%s\n", gitBin))
 
 	_, errOut, code := run(t, "repo", "add", "r", notGitDir)
 	if code != 3 {
