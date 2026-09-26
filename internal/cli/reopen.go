@@ -18,32 +18,10 @@ func reopenApply(
 	s *state.State,
 	concept, gap, srcCite, usageLine string,
 ) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-	// Build node membership sets.
-	allConcepts := make(map[string]bool)
-	passedSet := make(map[string]bool)
-	for _, c := range g.PassedConcepts {
-		allConcepts[c.ID] = true
-		passedSet[c.ID] = true
-	}
-	for _, c := range g.UntestedConcepts {
-		allConcepts[c.ID] = true
-	}
-
-	allNodes := make(map[string]bool)
-	for id := range allConcepts {
-		allNodes[id] = true
-	}
-	for _, item := range g.TestingItems {
-		if item.Q != nil {
-			allNodes[item.Q.ID] = true
-		}
-		if item.A != nil {
-			allNodes[item.A.ID] = true
-		}
-	}
+	ns := graphNodeSets(g)
 
 	// Unknown ID → exit 3.
-	if !allNodes[concept] {
+	if !ns.AllNodes[concept] {
 		return nil, nil, &ops.Refusal{
 			Err:  fmt.Sprintf("unknown ID %q", concept),
 			Fix:  usageLine,
@@ -52,7 +30,7 @@ func reopenApply(
 	}
 
 	// Not a concept (q or a node) → exit 1.
-	if !allConcepts[concept] {
+	if !ns.AllConcepts[concept] {
 		return nil, nil, &ops.Refusal{
 			Err:  concept + " is not a concept",
 			Exit: 1,
@@ -60,7 +38,7 @@ func reopenApply(
 	}
 
 	// Not in passed → exit 1.
-	if !passedSet[concept] {
+	if !ns.PassedSet[concept] {
 		return nil, nil, &ops.Refusal{
 			Err:  concept + " is not passed",
 			Exit: 1,
@@ -148,7 +126,7 @@ func reopenApply(
 			continue
 		}
 		childID := e.To
-		if !allConcepts[childID] {
+		if !ns.AllConcepts[childID] {
 			continue
 		}
 		if clearedG, gateRow, ok := ops.ClearGate(currentG, s, childID, "reopen", ""); ok {

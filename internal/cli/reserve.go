@@ -25,35 +25,10 @@ func reserveRun(ctx *Context) int {
 	usageLine := FindCommand("reserve").Usage()
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
-		// Build node membership sets.
-		allConcepts := make(map[string]bool)
-		untestedSet := make(map[string]bool)
-		for _, c := range g.PassedConcepts {
-			allConcepts[c.ID] = true
-		}
-		for _, c := range g.UntestedConcepts {
-			allConcepts[c.ID] = true
-			untestedSet[c.ID] = true
-		}
-		for _, c := range g.ReserveConcepts {
-			allConcepts[c.ID] = true
-		}
-
-		allNodes := make(map[string]bool)
-		for id := range allConcepts {
-			allNodes[id] = true
-		}
-		for _, item := range g.TestingItems {
-			if item.Q != nil {
-				allNodes[item.Q.ID] = true
-			}
-			if item.A != nil {
-				allNodes[item.A.ID] = true
-			}
-		}
+		ns := graphNodeSets(g)
 
 		// Unknown ID → exit 3.
-		if !allNodes[concept] {
+		if !ns.AllNodes[concept] {
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("unknown ID %q", concept),
 				Fix:  usageLine,
@@ -62,7 +37,7 @@ func reserveRun(ctx *Context) int {
 		}
 
 		// Not in untested → exit 1.
-		if !untestedSet[concept] {
+		if !ns.UntestedSet[concept] {
 			return nil, nil, &ops.Refusal{
 				Err:  concept + " is not in untested",
 				Exit: 1,
