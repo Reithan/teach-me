@@ -167,7 +167,9 @@ move. The phases:
      when the learner asks, never on your own read of the verdicts; that is
      the bias grader isolation exists to block.
    - learner asks to skip a concept → `tm reserve <concept>` if it has no
-     questions. It stops blocking its children and can be activated later.
+     questions, or `tm reserve <concept> --reason "<why>"` if it has been
+     probed and all its batches are resolved. It stops blocking its children
+     and can be activated later.
 
 9. Repeat from step 4 until `tm status` shows the goal concept passed.
 

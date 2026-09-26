@@ -67,9 +67,11 @@ active, counting the goal. At the limit, reserve the weakest defence first.
 **Grow nothing.** You have no `tm add`, `tm link`, or `tm drop`. A missing
 foundation is the planner's to add; name it in your completion paragraph.
 
-**Leave questioned concepts in place.** `tm reserve` refuses a concept with
-questions. Name any such concept that falls outside what the goal needs in the
-completion paragraph.
+**Leave concepts with open batches in place.** `tm reserve` refuses a concept
+when any of its batches is unresolved (unanswered or ungraded questions). A
+concept whose batches are all resolved can be parked with
+`tm reserve <concept> --reason "<why>"`. Name any concept with an open batch
+that falls outside what the goal needs in the completion paragraph.
 
 ## Workflow
 

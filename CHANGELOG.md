@@ -7,7 +7,7 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
-Spec v0.29.
+Spec v0.30.
 
 ### Added
 
@@ -15,6 +15,13 @@ Spec v0.29.
 - `CITATION.cff`, `CONTRIBUTING.md`, and `THIRD_PARTY_NOTICES.md` (the Go
   standard library license). Release archives now include `LICENSE`, `NOTICE`,
   `THIRD_PARTY_NOTICES.md`, and `CITATION.cff`.
+- `tm reserve <concept> --reason "<text>"` now accepts a concept that already
+  has questions, provided all its batches are resolved (every question has a
+  non-pending answer). The reason is logged on the `reserve` event. Concepts
+  with no questions still work without `--reason`. (#75)
+- `tm unlink <from> <to>` removes a concept→concept prerequisite edge. Reserve
+  endpoints are accepted, consistent with `tm link`. Logs an `unlink` event
+  with `from` and `to`. (#75)
 
 ### Changed
 
@@ -24,6 +31,8 @@ Spec v0.29.
   endpoints. A reserve parent still never blocks the frontier, so the planner
   can wire a parked foundation to its children and `tm activate` wakes it
   already linked. The cycle check now spans reserve concepts.
+- Lint check 12 no longer flags reserve concepts with questions. A reserve
+  concept may hold its testing history while parked. (#75)
 
 ### Fixed
 

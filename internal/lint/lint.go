@@ -912,13 +912,10 @@ func check12(
 			viols = append(viols, Violation{Msg: fmt.Sprintf("passed concept %q has open questions", c.ID)})
 		}
 	}
-	// Reserve concepts must have no questions and no gate line. GAP is allowed.
+	// Reserve concepts must have no gate line. GAP and questions are allowed.
 	for _, c := range g.ReserveConcepts {
 		if gateMetas[c.ID] {
 			viols = append(viols, Violation{Msg: fmt.Sprintf("reserve concept %q has a gate line", c.ID)})
-		}
-		if conceptHasQ[c.ID] {
-			viols = append(viols, Violation{Msg: fmt.Sprintf("reserve concept %q has questions", c.ID)})
 		}
 	}
 	return viols

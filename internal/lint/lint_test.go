@@ -944,38 +944,6 @@ func TestCheck12_ReserveConceptHasGateLine(t *testing.T) {
 	}
 }
 
-// Reserve concept c1 has a question in testing.
-const reserveConceptHasQuestionsGraph = `flowchart TB
-    subgraph passed["P"]
-        c2["Concept2"]
-    end
-    subgraph untested["U"]
-        c3["Other"]
-    end
-    subgraph reserve["Concepts held in reserve"]
-        c1["ReserveConcept"]
-    end
-    subgraph testing["T"]
-        q1["Q1"]:::probe_1
-        a1["A1"]:::fail
-        c1 --> q1
-        q1 --> a1
-    end
-    classDef probe_1 stroke:#4aa3ff
-    classDef pass stroke:#3fb950
-    classDef fail stroke:#f85149
-    classDef unclear stroke:#d29922
-    classDef pending stroke-dasharray:4 3
-`
-
-func TestCheck12_ReserveConceptHasQuestions(t *testing.T) {
-	viols := lint.Check([]byte(reserveConceptHasQuestionsGraph), defaultCfg())
-	want := `reserve concept "c1" has questions`
-	if !hasMsg(viols, want) {
-		t.Errorf("expected %q; got %v", want, viols)
-	}
-}
-
 // check5 (edge in wrong block involving reserve) ───────────────────────────────
 
 // An edge from a passed concept to a reserve concept belongs in the reserve

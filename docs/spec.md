@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.29
+# tm: teaching-map CLI, draft spec v0.30
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.28: the remaining questions of the current open probe batch stay answerable after a fail; the restriction on answering a probe batch applies only to later (fallback) probe batches; §8, §14 updated.
+Changes from v0.29: `tm reserve` accepts concepts with questions when `--reason` is given and all batches are resolved; `tm unlink <from> <to>` removes a prerequisite edge; lint check 12 no longer flags reserve concepts with questions; §6, §7, §11, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -280,12 +280,13 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm show <id> [--history]` | node, edges, Q/A beneath it; `--history` adds its log events | the node record |
 | `tm add <id> <cite> "<scope>" [--parent <id>:"<rel>"]... [--child <id>:"<rel>"]...` | new concept in `untested`. `--child` inserts a prerequisite above an existing concept. A parent or child may be in `reserve` | `ok` |
 | `tm link <from> <to> "<rel>"` | edge between existing concepts, `reserve` included | `ok` |
+| `tm unlink <from> <to>` | remove a concept→concept prerequisite edge; `reserve` endpoints accepted. Logged | `ok` |
 | `tm edit <concept> "<scope>" [--src <cite>]` | rewrite the scope of a concept that has no questions yet | `ok` |
 | `tm drop <id>` | remove an untested leaf concept that has no questions; or, for a drifted ungraded question, add an `unclear` tombstone answer to the graph so `--re` can target it. Logged | `ok` |
 | `tm gap <concept> "<gap>"` | set or replace the GAP field | `ok` |
 | `tm reopen <concept> "<gap>" [--src <cite>]` | move a passed concept to `untested` with a GAP; `--src` re-points the concept citation in the same operation. Descendants stay passed | `ok` |
 | `tm errata <concept> "<scope>" "<reason>" [--src <cite>]` | teacher: correct the scope of a concept in any active state, including one that has questions or is passed; logs the reason, leaves questions and answers untouched, and a pass then goes to a grader recheck. `--src` re-points the concept citation in the same operation | `ok` |
-| `tm reserve <concept>` | move an untested concept with no questions to `reserve`. Its edges stay; its children stop being blocked by it. Logged | `ok` |
+| `tm reserve <concept> [--reason "<text>"]` | move an untested concept to `reserve`. Concepts with no questions need no flag. Concepts with questions require `--reason` and all their batches must be resolved (no unanswered or ungraded questions). The reason is logged. Its edges stay; its children stop being blocked by it | `ok` |
 | `tm activate <concept>` | move a reserve concept to `untested`. Its own reserve parents stay parked. When it is a parent of a gated concept, the gate clears with `via: activate` (section 7). Logged | `ok` |
 | `tm prune <goal> [--keep N]` | park every untested concept with no questions that is outside the goal's ancestor closure; with `--keep N`, also park closure members beyond the N nearest untested concepts by hop distance, the goal counted first and ties broken by ID. Concepts with questions are never moved. Logged with the moved IDs | `reserved <n>` |
 | `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe. Refuses when the cited text exceeds 120 lines or 6,000 characters (§7) | `qN` |
@@ -359,12 +360,13 @@ The `reserve` count is printed only when it is nonzero.
 | any command | the graph's format is above the binary's (`fix:` to upgrade tm) |
 | `add` | ID exists (`fix: tm reopen` when it is passed, `fix: tm activate` when it is in `reserve`), ID is reserved, a citation is missing or out of bounds, a named parent or child is unknown, or the edge would close a cycle |
 | `link` | unknown ID, non-concept endpoint, or cycle |
+| `unlink` | unknown ID, non-concept endpoint, or the edge does not exist |
 | `edit` | the ID is a question or answer; the concept is passed or has any question |
 | `errata` | the ID is a question or answer; the reason is empty (`err: errata needs a reason`; `fix: tm errata <concept> "<scope>" "<why the old scope was wrong>"`) |
 | `drop` (concept) | the concept is passed, has children, or has any question |
 | `drop` (question) | the question is already graded; or the citation has not drifted |
 | `reopen` | the concept is not in `passed` |
-| `reserve` | the concept is not in `untested`, or has any question |
+| `reserve` | the concept is not in `untested`; the concept has questions and `--reason` is absent (`err: <concept> has questions`; `fix: tm reserve <concept> [--reason "<text>"]`); or `--reason` is given but the concept has an unresolved batch |
 | `activate` | the concept is not in `reserve` |
 | `prune` | the goal is not in `untested` (`fix: tm activate <goal>` when it is in `reserve`), or `--keep` is below 1 |
 | `add`, `q` | the cited URI cannot be fetched (fetch failed after a cache miss or expiry) |
@@ -578,7 +580,7 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 9. Every question in a batch resolves to the same concept. Batches respect max, and a batch with any answer respects min (replacement batches per 8.5 excepted).
 10. Concept edges carry a relation label and form a DAG.
 11. Every citation names an existing file and an in-bounds line range.
-12. Passed concepts have no tests, no GAP, and no gate line. Reserve concepts have no tests and no gate line.
+12. Passed concepts have no tests, no GAP, and no gate line. Reserve concepts have no gate line (tests and GAP are allowed).
 13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
 14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`. No unencoded `:` appears inside a `git:` locator's `<path>`; lint refuses it with `fix: percent-encode : as %3A`.
 15. When `%% tm:next` is present, its `q` value must be strictly greater than every `qN` and `aN` suffix in the file, and its `batch` value must be strictly greater than every `probe_N` and `teach_N` suffix. Lint refuses a stale counter with `fix: raise the counters in %% tm:next`.
@@ -851,6 +853,8 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 74 | `tm check <qid>` prints the concept scope as `CONCEPT`, and a question outside it grades `unclear` with a summary starting `out of scope:` | the grader is the only role that reads Q against source, so it is the only place a probe drawn outside its concept is caught; `unclear` routes to the teacher's existing `--re` replacement with no new transition | a grader error to the teacher (no channel through `tm`); a new `--oos` on probes (`--oos` is a teach-question flag with a different effect) | agreed, 2026-09-25 |
 | 75 | `add` and `link` accept `reserve` concepts as endpoints; the cycle check spans every block | a reserve parent never blocks the frontier (59), so an edge to a parked concept costs active work nothing, and it lets `activate` wake a foundation already wired to its children instead of re-linking it; lint already counts reserve in the DAG rule, so a cycle through reserve must refuse at the command, not fail the post-write lint | refusing reserve endpoints (forces activate, link, re-park); activating an endpoint on link | agreed, 2026-09-25 |
 | 76 | Remaining questions of an open-and-failed probe batch stay answerable; the teaching-round refusal applies only to later (fallback) probe batches | refusing the remaining questions deadlocks the concept: `tm q` refuses when a probe batch is open, and closing the batch requires answering those questions; the batch must close normally before the teaching round restriction takes effect | refuse all probe questions once any fail exists in the batch, deadlocking (the v0.28 behavior) | agreed, 2026-09-25 |
+| 77 | `tm reserve` accepts a concept with resolved questions when `--reason` is given; an unresolved batch still refuses; lint check 12 no longer flags reserve concepts with questions | a concept discovered outside the goal's domain after probing should be parkable without losing its history; the open-batch guard keeps `tm ask` and `tm grade` from running on a parked concept; `--reason` is required for probed concepts so the event log records why their history left the active graph; `tm activate` restores them unchanged | refusing always when questions exist (history cannot stay parked); a separate `tm park` command; silently removing questions on reserve | agreed, 2026-09-25 |
+| 78 | `tm unlink <from> <to>` removes a prerequisite edge; reserve endpoints accepted; no cycle check (removal cannot introduce a cycle) | adding edges is already symmetrically commanded; the teacher occasionally discovers that a dependency is wrong and needs a clean path to remove it; reserve consistency matches `tm link` (75) | hand-editing the graph; a `tm drop --edge` variant; refusing reserve endpoints on unlink | agreed, 2026-09-25 |
 
 ## 15. Deferred
 
