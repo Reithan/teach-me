@@ -64,7 +64,7 @@ func TestMigrateRule1_Rewrite(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	sha12 := fullSHA[:12]
 
 	// Hash the content of lines 1-2 of the file.
@@ -144,7 +144,7 @@ func TestMigrateRule1_Table(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	contentHash := icite.Hash("line1\nline2")
 	wrongHash := icite.Hash("content that does not match line1 or line2")
 
@@ -254,7 +254,7 @@ func TestMigrateRule1_SymlinkedRepoPath(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	sha12 := fullSHA[:12]
 	contentHash := icite.Hash("line1\nline2")
 
@@ -305,7 +305,7 @@ func TestMigrateRule1_NoAlias(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 
 	// Set up XDG config with git but NO repo alias.
 	srcSetupXDG(t, fmt.Sprintf("git=%s\n", gitBin))

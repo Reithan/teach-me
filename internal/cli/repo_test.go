@@ -17,37 +17,6 @@ import (
 
 const repoFileContent = "line1\nline2\nline3\n"
 
-// repoInitGit initialises a real git repo in dir, commits file.txt with
-// repoFileContent, and returns the full HEAD commit SHA.
-func repoInitGit(t *testing.T, dir string) string {
-	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not on PATH")
-	}
-	for _, args := range [][]string{
-		{"init"}, {"config", "user.email", "t@t"}, {"config", "user.name", "T"},
-	} {
-		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte(repoFileContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for _, args := range [][]string{{"add", "file.txt"}, {"commit", "-m", "init"}} {
-		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		t.Fatalf("rev-parse HEAD: %v", err)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // repoGetBranch returns the current branch name.
 func repoGetBranch(t *testing.T, dir string) string {
 	t.Helper()
@@ -221,7 +190,7 @@ func TestRepo_AddSHARewriting(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	sha12 := fullSHA[:12]
 	branch := repoGetBranch(t, repoDir)
 
@@ -291,7 +260,7 @@ func TestRepo_QGitLocator(t *testing.T) {
 
 	gitBin, _ := exec.LookPath("git")
 	repoDir := t.TempDir()
-	fullSHA := repoInitGit(t, repoDir)
+	fullSHA := srcInitGitRepo(t, repoDir, repoFileContent)
 	sha12 := fullSHA[:12]
 	branch := repoGetBranch(t, repoDir)
 
