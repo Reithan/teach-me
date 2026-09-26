@@ -723,13 +723,12 @@ func TestUpgradeThreeBlockOnMutation(t *testing.T) {
 }
 
 // TestReserveIDTreatedAsUnknown pins that commands other than activate,
-// prune, and reserve do not see reserve concepts: they refuse the ID instead
+// prune, reserve, add, and link do not see reserve concepts: they refuse the ID instead
 // of acting on it (edit and gap only search untested when rewriting a node).
 func TestReserveIDTreatedAsUnknown(t *testing.T) {
 	for _, args := range [][]string{
 		{"edit", "rr", "new scope"},
 		{"gap", "rr", "a gap"},
-		{"link", "rr", "cb", "requires"},
 		{"drop", "rr"},
 		{"reopen", "rr", "a gap"},
 		{"ask", "rr"},
@@ -755,6 +754,55 @@ func TestReserveIDTreatedAsUnknown(t *testing.T) {
 			}
 			if string(got) != activateTestGraph {
 				t.Errorf("graph changed on refusal")
+			}
+		})
+	}
+}
+
+// TestReserveEndpoints pins that add and link attach edges to reserve concepts
+// without blocking active work, and that the cycle check spans reserve. The
+// fixture already has rr --> ca.
+func TestReserveEndpoints(t *testing.T) {
+	const cite = "f5ca3875b379@src.txt:1-5"
+	for _, tc := range []struct {
+		name string
+		args []string
+		code int
+	}{
+		{"link reserve parent", []string{"link", "rr", "cb", "requires"}, 0},
+		{"link reserve child", []string{"link", "cb", "rr", "requires"}, 0},
+		{"link closes cycle through reserve", []string{"link", "ca", "rr", "requires"}, 1},
+		{"add reserve parent", []string{"add", "nn", cite, "new", "--parent", "rr:requires"}, 0},
+		{"add reserve child", []string{"add", "nn", cite, "new", "--child", "rr:requires"}, 0},
+		{"add closes cycle through reserve", []string{"add", "nn", cite, "new", "--parent", "ca:requires", "--child", "rr:requires"}, 1},
+		{"add reserve ID", []string{"add", "rr", cite, "new"}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			tempErrlog(t)
+			setupSrcFile(t, dir)
+			path := writeGraph(t, dir, activateTestGraph)
+			t.Setenv("TM_FILE", path)
+
+			_, errOut, code := run(t, tc.args...)
+			if code != tc.code {
+				t.Fatalf("want exit %d, got %d; stderr:\n%s", tc.code, code, errOut)
+			}
+			if code != 0 {
+				got, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(got) != activateTestGraph {
+					t.Errorf("graph changed on refusal")
+				}
+				return
+			}
+			lintFile(t, path, dir)
+			out, _, _ := run(t, "status")
+			if !strings.Contains(out, "blocked 0") {
+				t.Errorf("reserve endpoint blocked active work; status:\n%s", out)
 			}
 		})
 	}
