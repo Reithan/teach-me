@@ -208,23 +208,11 @@ func gradeTeachPendingGraph() string {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// gradeSetupDir creates a temp dir with src.txt, sets TM_ERRORS and TM_FILE="".
-func gradeSetupDir(t *testing.T) (string, string) {
-	t.Helper()
-	return qSetupDir(t)
-}
-
-// gradeWriteGraph writes mmd to dir/g.mmd and sets TM_FILE.
-func gradeWriteGraph(t *testing.T, dir, mmd string) string {
-	t.Helper()
-	return qWriteGraph(t, dir, mmd)
-}
-
 // ── Exit 3 (unknown qid) ──────────────────────────────────────────────────────
 
 func TestGrade_UnknownQID_Exit3(t *testing.T) {
-	dir, errPath := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeProbeIncompleteGraph())
+	dir, errPath := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeProbeIncompleteGraph())
 
 	_, errOut, code := run(t, "grade", "q99", "pass", "summary")
 	if code != 3 {
@@ -248,8 +236,8 @@ func TestGrade_UnknownQID_Exit3(t *testing.T) {
 
 func TestGrade_AlreadyGradedAnswer_Exit1(t *testing.T) {
 	// q1 has a "pass" answer — not pending. Grade refuses (§7 line 266).
-	dir, _ := gradeSetupDir(t)
-	gradeWriteGraph(t, dir, gradeAlreadyGradedGraph())
+	dir, _ := qSetupDir(t)
+	qWriteGraph(t, dir, gradeAlreadyGradedGraph())
 
 	_, errOut, code := run(t, "grade", "q1", "pass", "summary")
 	if code != 1 {
@@ -265,8 +253,8 @@ func TestGrade_AlreadyGradedAnswer_Exit1(t *testing.T) {
 
 func TestGrade_NoAnswer_Exit1(t *testing.T) {
 	// q2 in gradeProbeIncompleteGraph has no answer at all.
-	dir, _ := gradeSetupDir(t)
-	gradeWriteGraph(t, dir, gradeProbeIncompleteGraph())
+	dir, _ := qSetupDir(t)
+	qWriteGraph(t, dir, gradeProbeIncompleteGraph())
 
 	_, errOut, code := run(t, "grade", "q2", "pass", "summary")
 	if code != 1 {
@@ -281,8 +269,8 @@ func TestGrade_NoAnswer_Exit1(t *testing.T) {
 
 func TestGrade_OOSOnProbe_Exit1(t *testing.T) {
 	// §7 line 267: --oos is only valid for teach questions.
-	dir, _ := gradeSetupDir(t)
-	gradeWriteGraph(t, dir, gradeProbeIncompleteGraph())
+	dir, _ := qSetupDir(t)
+	qWriteGraph(t, dir, gradeProbeIncompleteGraph())
 
 	_, errOut, code := run(t, "grade", "q1", "pass", "summary", "--oos")
 	if code != 1 {
@@ -307,8 +295,8 @@ func TestGrade_OOSOnProbe_Exit1(t *testing.T) {
 func TestGrade_StepThree_BatchIncomplete(t *testing.T) {
 	// probe_1 has q1 (pending) and q2 (unanswered). Grading q1 → batch still
 	// has unanswered q2 → stop after writing grade event.
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeProbeIncompleteGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeProbeIncompleteGraph())
 
 	out, errOut, code := run(t, "grade", "q1", "pass", "grade summary")
 	if code != 0 {
@@ -399,8 +387,8 @@ func TestGrade_StepThree_BatchIncomplete(t *testing.T) {
 func TestGrade_StepFour_ProbeAllPass(t *testing.T) {
 	// probe_1: q1 (pending a1), q2 (pass a2). Grading q1 pass →
 	// all pass → pass procedure: remove testing subtree, move mycon to passed.
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeAllPassGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeAllPassGraph())
 
 	out, errOut, code := run(t, "grade", "q1", "pass", "great answer")
 	if code != 0 {
@@ -563,8 +551,8 @@ func TestGrade_StepTwo_UnclearRootedAtUnclear(t *testing.T) {
 	// (replacement probe, edge a1→q3) with pending a3.
 	// Grading q3 unclear: Q5 applies because walkToRootProbe(q3) returns
 	// (q1, a1) and a1.Class=="unclear" → recorded="fail".
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeReplacementProbeGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeReplacementProbeGraph())
 
 	out, errOut, code := run(t, "grade", "q3", "unclear", "still confused")
 	if code != 0 {
@@ -629,8 +617,8 @@ func TestGrade_StepFive_ProbeNoFailSomeUnclear(t *testing.T) {
 	// probe_1 q1 (pending a1), q2 (unclear a2). q1 is a root probe (mycon→q1)
 	// so Q5 does not apply. Grading q1 unclear → batch complete: q1=unclear,
 	// q2=unclear → no fail, some unclear → only grade event, no structural change.
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeProbeUnclearRootGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeProbeUnclearRootGraph())
 
 	out, errOut, code := run(t, "grade", "q1", "unclear", "ambiguous question")
 	if code != 0 {
@@ -673,8 +661,8 @@ func TestGrade_StepFive_ProbeNoFailSomeUnclear(t *testing.T) {
 func TestGrade_StepSix_ProbeAnyFail(t *testing.T) {
 	// probe_1 q1 (pass a1), q2 (pending a2). Grading q2 fail → batch complete,
 	// has fail → only grade event, no structural change.
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeProbeWithPassAndPendingGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeProbeWithPassAndPendingGraph())
 
 	out, errOut, code := run(t, "grade", "q2", "fail", "wrong answer")
 	if code != 0 {
@@ -714,8 +702,8 @@ func TestGrade_StepSix_ProbeAnyFail(t *testing.T) {
 
 func TestGrade_StepSeven_OOSOnTeach(t *testing.T) {
 	// Grade q5 (teach question) with --oos → a5.OOS=true, event.oos=true.
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeTeachPendingGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeTeachPendingGraph())
 
 	out, errOut, code := run(t, "grade", "q5", "pass", "out of scope answer", "--oos")
 	if code != 0 {
@@ -776,8 +764,8 @@ func TestGrade_StepSeven_OOSOnTeach(t *testing.T) {
 func TestGrade_StepEight_TeachAllPass(t *testing.T) {
 	// Grade teach q5 pass (no --oos). Batch teach_3 complete, all in-scope pass.
 	// No structural writes (step 8 is derived). Only grade event.
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeTeachPendingGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeTeachPendingGraph())
 
 	out, errOut, code := run(t, "grade", "q5", "pass", "well explained")
 	if code != 0 {
@@ -815,8 +803,8 @@ func TestGrade_StepEight_TeachAllPass(t *testing.T) {
 func TestGrade_StepNine_TeachFail(t *testing.T) {
 	// Grade teach q5 fail. Teaching not spent (TeachCount=1 < MaxTeach=8).
 	// No structural writes (step 9 is derived). Only grade event.
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeTeachPendingGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeTeachPendingGraph())
 
 	out, errOut, code := run(t, "grade", "q5", "fail", "did not explain well")
 	if code != 0 {
@@ -848,8 +836,8 @@ func TestGrade_StepNine_TeachFail(t *testing.T) {
 
 func TestGrade_GuidedFlag(t *testing.T) {
 	// --guided sets guided=true in the grade event.
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, gradeProbeIncompleteGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, gradeProbeIncompleteGraph())
 
 	out, errOut, code := run(t, "grade", "q1", "pass", "biased summary", "--guided")
 	if code != 0 {
@@ -897,8 +885,8 @@ func TestGrade_AllPass_Unblocked(t *testing.T) {
     classDef pending stroke-dasharray:4 3
     classDef pass stroke:#3fb950
 `
-	dir, _ := gradeSetupDir(t)
-	file := gradeWriteGraph(t, dir, mmd)
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, mmd)
 	// Set up src file for the child_con citation too (same src.txt range).
 
 	out, errOut, code := run(t, "grade", "q1", "pass", "good")

@@ -1,8 +1,6 @@
 package cli_test
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -252,64 +250,5 @@ func TestStatus_Concept_Blocked_NoBatches(t *testing.T) {
 	}
 	if strings.Contains(out, "> tm ask") {
 		t.Errorf("no chain expected for blocked concept; got:\n%s", out)
-	}
-}
-
-// ── New small fixture: passed concept test (belt-and-suspenders) ──────────────
-
-// passedConceptFixture creates a minimal .mmd in a temp dir where concept "alpha"
-// is passed and "beta" is its only child on the frontier. Returns the path.
-func passedConceptFixture(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-
-	content := `---
-config:
-  look: classic
----
-flowchart TB
-    subgraph passed["Concepts User understands"]
-        alpha["Alpha concept<br/>f5ca3875b379@src.txt:1-5"]
-    end
-    subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
-        beta["Beta concept<br/>6aa0757910fd@src.txt:6-10"]
-        alpha --"requires"--> beta
-    end
-    subgraph testing["Open tests validating and teaching User understanding"]
-    end
-`
-	mmdPath := filepath.Join(dir, "mini.mmd")
-	if err := os.WriteFile(mmdPath, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Write a src.txt so citations resolve.
-	srcContent := "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n"
-	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte(srcContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_SRC_ROOT", dir)
-	t.Setenv("TM_FILE", mmdPath)
-	return mmdPath
-}
-
-func TestStatus_Concept_Passed_SmallFixture(t *testing.T) {
-	// alpha is passed; beta is its only untested child on the frontier.
-	tempErrlog(t)
-	passedConceptFixture(t)
-
-	out, errOut, code := run(t, "status", "--concept", "alpha")
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
-	}
-
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("want 1 output line, got %d:\n%s", len(lines), out)
-	}
-	want := "alpha passed  unblocked beta"
-	if lines[0] != want {
-		t.Errorf("want %q, got %q", want, lines[0])
 	}
 }

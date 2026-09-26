@@ -352,8 +352,3 @@ func TestShow_Concept_Reserve(t *testing.T) {
 		t.Errorf("reserve concept should have no batch output; got:\n%s", out)
 	}
 }
-
-// ── Shared fixture helpers for status tests ──────────────────────────────────
-
-// raftFixtureWithSrc duplicated here to confirm it is available cross-file.
-// (It is defined in status_test.go; this is a compile-check comment only.)

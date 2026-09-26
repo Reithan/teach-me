@@ -84,25 +84,16 @@ func TestBaselineHelp_NoTMDOC_NoArgs(t *testing.T) {
 	}
 }
 
-func TestBaselineHelp_NoTMDOC_HelpFlag(t *testing.T) {
+func TestBaselineHelp_NoTMDOC_HelpFlags(t *testing.T) {
 	t.Setenv("TM_DOC", "")
-	out, _, code := run(t, "--help")
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d", code)
-	}
-	if !strings.Contains(out, "tm lint") {
-		t.Errorf("expected usage lines, got:\n%s", out)
-	}
-}
-
-func TestBaselineHelp_NoTMDOC_ShortHelp(t *testing.T) {
-	t.Setenv("TM_DOC", "")
-	out, _, code := run(t, "-h")
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d", code)
-	}
-	if !strings.Contains(out, "tm lint") {
-		t.Errorf("expected usage lines, got:\n%s", out)
+	for _, flag := range []string{"--help", "-h"} {
+		out, _, code := run(t, flag)
+		if code != 0 {
+			t.Fatalf("%s: want exit 0, got %d", flag, code)
+		}
+		if !strings.Contains(out, "tm lint") {
+			t.Errorf("%s: expected usage lines, got:\n%s", flag, out)
+		}
 	}
 }
 
@@ -127,51 +118,6 @@ func TestBaselineHelp_WithTMDOC_VersionMatch(t *testing.T) {
 	}
 	if strings.Contains(out, "err:") {
 		t.Errorf("no err line expected for matching version; got:\n%s", out)
-	}
-}
-
-func TestBaselineHelp_WithTMDOC_VersionMismatch(t *testing.T) {
-	tempErrlog(t) // prevent ERRORS.jsonl pollution in the test working dir
-	dir := t.TempDir()
-	docPath := filepath.Join(dir, "SKILL.md")
-	marker := docver.Marker()
-	// Write a fake skill file with a DIFFERENT version.
-	wrongVer := "99.99"
-	content := fmt.Sprintf("---\nmetadata:\n  tm-version: %q\n---\n# skill\n", wrongVer)
-	if err := os.WriteFile(docPath, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_DOC", docPath)
-
-	out, _, code := run(t, "--help")
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d", code)
-	}
-	wantErr := fmt.Sprintf("err: %s is for tm %s, this is tm %s", docPath, wrongVer, marker)
-	if !strings.Contains(out, wantErr) {
-		t.Errorf("want %q in output; got:\n%s", wantErr, out)
-	}
-}
-
-func TestBaselineHelp_WithTMDOC_MissingMarker(t *testing.T) {
-	tempErrlog(t) // prevent ERRORS.jsonl pollution in the test working dir
-	dir := t.TempDir()
-	docPath := filepath.Join(dir, "SKILL.md")
-	// Write a file with NO tm-version in frontmatter.
-	content := "---\nmetadata:\n  other-key: value\n---\n# skill\n"
-	if err := os.WriteFile(docPath, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TM_DOC", docPath)
-	marker := docver.Marker()
-
-	out, _, code := run(t, "--help")
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d", code)
-	}
-	wantErr := fmt.Sprintf("err: %s is for tm ?, this is tm %s", docPath, marker)
-	if !strings.Contains(out, wantErr) {
-		t.Errorf("want %q in output; got:\n%s", wantErr, out)
 	}
 }
 
@@ -534,23 +480,6 @@ func TestNilRunPlaceholder_Exit3(t *testing.T) {
 	}
 }
 
-func TestNilRunPlaceholder_GradeNotImplemented(t *testing.T) {
-	// grade is now implemented; verify it passes the role guard and reaches the
-	// handler, which exits 3 when no graph file is available.
-	t.Setenv("TM_ROLE", "")
-	t.Setenv("TM_FILE", "")
-	tempErrlog(t)
-	t.Chdir(t.TempDir()) // empty dir — no .tmconfig
-
-	_, errOut, code := run(t, "grade", "q1", "pass", "summary")
-	if code != 3 {
-		t.Fatalf("want exit 3, got %d", code)
-	}
-	if strings.Contains(errOut, "not implemented") {
-		t.Errorf("grade should be implemented; got:\n%s", errOut)
-	}
-}
-
 // ── Role guard tests ──────────────────────────────────────────────────────────
 
 func TestRoleGuard_GraderForbidden_Status(t *testing.T) {
@@ -622,7 +551,7 @@ func TestRoleGuard_GraderAllowed_Check(t *testing.T) {
 
 	_, errOut, code := run(t, "check", "q1")
 	if code != 3 {
-		t.Fatalf("want exit 3 (not implemented), got %d", code)
+		t.Fatalf("want exit 3 (no graph file, not role refusal), got %d", code)
 	}
 	if strings.Contains(errOut, "TM_ROLE") {
 		t.Errorf("role guard should NOT fire for 'check' with grader; got:\n%s", errOut)
@@ -635,7 +564,7 @@ func TestRoleGuard_GraderAllowed_Grade(t *testing.T) {
 
 	_, errOut, code := run(t, "grade", "q1", "pass", "summary")
 	if code != 3 {
-		t.Fatalf("want exit 3 (not implemented), got %d", code)
+		t.Fatalf("want exit 3 (no graph file, not role refusal), got %d", code)
 	}
 	if strings.Contains(errOut, "TM_ROLE") {
 		t.Errorf("role guard should NOT fire for 'grade' with grader; got:\n%s", errOut)

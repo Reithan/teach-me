@@ -76,32 +76,11 @@ func answerBlockedParentGraph() string {
 `
 }
 
-// answerTeachGraph: answerable teach_3 with q5 unanswered. probe_1 resolved
-// with fail; probe_2 fallback (q3, q4); teach_3 has q5 (TeachMin=1 by default).
-// Reuses qTeachAtMaxGraph.
-func answerTeachGraph() string {
-	return qTeachAtMaxGraph()
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-// answerSetupDir creates a temp dir with src.txt and sets TM_FILE="".
-func answerSetupDir(t *testing.T) (string, string) {
-	t.Helper()
-	return qSetupDir(t)
-}
-
-// answerWriteGraph writes the graph to dir/g.mmd and sets TM_FILE.
-func answerWriteGraph(t *testing.T, dir, mmd string) string {
-	t.Helper()
-	return qWriteGraph(t, dir, mmd)
-}
-
 // ── Exit 3 tests ──────────────────────────────────────────────────────────────
 
 func TestAnswer_UnknownQID_Exit3(t *testing.T) {
-	dir, errPath := answerSetupDir(t)
-	answerWriteGraph(t, dir, answerProbeGraph())
+	dir, errPath := qSetupDir(t)
+	qWriteGraph(t, dir, answerProbeGraph())
 
 	_, errOut, code := run(t, "answer", "q99", "some answer")
 	if code != 3 {
@@ -120,8 +99,8 @@ func TestAnswer_UnknownQID_Exit3(t *testing.T) {
 
 func TestAnswer_AlreadyHasAnswer_Exit1(t *testing.T) {
 	// q1 already has a pending answer in the graph.
-	dir, errPath := answerSetupDir(t)
-	answerWriteGraph(t, dir, answerAlreadyAnsweredGraph())
+	dir, errPath := qSetupDir(t)
+	qWriteGraph(t, dir, answerAlreadyAnsweredGraph())
 
 	_, errOut, code := run(t, "answer", "q1", "another attempt")
 	if code != 1 {
@@ -141,8 +120,8 @@ func TestAnswer_AlreadyHasAnswer_Exit1(t *testing.T) {
 
 func TestAnswer_BlockedParent_Exit1(t *testing.T) {
 	// child_con has parent_con (not passed) as parent.
-	dir, errPath := answerSetupDir(t)
-	answerWriteGraph(t, dir, answerBlockedParentGraph())
+	dir, errPath := qSetupDir(t)
+	qWriteGraph(t, dir, answerBlockedParentGraph())
 
 	_, errOut, code := run(t, "answer", "q1", "some answer")
 	if code != 1 {
@@ -162,9 +141,9 @@ func TestAnswer_BlockedParent_Exit1(t *testing.T) {
 
 func TestAnswer_Gated_Exit1(t *testing.T) {
 	// MaxFails=1 + probe_1 resolved with fail → Gated=true.
-	dir, errPath := answerSetupDir(t)
+	dir, errPath := qSetupDir(t)
 	t.Setenv("TM_MAX_FAILS", "1")
-	answerWriteGraph(t, dir, qReNotUnclearGraph())
+	qWriteGraph(t, dir, qReNotUnclearGraph())
 
 	// q1 is in probe_1 which is already resolved (graded). q1 already has a
 	// pass answer in qReNotUnclearGraph. Use a separate qid that doesn't exist...
@@ -205,7 +184,7 @@ func TestAnswer_Gated_Exit1(t *testing.T) {
     classDef pass stroke:#3fb950
     classDef fail stroke:#f85149
 `
-	answerWriteGraph(t, dir, mmd)
+	qWriteGraph(t, dir, mmd)
 
 	_, errOut, code := run(t, "answer", "q3", "some answer")
 	if code != 1 {
@@ -223,8 +202,8 @@ func TestAnswer_Gated_Exit1(t *testing.T) {
 func TestAnswer_FallbackProbeTeachUnresolved_Exit1(t *testing.T) {
 	// probe_2 (q3,q4) is a fallback probe, teach_3 (q5) is unresolved.
 	// Answering q3 must fail with "teach batch not resolved".
-	dir, errPath := answerSetupDir(t)
-	answerWriteGraph(t, dir, answerTeachGraph())
+	dir, errPath := qSetupDir(t)
+	qWriteGraph(t, dir, qTeachAtMaxGraph())
 
 	_, errOut, code := run(t, "answer", "q3", "some answer")
 	if code != 1 {
@@ -246,8 +225,8 @@ func TestAnswer_TeachingIncomplete_Exit1(t *testing.T) {
 	// qTeachReadyGraph: probe_1 resolved with fail (OpenTargets=[q2]),
 	// probe_2 (q3,q4) is fallback, no teach batch (TeachingSpent=false).
 	// Answering q3 should fail because teaching round is not complete.
-	dir, errPath := answerSetupDir(t)
-	answerWriteGraph(t, dir, qTeachReadyGraph())
+	dir, errPath := qSetupDir(t)
+	qWriteGraph(t, dir, qTeachReadyGraph())
 
 	_, errOut, code := run(t, "answer", "q3", "some answer")
 	if code != 1 {
@@ -267,7 +246,7 @@ func TestAnswer_TeachingIncomplete_Exit1(t *testing.T) {
 
 func TestAnswer_ProbeMinCount_Exit1(t *testing.T) {
 	// probe_1 has only 1 question; default ProbeMin=2 → refuse.
-	dir, errPath := answerSetupDir(t)
+	dir, errPath := qSetupDir(t)
 	mmd := qFrontmatter + `flowchart TB
     subgraph passed["Concepts User understands"]
     end
@@ -281,7 +260,7 @@ func TestAnswer_ProbeMinCount_Exit1(t *testing.T) {
     end
     classDef probe_1 stroke:#4aa3ff
 `
-	answerWriteGraph(t, dir, mmd)
+	qWriteGraph(t, dir, mmd)
 
 	_, errOut, code := run(t, "answer", "q1", "some answer")
 	if code != 1 {
@@ -298,9 +277,9 @@ func TestAnswer_ProbeMinCount_Exit1(t *testing.T) {
 
 func TestAnswer_TeachMinCount_Exit1(t *testing.T) {
 	// teach_3 has 1 question; TM_TEACH_MIN=2 → refuse.
-	dir, errPath := answerSetupDir(t)
+	dir, errPath := qSetupDir(t)
 	t.Setenv("TM_TEACH_MIN", "2")
-	answerWriteGraph(t, dir, answerTeachGraph())
+	qWriteGraph(t, dir, qTeachAtMaxGraph())
 
 	_, errOut, code := run(t, "answer", "q5", "some answer")
 	if code != 1 {
@@ -319,8 +298,8 @@ func TestAnswer_TeachMinCount_Exit1(t *testing.T) {
 
 func TestAnswer_ProbeHappyPath_WithAsked(t *testing.T) {
 	// probe_1 (q1, q2) is answerable. Answer q1 with --asked.
-	dir, _ := answerSetupDir(t)
-	file := answerWriteGraph(t, dir, answerProbeGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerProbeGraph())
 
 	rawText := `answer with "quotes" and $signs`
 	askedWording := "how does X work?"
@@ -401,8 +380,8 @@ func TestAnswer_ProbeHappyPath_WithAsked(t *testing.T) {
 
 func TestAnswer_ProbeHappyPath_NoAsked(t *testing.T) {
 	// Answer q2 (no --asked). The event must include asked="" per §10.
-	dir, _ := answerSetupDir(t)
-	file := answerWriteGraph(t, dir, answerAlreadyAnsweredGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerAlreadyAnsweredGraph())
 	// answerAlreadyAnsweredGraph has q1 already answered; q2 is unanswered.
 
 	out, errOut, code := run(t, "answer", "q2", "my plain answer")
@@ -458,8 +437,8 @@ func TestAnswer_ProbeHappyPath_NoAsked(t *testing.T) {
 
 func TestAnswer_TeachHappyPath(t *testing.T) {
 	// teach_3 (q5) is answerable. Answer q5 without --asked.
-	dir, _ := answerSetupDir(t)
-	file := answerWriteGraph(t, dir, answerTeachGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, qTeachAtMaxGraph())
 
 	out, errOut, code := run(t, "answer", "q5", "teach answer text")
 	if code != 0 {
@@ -516,7 +495,7 @@ func TestAnswer_ReplacementBatch_MinExempt(t *testing.T) {
 	// so there is no teaching round and OpenTargets is empty (fail-only).
 	// answer q3 reaches the min-count check, which the replacement batch is
 	// exempt from — no env hacks needed.
-	dir, _ := answerSetupDir(t)
+	dir, _ := qSetupDir(t)
 	t.Setenv("TM_PROBE_MIN", "2")
 	mmd := qFrontmatter + `flowchart TB
     subgraph passed["Concepts User understands"]
@@ -542,7 +521,7 @@ func TestAnswer_ReplacementBatch_MinExempt(t *testing.T) {
     classDef unclear stroke:#d29922
     classDef pass stroke:#3fb950
 `
-	file := answerWriteGraph(t, dir, mmd)
+	file := qWriteGraph(t, dir, mmd)
 
 	// probe_2 has 1 question (below ProbeMin=2) but is a replacement batch → min-exempt.
 	out, errOut, code := run(t, "answer", "q3", "replacement answer")
@@ -562,7 +541,7 @@ func TestAnswer_ReplacementBatch_MinExempt(t *testing.T) {
 // (unclear probes take a replacement, not a teaching round; OpenTargets is
 // fail-only) and not refuse on min (replacement batches are min-exempt).
 func TestAsk_ReplacementBatch_Emitted(t *testing.T) {
-	dir, _ := answerSetupDir(t)
+	dir, _ := qSetupDir(t)
 	t.Setenv("TM_PROBE_MIN", "2")
 	mmd := qFrontmatter + `flowchart TB
     subgraph passed["Concepts User understands"]
@@ -588,7 +567,7 @@ func TestAsk_ReplacementBatch_Emitted(t *testing.T) {
     classDef unclear stroke:#d29922
     classDef pass stroke:#3fb950
 `
-	answerWriteGraph(t, dir, mmd)
+	qWriteGraph(t, dir, mmd)
 
 	out, errOut, code := run(t, "ask", "mycon")
 	if code != 0 {
@@ -608,7 +587,7 @@ func TestAsk_ReplacementBatch_Emitted(t *testing.T) {
 func TestCheck_AskedLine_Present(t *testing.T) {
 	// Build a graph with a pending answer that has an Asked wording.
 	// Use inline graph rather than fixture so we can control Asked.
-	dir, _ := answerSetupDir(t)
+	dir, _ := qSetupDir(t)
 
 	// Write the graph manually with an ASKED: field in a1's label.
 	mmd := qFrontmatter + `flowchart TB
@@ -672,8 +651,8 @@ func TestCheck_AskedLine_Absent_WhenEmpty(t *testing.T) {
 func TestAnswer_EventLogFieldsMatchSpec(t *testing.T) {
 	// Verify the event row has q, raw, asked fields matching §10, with asked=""
 	// always present (even when not supplied), mirroring q event's re:"" convention.
-	dir, _ := answerSetupDir(t)
-	file := answerWriteGraph(t, dir, answerProbeGraph())
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerProbeGraph())
 
 	_, _, code := run(t, "answer", "q1", "my raw answer", "--asked", "the question wording")
 	if code != 0 {
@@ -700,7 +679,7 @@ func TestAnswer_EventLogFieldsMatchSpec(t *testing.T) {
 	}
 
 	// Verify with absent --asked: asked="" is still present in the row.
-	file2 := answerWriteGraph(t, dir, answerProbeGraph())
+	file2 := qWriteGraph(t, dir, answerProbeGraph())
 	t.Setenv("TM_FILE", file2)
 	_, _, code2 := run(t, "answer", "q1", "another answer")
 	if code2 != 0 {

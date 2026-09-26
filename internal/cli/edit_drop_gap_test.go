@@ -32,11 +32,7 @@ func copyFixtureTo(t *testing.T, fixturePath, dir string) {
 // TestEdit_HappyPath verifies that tm edit rewrites a concept's scope,
 // round-trips, lints clean, and logs an "edit" event with before/after scope.
 func TestEdit_HappyPath(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 
@@ -109,11 +105,7 @@ func TestEdit_HappyPath(t *testing.T) {
 
 // TestEdit_SrcFlag verifies that --src updates the citation and lints clean.
 func TestEdit_SrcFlag(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 
@@ -149,11 +141,7 @@ func TestEdit_SrcFlag(t *testing.T) {
 
 // TestEdit_BadSrcParse verifies that a malformed --src citation exits 3.
 func TestEdit_BadSrcParse(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, _, _ = run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope")
@@ -172,11 +160,7 @@ func TestEdit_BadSrcParse(t *testing.T) {
 
 // TestEdit_BadSrcOutOfBounds verifies that an out-of-bounds --src citation exits 3.
 func TestEdit_BadSrcOutOfBounds(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, _, _ = run(t, "add", "mycon", "f5ca3875b379@src.txt:1-5", "scope")
@@ -196,11 +180,7 @@ func TestEdit_BadSrcOutOfBounds(t *testing.T) {
 
 // TestEdit_UnknownID verifies that editing an unknown ID exits 3.
 func TestEdit_UnknownID(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, errOut, code := run(t, "edit", "nonexistent", "new scope")
@@ -235,11 +215,7 @@ func TestEdit_QuestionID(t *testing.T) {
 // TestEdit_PassedConcept verifies that editing a passed concept exits 1 with
 // a reopen fix hint.
 func TestEdit_PassedConcept(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	buildMinimalGraph(t, dir)
 
 	_, errOut, code := run(t, "edit", "passed_c", "new scope")
@@ -281,11 +257,7 @@ func TestEdit_HasQuestions(t *testing.T) {
 // incoming edge, the graph round-trips and lints clean, and logs a "drop" event
 // with the correct node and edges fields.
 func TestDrop_HappyPath(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 
@@ -383,11 +355,7 @@ func TestDrop_HappyPath(t *testing.T) {
 
 // TestDrop_HasChildren verifies that dropping a concept with dependents exits 1.
 func TestDrop_HasChildren(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, _, c1 := run(t, "add", "parent", "f5ca3875b379@src.txt:1-5", "parent concept")
@@ -415,11 +383,7 @@ func TestDrop_HasChildren(t *testing.T) {
 
 // TestDrop_PassedConcept verifies that dropping a passed concept exits 1.
 func TestDrop_PassedConcept(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	buildMinimalGraph(t, dir)
 
 	_, errOut, code := run(t, "drop", "passed_c")
@@ -433,11 +397,7 @@ func TestDrop_PassedConcept(t *testing.T) {
 
 // TestDrop_UnknownID verifies that dropping an unknown ID exits 3.
 func TestDrop_UnknownID(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, errOut, code := run(t, "drop", "nonexistent")
@@ -495,11 +455,7 @@ func TestDrop_HasQuestions(t *testing.T) {
 // the graph round-trips, lints clean, and logs an event with before="" and
 // after=gap.
 func TestGap_SetNew(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 
@@ -568,11 +524,7 @@ func TestGap_SetNew(t *testing.T) {
 // TestGap_ReplaceExisting verifies that gap replaces a previous GAP value,
 // recording the correct before/after in the event log.
 func TestGap_ReplaceExisting(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 
 	file := newGraph(t, dir)
 
@@ -629,11 +581,7 @@ func TestGap_ReplaceExisting(t *testing.T) {
 // TestGap_PassedConcept verifies that gap on a passed concept exits 1 with a
 // reopen fix hint.
 func TestGap_PassedConcept(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	buildMinimalGraph(t, dir)
 
 	_, errOut, code := run(t, "gap", "passed_c", "some gap")
@@ -650,11 +598,7 @@ func TestGap_PassedConcept(t *testing.T) {
 
 // TestGap_UnknownID verifies that gap on an unknown ID exits 3.
 func TestGap_UnknownID(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	tempErrlog(t)
-	t.Setenv("TM_FILE", "")
-	setupSrcFile(t, dir)
+	dir, _ := qSetupDir(t)
 	_ = newGraph(t, dir)
 
 	_, errOut, code := run(t, "gap", "nonexistent", "some gap")
