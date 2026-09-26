@@ -283,6 +283,63 @@ func TestAnswer_OpenBatchAfterFail(t *testing.T) {
 	lintFile(t, file, dir)
 }
 
+func TestAsk_OpenBatchAfterFail(t *testing.T) {
+	// ask must emit q2 from probe_1 when probe_1 is open-and-failed (issue #78).
+	dir, _ := qSetupDir(t)
+	qWriteGraph(t, dir, answerFailMidBatchGraph())
+
+	out, errOut, code := run(t, "ask", "mycon")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("want at least 2 output lines, got %d: %q", len(lines), out)
+	}
+	if lines[0] != "probe_1" {
+		t.Errorf("first line: want 'probe_1', got %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "q2 |") {
+		t.Errorf("second line: want q2, got %q", lines[1])
+	}
+}
+
+func TestAnswer_OpenBatch_FullCycle(t *testing.T) {
+	// Full cycle for the issue-#78 deadlock fix: answer the remaining question
+	// in the open-failed batch, grade it, add a fallback probe batch, then add
+	// a teach question — all should succeed.
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerFailMidBatchGraph())
+
+	// Step 1: answer q2 (the fix lets this through).
+	_, errOut, code := run(t, "answer", "q2", "late answer")
+	if code != 0 {
+		t.Fatalf("answer q2: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+
+	// Step 2: grade q2 pass → probe_1 resolves (q1=fail, q2=pass).
+	_, errOut, code = run(t, "grade", "q2", "pass", "solid answer")
+	if code != 0 {
+		t.Fatalf("grade q2: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+
+	// Step 3: add two probe questions to create the fallback batch (probe_2).
+	for i, scope := range []string{"fallback scope one", "fallback scope two"} {
+		_, errOut, code = run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", scope)
+		if code != 0 {
+			t.Fatalf("add probe %d: want exit 0, got %d; stderr:\n%s", i+1, code, errOut)
+		}
+	}
+
+	// Step 4: add a teach question for q1 (the failed probe target).
+	_, errOut, code = run(t, "q", "mycon", "f5ca3875b379@src.txt:1-5", "teach scope", "--teach", "--re", "q1")
+	if code != 0 {
+		t.Fatalf("tm q --teach --re q1: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+
+	lintFile(t, file, dir)
+}
+
 func TestAnswer_ProbeMinCount_Exit1(t *testing.T) {
 	// probe_1 has only 1 question; default ProbeMin=2 → refuse.
 	dir, errPath := qSetupDir(t)
