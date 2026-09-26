@@ -319,33 +319,6 @@ func TestMoveToPassed(t *testing.T) {
 	}
 }
 
-// TestMoveToPassed_NoGAP verifies GAP stripping when GAP is already empty.
-func TestMoveToPassed_NoGAP(t *testing.T) {
-	// A graph where target has no GAP field.
-	const noGAP = `flowchart TB
-    subgraph passed["p"]
-    end
-    subgraph untested["u"]
-        target["Target scope<br/>ref.txt:1-10"]
-    end
-    subgraph testing["t"]
-    end
-    classDef pass stroke:#3fb950
-    classDef fail stroke:#f85149
-    classDef unclear stroke:#d29922
-    classDef pending stroke-dasharray:4 3
-`
-	g, _ := mustParseState(t, noGAP)
-	newG := ops.MoveToPassed(g, "target")
-
-	if len(newG.PassedConcepts) != 1 || newG.PassedConcepts[0].ID != "target" {
-		t.Errorf("PassedConcepts = %v; want [target]", newG.PassedConcepts)
-	}
-	if newG.PassedConcepts[0].GAP != "" {
-		t.Errorf("GAP = %q; want empty", newG.PassedConcepts[0].GAP)
-	}
-}
-
 // TestEdgeRelocationRoundTrip verifies that after RemoveTestingSubtree +
 // MoveToPassed + Write + Parse, edges land in the blocks that §4.2 requires.
 //

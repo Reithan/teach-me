@@ -16,27 +16,21 @@ func (s *State) ConceptBatches(concept string) []string {
 // DraftProbeBatch returns the highest-N probe batch in BatchDraft state for
 // the given concept. Returns ("", false) when no draft probe batch exists.
 func (s *State) DraftProbeBatch(concept string) (string, bool) {
-	batches := s.conceptBatches[concept]
-	// batches are sorted by N ascending; iterate to find the highest draft probe.
-	class := ""
-	for _, b := range batches {
-		if graph.IsProbeClass(b) && s.BatchStateOf(b) == BatchDraft {
-			class = b // keep updating to return the highest-N one
-		}
-	}
-	if class == "" {
-		return "", false
-	}
-	return class, true
+	return s.draftBatch(concept, graph.IsProbeClass)
 }
 
 // DraftTeachBatch returns the highest-N teach batch in BatchDraft state for
 // the given concept. Returns ("", false) when no draft teach batch exists.
 func (s *State) DraftTeachBatch(concept string) (string, bool) {
-	batches := s.conceptBatches[concept]
+	return s.draftBatch(concept, graph.IsTeachClass)
+}
+
+// draftBatch returns the highest-N batch matching isClass in BatchDraft state.
+// Batches are sorted by N ascending so iterating to the end yields the highest.
+func (s *State) draftBatch(concept string, isClass func(string) bool) (string, bool) {
 	class := ""
-	for _, b := range batches {
-		if graph.IsTeachClass(b) && s.BatchStateOf(b) == BatchDraft {
+	for _, b := range s.conceptBatches[concept] {
+		if isClass(b) && s.BatchStateOf(b) == BatchDraft {
 			class = b
 		}
 	}
