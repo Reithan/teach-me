@@ -43,12 +43,11 @@ func loadRun(ctx *Context) int {
 	// since at load time there is no configured pointer yet to resolve.
 	if n := s.Graph().FormatN(); n != graph.CurrentFormat {
 		base := filepath.Base(file)
-		var errMsg, fixMsg string
+		errMsg := formatMismatchMsg(base, n)
+		var fixMsg string
 		if n < graph.CurrentFormat {
-			errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
 			fixMsg = fmt.Sprintf("tm migrate %s", file)
 		} else {
-			errMsg = fmt.Sprintf("%s is format %d, this is tm format %d", base, n, graph.CurrentFormat)
 			fixMsg = "upgrade tm"
 		}
 		ctx.ErrMsg = errMsg
