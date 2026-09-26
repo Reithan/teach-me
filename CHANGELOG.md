@@ -7,6 +7,10 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-25
+
+Spec v0.30. Skill `tm-version` is `0.5`.
+
 ### Added
 
 - `SECURITY.md` with a private vulnerability-reporting path.
@@ -14,19 +18,16 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ### Fixed
 
+- `tm ask` and the `tm status --concept` chain now emit the locked fallback
+  probe batch once the latest teach batch resolves all pass (or teaching is
+  spent). Before, they printed nothing and exited 0, leaving the concept stuck.
+  (#94)
 - `make conformance` (and so `make check`) skipped the suite because the target was not phony.
 - Conformance dependencies override `lodash-es` to 4.18.1, clearing 5 high-severity audit findings.
 
 ### Security
 
 - CI and cross-platform workflow tokens are limited to `contents: read`.
-
-### Fixed
-
-- `tm ask` and the `tm status --concept` chain now emit the locked fallback
-  probe batch once the latest teach batch resolves all pass (or teaching is
-  spent). Before, they printed nothing and exited 0, leaving the concept stuck.
-  (#94)
 
 ## [0.5.0-beta.1] - 2026-09-25
 
@@ -187,7 +188,8 @@ with content hashes, source resolution and converters, drift and recheck,
 `tm report`), the release pipeline, and the teacher, grader, and planner
 adapters under `skill/teach-me/`. (#1 through #39)
 
-[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.5.0-beta.1...HEAD
+[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/Reithan/teach-me/compare/v0.5.0-beta.1...v0.5.1
 [0.5.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.4.0-beta.1...v0.5.0-beta.1
 [0.4.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.3.0-beta.1...v0.4.0-beta.1
 [0.3.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.2.1-beta.2...v0.3.0-beta.1
