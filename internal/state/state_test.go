@@ -492,10 +492,17 @@ func TestBatchStateOf_GateBase_NoLock(t *testing.T) {
 	}
 }
 
-// TestConceptStatus_LatestTeachNotAllPass_NoTeachBatches verifies that
-// LatestTeachNotAllPass is true when no teach batches exist above base.
-func TestConceptStatus_LatestTeachNotAllPass_NoTeachBatches(t *testing.T) {
-	g := `flowchart TB
+// TestConceptStatus_LatestTeachNotAllPass checks LatestTeachNotAllPass under
+// three graph shapes: no teach batches, latest teach all-pass, latest teach has fail.
+func TestConceptStatus_LatestTeachNotAllPass(t *testing.T) {
+	tests := []struct {
+		name     string
+		graphStr string
+		want     bool
+	}{
+		{
+			name: "no teach batches",
+			graphStr: `flowchart TB
     subgraph passed["Passed"]
     end
     subgraph untested["Untested"]
@@ -506,19 +513,13 @@ func TestConceptStatus_LatestTeachNotAllPass_NoTeachBatches(t *testing.T) {
         foo --> q1
     end
     classDef probe_1 stroke:#4aa3ff
-`
-	s := mustLoad(t, g, defaultCfg())
-	cs := s.ConceptStatus("foo")
-	if !cs.LatestTeachNotAllPass {
-		t.Error("LatestTeachNotAllPass should be true when no teach batches exist above base")
-	}
-}
-
-// TestConceptStatus_LatestTeachNotAllPass_LatestAllPass verifies that
-// LatestTeachNotAllPass is false when the latest teach batch is all-pass.
-func TestConceptStatus_LatestTeachNotAllPass_LatestAllPass(t *testing.T) {
-	// probe_1 (q1 fail), teach_2 (q2 pass) — latest batch is all-pass.
-	g := `flowchart TB
+`,
+			want: true,
+		},
+		{
+			name: "latest teach all-pass",
+			// probe_1 (q1 fail), teach_2 (q2 pass) — latest batch is all-pass.
+			graphStr: `flowchart TB
     subgraph passed["Passed"]
     end
     subgraph untested["Untested"]
@@ -538,19 +539,13 @@ func TestConceptStatus_LatestTeachNotAllPass_LatestAllPass(t *testing.T) {
     classDef teach_2 stroke:#c9a227
     classDef pass stroke:#3fb950
     classDef fail stroke:#f85149
-`
-	s := mustLoad(t, g, defaultCfg())
-	cs := s.ConceptStatus("foo")
-	if cs.LatestTeachNotAllPass {
-		t.Error("LatestTeachNotAllPass should be false when latest teach batch is all-pass")
-	}
-}
-
-// TestConceptStatus_LatestTeachNotAllPass_LatestHasFail verifies that
-// LatestTeachNotAllPass is true when the latest teach batch has a non-pass answer.
-func TestConceptStatus_LatestTeachNotAllPass_LatestHasFail(t *testing.T) {
-	// probe_1 (q1 fail), teach_2 (q2 pass), teach_4 (q4 fail) — latest has fail.
-	g := `flowchart TB
+`,
+			want: false,
+		},
+		{
+			name: "latest teach has fail",
+			// probe_1 (q1 fail), teach_2 (q2 pass), teach_4 (q4 fail).
+			graphStr: `flowchart TB
     subgraph passed["Passed"]
     end
     subgraph untested["Untested"]
@@ -574,11 +569,16 @@ func TestConceptStatus_LatestTeachNotAllPass_LatestHasFail(t *testing.T) {
     classDef teach_2,teach_4 stroke:#c9a227
     classDef pass stroke:#3fb950
     classDef fail stroke:#f85149
-`
-	s := mustLoad(t, g, defaultCfg())
-	cs := s.ConceptStatus("foo")
-	if !cs.LatestTeachNotAllPass {
-		t.Error("LatestTeachNotAllPass should be true when latest teach batch has a fail answer")
+`,
+			want: true,
+		},
+	}
+	for _, tc := range tests {
+		s := mustLoad(t, tc.graphStr, defaultCfg())
+		cs := s.ConceptStatus("foo")
+		if cs.LatestTeachNotAllPass != tc.want {
+			t.Errorf("%s: LatestTeachNotAllPass = %v, want %v", tc.name, cs.LatestTeachNotAllPass, tc.want)
+		}
 	}
 }
 
@@ -812,56 +812,37 @@ func stallGraph(verdicts []string) string {
 	return sb.String()
 }
 
-func TestStallStreak_AllFail(t *testing.T) {
-	// Two teach batches both resolved with fail → stall streak = 2 questions.
-	g := stallGraph([]string{"fail", "fail"})
-	cfg := defaultCfg()
-	s := mustLoad(t, g, cfg)
-	cs := s.ConceptStatus("foo")
-	if cs.StallStreak != 2 {
-		t.Errorf("StallStreak = %d, want 2", cs.StallStreak)
+func TestStallStreak(t *testing.T) {
+	tests := []struct {
+		name        string
+		verdicts    []string
+		maxStall    int // 0 → default (4)
+		wantStreak  int
+		wantStalled bool
+		wantGated   bool
+	}{
+		{"all fail", []string{"fail", "fail"}, 0, 2, false, false},
+		// fail,pass,fail: from highest N teach_5(fail)→+1; teach_4(pass)→stop; streak=1
+		{"reset on pass", []string{"fail", "pass", "fail"}, 0, 1, false, false},
+		{"reset on pass first", []string{"fail", "fail", "pass"}, 0, 0, false, false},
+		{"streak reaches max", []string{"fail", "fail"}, 2, 2, true, true},
 	}
-	if cs.Stalled {
-		t.Error("Stalled should be false (2 < MaxStall=4)")
-	}
-}
-
-func TestStallStreak_ResetOnPass(t *testing.T) {
-	// Three batches: fail, pass, fail.
-	// From highest N: teach_5(fail)→streak+1; teach_4(pass)→STOP.
-	// streak = 1.
-	g := stallGraph([]string{"fail", "pass", "fail"})
-	cfg := defaultCfg()
-	s := mustLoad(t, g, cfg)
-	cs := s.ConceptStatus("foo")
-	if cs.StallStreak != 1 {
-		t.Errorf("StallStreak = %d, want 1 (reset at pass in teach_4)", cs.StallStreak)
-	}
-}
-
-func TestStallStreak_ResetOnPassFirst(t *testing.T) {
-	// Most recent batch has a pass → streak = 0.
-	g := stallGraph([]string{"fail", "fail", "pass"})
-	cfg := defaultCfg()
-	s := mustLoad(t, g, cfg)
-	cs := s.ConceptStatus("foo")
-	if cs.StallStreak != 0 {
-		t.Errorf("StallStreak = %d, want 0 (most recent batch has pass)", cs.StallStreak)
-	}
-}
-
-func TestStalled_StreakReachesMax(t *testing.T) {
-	// MaxStall=2; two fail batches → stalled.
-	g := stallGraph([]string{"fail", "fail"})
-	cfg := defaultCfg()
-	cfg.MaxStall = 2
-	s := mustLoad(t, g, cfg)
-	cs := s.ConceptStatus("foo")
-	if !cs.Stalled {
-		t.Error("should be stalled (streak=2 >= MaxStall=2)")
-	}
-	if !cs.Gated {
-		t.Error("should be gated when stalled")
+	for _, tc := range tests {
+		cfg := defaultCfg()
+		if tc.maxStall != 0 {
+			cfg.MaxStall = tc.maxStall
+		}
+		s := mustLoad(t, stallGraph(tc.verdicts), cfg)
+		cs := s.ConceptStatus("foo")
+		if cs.StallStreak != tc.wantStreak {
+			t.Errorf("%s: StallStreak = %d, want %d", tc.name, cs.StallStreak, tc.wantStreak)
+		}
+		if cs.Stalled != tc.wantStalled {
+			t.Errorf("%s: Stalled = %v, want %v", tc.name, cs.Stalled, tc.wantStalled)
+		}
+		if cs.Gated != tc.wantGated {
+			t.Errorf("%s: Gated = %v, want %v", tc.name, cs.Gated, tc.wantGated)
+		}
 	}
 }
 
