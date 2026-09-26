@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/reithan/teach-me/internal/graph"
-	"github.com/reithan/teach-me/internal/lint"
 )
 
 // makeRaftSrcRoot creates a temp dir with raft.txt (≥300 numbered lines) and
@@ -20,22 +19,6 @@ func makeRaftSrcRoot(t *testing.T) string {
 	}
 	t.Setenv("TM_SRC_ROOT", dir)
 	return dir
-}
-
-// lintFileWithSrcRoot checks that the graph at file passes lint using the
-// given srcRoot.
-func lintFileWithSrcRoot(t *testing.T, file, srcRoot string) {
-	t.Helper()
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("read file for lint: %v", err)
-	}
-	viols := lint.Check(data, lint.Config{
-		SrcRoot: srcRoot, ProbeMin: 2, ProbeMax: 5, TeachMin: 1, TeachMax: 3,
-	})
-	if len(viols) > 0 {
-		t.Errorf("graph fails lint: %v", viols)
-	}
 }
 
 // TestM5Lifecycle drives the full M5 concept-mutation surface in order:
@@ -253,7 +236,7 @@ func TestM5Lifecycle(t *testing.T) {
 	t.Setenv("TM_FILE", g2)
 
 	// Verify raft fixture lints clean before we do anything.
-	lintFileWithSrcRoot(t, g2, raftSrcRoot)
+	lintFile(t, g2, raftSrcRoot)
 
 	// Reopen leader_election (which is in passed).
 	{
@@ -311,7 +294,7 @@ func TestM5Lifecycle(t *testing.T) {
 
 		// Lint-clean (passed descendant replicated_log stays in passed,
 		// untested leader_election → passed replicated_log via the existing edge).
-		lintFileWithSrcRoot(t, g2, raftSrcRoot)
+		lintFile(t, g2, raftSrcRoot)
 	}
 
 	// Verify reopen event in g2's event log.
