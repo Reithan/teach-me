@@ -244,6 +244,45 @@ func TestAnswer_TeachingIncomplete_Exit1(t *testing.T) {
 	}
 }
 
+// answerFailMidBatchGraph: probe_1 is still open; q1 was graded fail and a gap
+// recorded before q2 was answered (issue #78).
+func answerFailMidBatchGraph() string {
+	return qFrontmatter + `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
+        mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["First probe<br/>e266782c2841@src.txt:1-2"]:::probe_1
+        a1["wrong answer"]:::fail
+        q2["Second probe<br/>20f437d6f701@src.txt:3-4"]:::probe_1
+        mycon --> q1
+        q1 --> a1
+        mycon --> q2
+    end
+    classDef probe_1 stroke:#4aa3ff
+    classDef fail stroke:#f85149
+`
+}
+
+func TestAnswer_OpenBatchAfterFail(t *testing.T) {
+	// Refusing q2 here deadlocks the concept: tm q needs probe_1 closed, and
+	// only answering q2 closes it (issue #78).
+	dir, _ := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerFailMidBatchGraph())
+
+	out, errOut, code := run(t, "answer", "q2", "late answer")
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+	if strings.TrimSpace(out) != "ok" {
+		t.Errorf("want 'ok', got %q", out)
+	}
+	lintFile(t, file, dir)
+}
+
 func TestAnswer_ProbeMinCount_Exit1(t *testing.T) {
 	// probe_1 has only 1 question; default ProbeMin=2 → refuse.
 	dir, errPath := qSetupDir(t)
