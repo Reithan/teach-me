@@ -7,7 +7,7 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
-Spec v0.28.
+Spec v0.29.
 
 ### Added
 
@@ -29,6 +29,11 @@ Spec v0.28.
 
 - `tm add` on an ID in reserve refuses with exit 1 and `fix: tm activate <id>`
   instead of failing the post-write lint (duplicate declaration, exit 2).
+- `tm answer` and `tm ask` no longer refuse the remaining questions of an
+  open-and-failed probe batch with "teaching round not complete". Those questions
+  must be answered to close the batch; the teaching-round restriction applies
+  only to later (fallback) probe batches. Fixes a deadlock where neither
+  `tm answer` nor `tm q` could make progress (#78).
 
 ## [0.4.0-beta.1] - 2026-09-25
 
