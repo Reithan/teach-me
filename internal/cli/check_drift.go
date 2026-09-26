@@ -319,41 +319,7 @@ func gradeDriftRun(ctx *Context) int {
 			}
 			newNode.Cites = newCites
 
-			// Build updated graph.
-			ng := *g
-			switch targetNode.Block {
-			case graph.BlockPassed:
-				newPassed := make([]*graph.ConceptNode, len(g.PassedConcepts))
-				copy(newPassed, g.PassedConcepts)
-				for i, c := range newPassed {
-					if c.ID == concept {
-						newPassed[i] = &newNode
-						break
-					}
-				}
-				ng.PassedConcepts = newPassed
-			case graph.BlockReserve:
-				newReserve := make([]*graph.ConceptNode, len(g.ReserveConcepts))
-				copy(newReserve, g.ReserveConcepts)
-				for i, c := range newReserve {
-					if c.ID == concept {
-						newReserve[i] = &newNode
-						break
-					}
-				}
-				ng.ReserveConcepts = newReserve
-			default:
-				newUntested := make([]*graph.ConceptNode, len(g.UntestedConcepts))
-				copy(newUntested, g.UntestedConcepts)
-				for i, c := range newUntested {
-					if c.ID == concept {
-						newUntested[i] = &newNode
-						break
-					}
-				}
-				ng.UntestedConcepts = newUntested
-			}
-			newG = &ng
+			newG = replaceConceptInGraph(g, &newNode)
 
 		} else {
 			// reopen: run the full reopenApply logic (gate clearing, reopen event).
