@@ -48,7 +48,9 @@ it.
 
 ## Activation rules
 
-Activate only from a gate's `fix:` line, or when the learner asks. Expect the
+Activate only from a gate's `fix:` line, when the learner asks, or when the
+pruner parked a probed concept whose teaching round you still mean to finish;
+`tm activate` restores its questions and round state as they were. Expect the
 pruner to park more than you would. That is its job: a parked concept costs
 nothing until a probe fails, and `tm activate` restores it in one command,
 while an unneeded active concept costs the learner a full probe batch.
