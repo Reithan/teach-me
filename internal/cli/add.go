@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -238,27 +237,4 @@ func parseEndpointValue(v string) (endpointPair, string) {
 		return endpointPair{}, fmt.Sprintf("flag value %q must be <id>:<rel>", v)
 	}
 	return endpointPair{endpointID: v[:idx], rel: v[idx+1:]}, ""
-}
-
-// runMutationWithFile is like runMutation but accepts an already-resolved file
-// path, avoiding a second call to state.ResolveFile.
-func runMutationWithFile(ctx *Context, file string, apply ops.Apply) int {
-	stateCfg := state.ConfigFromEnv()
-	lintCfg := buildLintConfig(file)
-
-	_, refusal, engErr := ops.Mutate(file, stateCfg, lintCfg, errlog.RealClock, apply)
-	if engErr != nil {
-		ctx.ErrMsg = fmt.Sprintf("cannot mutate %s: %v", filepath.Base(file), engErr)
-		writeErrFix(ctx.ErrOut, ctx.ErrMsg, "")
-		return 3
-	}
-	if refusal != nil {
-		ctx.ErrMsg = refusal.Err
-		ctx.FixMsg = refusal.Fix
-		writeErrFix(ctx.ErrOut, refusal.Err, refusal.Fix)
-		return refusal.Exit
-	}
-
-	_, _ = fmt.Fprintln(ctx.Out, "ok")
-	return 0
 }
