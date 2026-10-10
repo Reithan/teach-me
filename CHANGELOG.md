@@ -23,6 +23,13 @@ in beta. Each release names the `docs/spec.md` revision it implements.
   fallback batches; `tm activate` restores the round as it was. Spec v0.32,
   decision 80. (#110)
 
+### Security
+
+- Conformance dependencies override `katex` to 0.19.0 (GHSA-238p-pmpm-9mq7,
+  prototype pollution, pulled in by mermaid) and update `source-map-js` to 1.2.2
+  (GHSA-68fv-2mgg-jv7q, event-loop denial of service, pulled in by jsdom).
+  `npm audit` reports no findings; the suite passes on both Mermaid versions.
+
 ## [0.5.2] - 2026-10-09
 
 Spec v0.31. Skill `tm-version` is `0.5`.
