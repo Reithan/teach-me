@@ -7,6 +7,10 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-10
+
+Spec v0.32. Skill `tm-version` is `0.5`.
+
 ### Added
 
 - `FuzzSession` in `internal/cli` plays random learner sessions (ask, q, answer,
@@ -246,7 +250,8 @@ with content hashes, source resolution and converters, drift and recheck,
 `tm report`), the release pipeline, and the teacher, grader, and planner
 adapters under `skill/teach-me/`. (#1 through #39)
 
-[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/Reithan/teach-me/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/Reithan/teach-me/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/Reithan/teach-me/compare/v0.5.0-beta.1...v0.5.1
 [0.5.0-beta.1]: https://github.com/Reithan/teach-me/compare/v0.4.0-beta.1...v0.5.0-beta.1
