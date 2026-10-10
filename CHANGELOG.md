@@ -7,6 +7,14 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Fixed
+
+- `tm reserve` exited 2 (post-write lint) on a concept with a gate line, so a
+  concept whose gate had been cleared by `--override` or an upstream action could
+  never be parked. Reserve concepts now keep their gate line, as they keep locked
+  fallback batches; `tm activate` restores the round as it was. Spec v0.32,
+  decision 80. (#110)
+
 ## [0.5.2] - 2026-10-09
 
 Spec v0.31. Skill `tm-version` is `0.5`.
