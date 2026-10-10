@@ -14,6 +14,9 @@ in beta. Each release names the `docs/spec.md` revision it implements.
   frontier concept has no command that can advance it, or when `ask`/`status`
   go silent while questions remain; seeds replay #78, #94, #103, and #110,
   which it found on its first CI run.
+- Weekly scheduled `govulncheck` run on `main` (`.github/workflows/vuln-weekly.yml`),
+  so a new Go advisory is reported on its own instead of as a failing check on
+  an unrelated pull request. One Linux job; the per-PR scan is unchanged.
 
 ### Fixed
 
