@@ -68,10 +68,11 @@ active, counting the goal. At the limit, reserve the weakest defence first.
 foundation is the planner's to add; name it in your completion paragraph.
 
 **Leave concepts with open batches in place.** `tm reserve` refuses a concept
-when any of its batches is unresolved (unanswered or ungraded questions). A
-concept whose batches are all resolved can be parked with
-`tm reserve <concept> --reason "<why>"`. Name any concept with an open batch
-that falls outside what the goal needs in the completion paragraph.
+when any of its batches is draft or open (unanswered or ungraded questions). A
+concept whose batches are all resolved, or locked fallback probes with no
+answers, can be parked with `tm reserve <concept> --reason "<why>"`. Name any
+concept with an open batch that falls outside what the goal needs in the
+completion paragraph.
 
 ## Workflow
 

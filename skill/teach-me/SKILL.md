@@ -168,8 +168,9 @@ move. The phases:
      the bias grader isolation exists to block.
    - learner asks to skip a concept → `tm reserve <concept>` if it has no
      questions, or `tm reserve <concept> --reason "<why>"` if it has been
-     probed and all its batches are resolved. It stops blocking its children
-     and can be activated later.
+     probed and every batch is resolved or a locked fallback probe batch
+     with no answers (an open or draft batch must finish first). It stops
+     blocking its children and can be activated later with its round intact.
 
 9. Repeat from step 4 until `tm status` shows the goal concept passed.
 

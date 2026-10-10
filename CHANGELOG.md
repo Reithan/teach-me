@@ -24,6 +24,11 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ### Fixed
 
+- `tm reserve --reason` refused a concept whose only unresolved batch was a
+  locked fallback probe batch, and its `fix:` line pointed at `tm answer`,
+  which refuses locked probes. A locked batch has no answers and cannot be
+  asked or graded, so reserve now accepts it; `tm activate` restores the
+  round as it was. Spec v0.31, decision 79. (#103)
 - On Windows, parallel mutating commands (for example, concurrent graders)
   could fail with `graph is locked` for 45 s. A holder could not delete the
   lock file while a waiter had it open, so the lock stayed behind. Release now
