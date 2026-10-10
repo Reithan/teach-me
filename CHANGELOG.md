@@ -7,6 +7,21 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Security
+
+- Build with Go 1.27.2. `govulncheck` reported eight standard library
+  advisories in Go 1.27.1 (`net/http` and its HTTP/2 client, for example
+  GO-2026-6603) reachable from URL source fetches; all are fixed in 1.27.2.
+
+### Changed
+
+- `make tools` and the CI Lint job install golangci-lint v2.14.0 (from
+  v2.13.2) and build it from source with the `go.mod` toolchain instead of
+  downloading the prebuilt binary. v2.13.2 bundles `x/tools` v0.49.0, which
+  reads export data up to version 4; Go 1.27.2 writes version 5, so every
+  package failed to typecheck with `could not load export data`. v2.14.0
+  bundles `x/tools` v0.50.0, which reads version 5.
+
 ### Fixed
 
 - On Windows, parallel mutating commands (for example, concurrent graders)

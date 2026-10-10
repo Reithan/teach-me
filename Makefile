@@ -2,16 +2,18 @@ SHELL := /bin/sh
 
 TOOLS_BIN    := .tools/bin
 GOLANGCI     := $(TOOLS_BIN)/golangci-lint
-GOLANGCI_VER := v2.13.2
+GOLANGCI_VER := v2.14.0
 DIFFCOVER_VER := 10.5.1
 
 .PHONY: tools hooks precommit check lint test coverage diff-coverage fuzz conformance vuln version-sync
 
 ## tools: install golangci-lint, diff-cover, and (if present) conformance deps.
+## golangci-lint is built from source so its go/types matches the go.mod
+## toolchain. v2.14.0 is the first release whose x/tools (v0.50.0) reads the
+## export data format Go 1.27.2 writes (pkgbits version 5).
 tools:
 	mkdir -p $(TOOLS_BIN)
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-		| sh -s -- -b $(TOOLS_BIN) $(GOLANGCI_VER)
+	GOBIN=$(CURDIR)/$(TOOLS_BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VER)
 	@command -v pipx >/dev/null 2>&1 || { \
 		printf 'err: pipx not found\nfix: install pipx then re-run make tools\n' >&2; exit 1; }
 	pipx install "diff-cover==$(DIFFCOVER_VER)" || pipx upgrade "diff-cover"

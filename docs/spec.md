@@ -891,7 +891,7 @@ Versions are the latest releases as of 2026-09-17. Pin exactly; Dependabot propo
 | Tool | Version | Use |
 |---|---|---|
 | Go | 1.27; `toolchain` line pinned to the newest 1.27.x patch at repository creation | build, test, fuzz, coverage |
-| golangci-lint | v2.13.2 | lint and formatting (`gofumpt`, `goimports`) |
+| golangci-lint | v2.14.0 | lint and formatting (`gofumpt`, `goimports`) |
 | govulncheck | newest at creation, pinned as a `tool` directive in `go.mod` | vulnerability scan |
 | gocover-cobertura | v1.5.0, pinned as a `tool` directive in `go.mod` | coverage profile to Cobertura XML |
 | diff-cover | 10.5.1, installed with `pipx` | statement coverage of lines changed on the branch |
@@ -986,7 +986,7 @@ Runs on every pull request and on pushes to `main`. `actions/checkout` uses `fet
 
 | Job | Runs | Fails when |
 |---|---|---|
-| `lint` | golangci-lint v2.13.2 | any finding |
+| `lint` | golangci-lint v2.14.0 | any finding |
 | `test` | `go test -race ./...` on `ubuntu-latest`, `macos-latest`, `windows-latest` | any failure |
 | `fuzz` | both fuzz targets, 30 s each, Linux | any crasher |
 | `diff-coverage` | pull requests only, Linux: `go test -race -covermode=atomic -coverprofile=coverage.out ./...`, excluding `cmd/tm` and `internal/tools`; convert with `go tool gocover-cobertura`; rewrite filenames from module path to repository-relative; then `diff-cover coverage.xml --compare-branch=origin/main --fail-under=85` | statement coverage of lines added or changed on the branch, relative to `main`, below 85% |
@@ -1001,7 +1001,7 @@ All jobs are required checks on `main`. `main` is protected: pull requests only,
 
 ### 16.8 Local hooks
 
-Hooks live in `.githooks/` as POSIX `sh` scripts with the executable bit set, and use no hook framework. `make hooks` runs `git config core.hooksPath .githooks`. `make tools` installs what the hooks need into `.tools/bin` (gitignored): golangci-lint v2.13.2 from its official install script, `diff-cover` 10.5.1 through `pipx`, and `npm ci` in `conformance/`. Prerequisites on the machine are Go 1.27, Node 24, and `pipx`. A missing tool fails the hook with `fix: make tools`. `AGENTS.md` lists `make tools hooks` as the first step in a fresh clone.
+Hooks live in `.githooks/` as POSIX `sh` scripts with the executable bit set, and use no hook framework. `make hooks` runs `git config core.hooksPath .githooks`. `make tools` installs what the hooks need into `.tools/bin` (gitignored): golangci-lint v2.14.0 built from source with `go install` under the `go.mod` toolchain (v2.14.0 is the first release whose x/tools reads the export data format Go 1.27.2 writes; building from source keeps its `go/types` in step with the toolchain), `diff-cover` 10.5.1 through `pipx`, and `npm ci` in `conformance/`. Prerequisites on the machine are Go 1.27, Node 24, and `pipx`. A missing tool fails the hook with `fix: make tools`. `AGENTS.md` lists `make tools hooks` as the first step in a fresh clone.
 
 | Hook | Refuses when | Then runs |
 |---|---|---|
