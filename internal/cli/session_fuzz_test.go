@@ -41,6 +41,7 @@ var (
 	sessionConcepts = [...]string{"root", "goal"}
 	sessionCites    = [...]string{"src.txt:1-2", "src.txt:3-4", "src.txt:5-6", "src.txt:7-8"}
 	sessionQID      = regexp.MustCompile(`^q[0-9]+$`)
+	askLines        = regexp.MustCompile(`(?m)^q[0-9]+ \|`)
 )
 
 // move is one decoded learner action. concept indexes sessionConcepts, cite
@@ -165,7 +166,6 @@ type session struct {
 	t    *testing.T
 	dir  string
 	file string
-	qids []string
 	log  []string
 }
 
@@ -238,18 +238,26 @@ func (s *session) apply(op int, operand byte) {
 	c := sessionConcepts[operand&1]
 	cite := sessionCites[(operand>>1)&3]
 	qid := ""
-	if n := len(s.qids); n > 0 {
-		qid = s.qids[int(operand>>3)%n]
+	if op == opTeach || (op >= opAnswer && op <= opUnclear) {
+		qid = s.pickQ(operand)
+	}
+	switch op {
+	case opAsk, opProbe, opTeach, opGap, opAskOverride:
+		// ask, q and gap answer a reserved concept with exit 3 "unknown
+		// concept" by design, so those moves are skipped until it is activated.
+		if s.reserved(c) {
+			return
+		}
 	}
 	switch op {
 	case opAsk:
 		out, code := s.do("ask", c)
 		s.checkAskSilence(c, out, code)
 	case opProbe:
-		s.recordQ(s.do("q", c, cite, "probe"))
+		s.checkQOutput(s.do("q", c, cite, "probe"))
 	case opTeach:
 		if qid != "" {
-			s.recordQ(s.do("q", c, cite, "teach", "--teach", "--re", qid))
+			s.checkQOutput(s.do("q", c, cite, "teach", "--teach", "--re", qid))
 		}
 	case opGap:
 		s.do("gap", c, "g")
@@ -282,16 +290,22 @@ func (s *session) apply(op int, operand byte) {
 		s.checkAskSilence(c, out, code)
 	case opStatus:
 		status, _ := s.do("status", "--concept", c)
+		if s.reserved(c) {
+			return
+		}
 		out, code := s.do("ask", c)
 		s.checkAskSilence(c, out, code)
-		if code == 0 && strings.TrimSpace(out) != "" && !strings.Contains(status, "> tm ask "+c+"\n") {
+		// Only question lines count as ask emitting: with every question of an
+		// open batch answered and awaiting a grade, ask prints the batch class
+		// alone while status chains nothing.
+		if code == 0 && askLines.MatchString(out) && !strings.Contains(status, "> tm ask "+c+"\n") {
 			s.fatalf("ask %s emits a batch but status --concept %s has no chain line:\n%s", c, c, status)
 		}
 	}
 }
 
-// recordQ remembers the id printed by a successful q.
-func (s *session) recordQ(stdout string, code int) {
+// checkQOutput verifies that a successful q printed a question id.
+func (s *session) checkQOutput(stdout string, code int) {
 	s.t.Helper()
 	if code != 0 {
 		return
@@ -300,7 +314,6 @@ func (s *session) recordQ(stdout string, code int) {
 	if !sessionQID.MatchString(id) {
 		s.fatalf("q exited 0 but printed %q instead of a question id", stdout)
 	}
-	s.qids = append(s.qids, id)
 }
 
 // load reads the session graph and derived state with the current TM_* knobs.
@@ -496,4 +509,32 @@ func (s *session) checkLiveness() {
 			s.fatalf("reserved concept %s cannot be activated: %s", c, why)
 		}
 	}
+}
+
+// reserved reports whether concept c is currently in the reserve block.
+func (s *session) reserved(c string) bool {
+	s.t.Helper()
+	for _, r := range s.load().Reserve() {
+		if r == c {
+			return true
+		}
+	}
+	return false
+}
+
+// pickQ selects a question that is still in the graph, using the operand's
+// question bits, or "" when none is. Questions of a passed concept leave the
+// graph, so ids seen earlier may no longer exist.
+func (s *session) pickQ(operand byte) string {
+	s.t.Helper()
+	var ids []string
+	for _, item := range s.load().Graph().TestingItems {
+		if item.Q != nil {
+			ids = append(ids, item.Q.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return ""
+	}
+	return ids[int(operand>>3)%len(ids)]
 }
