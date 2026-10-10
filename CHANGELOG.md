@@ -7,6 +7,12 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Added
+
+- Weekly scheduled `govulncheck` run on `main` (`.github/workflows/vuln-weekly.yml`),
+  so a new Go advisory is reported on its own instead of as a failing check on
+  an unrelated pull request. One Linux job; the per-PR scan is unchanged.
+
 ## [0.5.2] - 2026-10-09
 
 Spec v0.31. Skill `tm-version` is `0.5`.

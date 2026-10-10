@@ -1,0 +1,26 @@
+name: Weekly Vulnerability Scan
+
+permissions:
+  contents: read
+
+# Dependabot bumps modules but not the `toolchain` line in go.mod, and new Go
+# advisories land without any commit here. This single Linux job runs
+# govulncheck against main every week so a reachable advisory is reported on
+# its own schedule instead of as a red check on an unrelated PR. The per-PR
+# scan stays in ci.yml.
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+  workflow_dispatch:
+
+jobs:
+  vuln:
+    name: Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Run govulncheck
+        run: go tool govulncheck ./...
