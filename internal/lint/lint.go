@@ -870,7 +870,7 @@ func check15(g *graph.Graph) []Violation {
 
 // check12 verifies that every passed concept has no GAP, no gate meta line
 // targeting it, and no questions that resolve to it.
-// Also verifies that every reserve concept has no questions and no gate line.
+// Reserve concepts may keep questions, GAP, and a gate line (spec decision 80).
 func check12(
 	g *graph.Graph,
 	concepts map[string]bool,
@@ -910,12 +910,6 @@ func check12(
 		}
 		if conceptHasQ[c.ID] {
 			viols = append(viols, Violation{Msg: fmt.Sprintf("passed concept %q has open questions", c.ID)})
-		}
-	}
-	// Reserve concepts must have no gate line. GAP and questions are allowed.
-	for _, c := range g.ReserveConcepts {
-		if gateMetas[c.ID] {
-			viols = append(viols, Violation{Msg: fmt.Sprintf("reserve concept %q has a gate line", c.ID)})
 		}
 	}
 	return viols

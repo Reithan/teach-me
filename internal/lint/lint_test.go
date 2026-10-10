@@ -936,11 +936,12 @@ const reserveConceptWithGateLineGraph = `flowchart TB
     classDef pending stroke-dasharray:4 3
 `
 
-func TestCheck12_ReserveConceptHasGateLine(t *testing.T) {
+// A reserve concept keeps its gate line so tm activate restores the round
+// as it was (spec decision 80, #110).
+func TestCheck12_ReserveConceptMayKeepGateLine(t *testing.T) {
 	viols := lint.Check([]byte(reserveConceptWithGateLineGraph), defaultCfg())
-	want := `reserve concept "c1" has a gate line`
-	if !hasMsg(viols, want) {
-		t.Errorf("expected %q; got %v", want, viols)
+	if hasMsgContaining(viols, "gate line") {
+		t.Errorf("reserve concept with a gate line must lint clean; got %v", viols)
 	}
 }
 
