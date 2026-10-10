@@ -125,6 +125,7 @@ func sessionSeeds() map[string][]byte {
 //   - no command exits 2 (post-write lint failure) or 3 (the harness only uses
 //     known ids and valid syntax), and every nonzero exit writes to stderr;
 //   - a successful q prints a question id;
+//   - reserve succeeds on an untested concept whose batches are all resolved or locked;
 //   - ask exiting 0 with no output never happens for an active frontier
 //     concept that still has an unanswered question;
 //   - status --concept chains "> tm ask" whenever ask would emit;
@@ -282,7 +283,10 @@ func (s *session) apply(op int, operand byte) {
 			s.do("grade", qid, "unclear", "?")
 		}
 	case opReserve:
-		s.do("reserve", c, "--reason", "r")
+		want := s.reservable(c)
+		if _, code := s.do("reserve", c, "--reason", "r"); want && code != 0 {
+			s.fatalf("reserve %s refused although every batch is resolved or locked\n%s", c, s.describe(s.load(), c))
+		}
 	case opActivate:
 		s.do("activate", c)
 	case opAskOverride:
@@ -537,4 +541,24 @@ func (s *session) pickQ(operand byte) string {
 		return ""
 	}
 	return ids[int(operand>>3)%len(ids)]
+}
+
+// reservable reports whether reserve --reason must succeed for c: it is an
+// untested concept whose every batch is resolved or locked.
+func (s *session) reservable(c string) bool {
+	s.t.Helper()
+	st := s.load()
+	untested := false
+	for _, u := range st.Graph().UntestedConcepts {
+		untested = untested || u.ID == c
+	}
+	if !untested {
+		return false
+	}
+	for _, class := range st.ConceptBatches(c) {
+		if b := st.BatchStateOf(class); b != state.BatchResolved && b != state.BatchLocked {
+			return false
+		}
+	}
+	return true
 }

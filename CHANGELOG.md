@@ -7,6 +7,13 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Added
+
+- `FuzzSession` in `internal/cli` plays random learner sessions (ask, q, answer,
+  grade, reserve, activate) against a two-concept graph and fails when a
+  frontier concept has no command that can advance it, or when `ask`/`status`
+  go silent while questions remain; seeds replay #78, #94, and #103.
+
 ## [0.5.2] - 2026-10-09
 
 Spec v0.31. Skill `tm-version` is `0.5`.
