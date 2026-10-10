@@ -1001,7 +1001,7 @@ All jobs are required checks on `main`. `main` is protected: pull requests only,
 
 ### 16.8 Local hooks
 
-Hooks live in `.githooks/` as POSIX `sh` scripts with the executable bit set, and use no hook framework. `make hooks` runs `git config core.hooksPath .githooks`. `make tools` installs what the hooks need into `.tools/bin` (gitignored): golangci-lint v2.13.2 from its official install script, `diff-cover` 10.5.1 through `pipx`, and `npm ci` in `conformance/`. Prerequisites on the machine are Go 1.27, Node 24, and `pipx`. A missing tool fails the hook with `fix: make tools`. `AGENTS.md` lists `make tools hooks` as the first step in a fresh clone.
+Hooks live in `.githooks/` as POSIX `sh` scripts with the executable bit set, and use no hook framework. `make hooks` runs `git config core.hooksPath .githooks`. `make tools` installs what the hooks need into `.tools/bin` (gitignored): golangci-lint v2.13.2 built from source with `go install` under the `go.mod` toolchain (a prebuilt binary built with an older Go cannot read a newer toolchain's export data), `diff-cover` 10.5.1 through `pipx`, and `npm ci` in `conformance/`. Prerequisites on the machine are Go 1.27, Node 24, and `pipx`. A missing tool fails the hook with `fix: make tools`. `AGENTS.md` lists `make tools hooks` as the first step in a fresh clone.
 
 | Hook | Refuses when | Then runs |
 |---|---|---|

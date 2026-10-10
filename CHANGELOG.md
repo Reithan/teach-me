@@ -13,6 +13,13 @@ in beta. Each release names the `docs/spec.md` revision it implements.
   advisories in Go 1.27.1 (`net/http` and its HTTP/2 client, for example
   GO-2026-6603) reachable from URL source fetches; all are fixed in 1.27.2.
 
+### Changed
+
+- `make tools` and the CI Lint job build golangci-lint v2.13.2 from source
+  with the `go.mod` toolchain instead of downloading the prebuilt binary. The
+  binary was built with Go 1.27.0 and fails on Go 1.27.2 export data with
+  `could not load export data`.
+
 ### Fixed
 
 - On Windows, parallel mutating commands (for example, concurrent graders)
