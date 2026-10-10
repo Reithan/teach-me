@@ -7,6 +7,12 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Security
+
+- Build with Go 1.27.2. `govulncheck` reported eight standard library
+  advisories in Go 1.27.1 (`net/http` and its HTTP/2 client, for example
+  GO-2026-6603) reachable from URL source fetches; all are fixed in 1.27.2.
+
 ### Fixed
 
 - On Windows, parallel mutating commands (for example, concurrent graders)
