@@ -1106,3 +1106,70 @@ func TestGrade_ReserveConceptGuard(t *testing.T) {
 		t.Errorf("want reserve guard err; got:\n%s", errOut)
 	}
 }
+
+// TestReserve_KeepsGateLine_110: a concept gated by --override carries a
+// %% tm:gate line. tm reserve leaves it in place (it used to exit 2 on the
+// post-write lint), and tm activate restores the gated round unchanged (#110).
+func TestReserve_KeepsGateLine_110(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	setupSrcFile(t, dir)
+	path := newGraph(t, dir)
+	for k, v := range map[string]string{
+		"TM_PROBE_MIN": "1", "TM_PROBE_MAX": "2",
+		"TM_TEACH_MIN": "1", "TM_TEACH_MAX": "1",
+		"TM_MAX_FAILS": "2", "TM_MAX_TEACH": "2", "TM_MAX_STALL": "2",
+	} {
+		t.Setenv(k, v)
+	}
+
+	// Drive root into a gated state, then clear the gate with --override.
+	steps := [][]string{
+		{"add", "root", "src.txt:1-5", "scope"},
+		{"q", "root", "src.txt:1-2", "probe"},
+		{"answer", "q1", "a", "--concede"},
+		{"q", "root", "src.txt:1-2", "probe"},
+		{"gap", "root", "g"},
+		{"q", "root", "src.txt:1-2", "teach", "--teach", "--re", "q1"},
+		{"answer", "q3", "a"},
+		{"grade", "q3", "pass", "ok"},
+		{"answer", "q2", "a", "--concede"},
+		{"ask", "root", "--override", "o"},
+	}
+	for _, args := range steps {
+		if _, errOut, code := run(t, args...); code != 0 {
+			t.Fatalf("%v: want exit 0, got %d; stderr=%q", args, code, errOut)
+		}
+	}
+	before, errOut, code := run(t, "status", "--concept", "root")
+	if code != 0 {
+		t.Fatalf("status before reserve: exit %d; stderr=%q", code, errOut)
+	}
+	if data, _ := os.ReadFile(path); !strings.Contains(string(data), "%% tm:gate root base=") {
+		t.Fatalf("precondition: want a gate line for root; graph:\n%s", data)
+	}
+
+	out, errOut, code := run(t, "reserve", "root", "--reason", "r")
+	if code != 0 {
+		t.Fatalf("reserve: want exit 0, got %d; stderr=%q", code, errOut)
+	}
+	if strings.TrimSpace(out) != "ok" {
+		t.Errorf("reserve stdout: want %q got %q", "ok", strings.TrimSpace(out))
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), "%% tm:gate root base=") {
+		t.Errorf("reserve dropped the gate line; graph:\n%s", data)
+	}
+
+	if _, errOut, code = run(t, "activate", "root"); code != 0 {
+		t.Fatalf("activate: want exit 0, got %d; stderr=%q", code, errOut)
+	}
+	after, errOut, code := run(t, "status", "--concept", "root")
+	if code != 0 {
+		t.Fatalf("status after activate: exit %d; stderr=%q", code, errOut)
+	}
+	if after != before {
+		t.Errorf("status changed across reserve and activate\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}

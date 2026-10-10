@@ -9,9 +9,29 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ### Added
 
+- `FuzzSession` in `internal/cli` plays random learner sessions (ask, q, answer,
+  grade, reserve, activate) against a two-concept graph and fails when a
+  frontier concept has no command that can advance it, or when `ask`/`status`
+  go silent while questions remain; seeds replay #78, #94, #103, and #110,
+  which it found on its first CI run.
 - Weekly scheduled `govulncheck` run on `main` (`.github/workflows/vuln-weekly.yml`),
   so a new Go advisory is reported on its own instead of as a failing check on
   an unrelated pull request. One Linux job; the per-PR scan is unchanged.
+
+### Fixed
+
+- `tm reserve` exited 2 (post-write lint) on a concept with a gate line, so a
+  concept whose gate had been cleared by `--override` or an upstream action could
+  never be parked. Reserve concepts now keep their gate line, as they keep locked
+  fallback batches; `tm activate` restores the round as it was. Spec v0.32,
+  decision 80. (#110)
+
+### Security
+
+- Conformance dependencies override `katex` to 0.19.0 (GHSA-238p-pmpm-9mq7,
+  prototype pollution, pulled in by mermaid) and update `source-map-js` to 1.2.2
+  (GHSA-68fv-2mgg-jv7q, event-loop denial of service, pulled in by jsdom).
+  `npm audit` reports no findings; the suite passes on both Mermaid versions.
 
 ## [0.5.2] - 2026-10-09
 
