@@ -12,7 +12,7 @@ make tools hooks
 
 | Target | Description |
 |---|---|
-| `make tools` | Install golangci-lint v2.13.2 into `.tools/bin`, diff-cover 10.5.1 via pipx, and `npm ci` in `conformance/` |
+| `make tools` | Install golangci-lint v2.14.0 into `.tools/bin`, diff-cover 10.5.1 via pipx, and `npm ci` in `conformance/` |
 | `make hooks` | Configure git to use `.githooks/` (`git config core.hooksPath .githooks`) |
 | `make precommit` | Lint, build, `go mod tidy -diff`, and version-sync check |
 | `make check` | Full local CI: lint, test, diff-coverage, fuzz, conformance, vuln, and version-sync |

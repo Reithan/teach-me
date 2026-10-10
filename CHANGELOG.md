@@ -15,10 +15,12 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ### Changed
 
-- `make tools` and the CI Lint job build golangci-lint v2.13.2 from source
-  with the `go.mod` toolchain instead of downloading the prebuilt binary. The
-  binary was built with Go 1.27.0 and fails on Go 1.27.2 export data with
-  `could not load export data`.
+- `make tools` and the CI Lint job install golangci-lint v2.14.0 (from
+  v2.13.2) and build it from source with the `go.mod` toolchain instead of
+  downloading the prebuilt binary. v2.13.2 bundles `x/tools` v0.49.0, which
+  reads export data up to version 4; Go 1.27.2 writes version 5, so every
+  package failed to typecheck with `could not load export data`. v2.14.0
+  bundles `x/tools` v0.50.0, which reads version 5.
 
 ### Fixed
 
