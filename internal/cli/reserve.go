@@ -74,10 +74,13 @@ func reserveRun(ctx *Context) int {
 				}
 			}
 
-			// All batches must be resolved (no unanswered or ungraded questions).
+			// Every batch must be resolved (no unanswered or ungraded questions)
+			// or locked (a fallback probe batch with no answers, held behind a
+			// teach batch). A locked batch cannot be asked, answered, or graded,
+			// so parking it is safe; draft and open batches still refuse (#103).
 			for _, batchClass := range s.ConceptBatches(concept) {
 				bs := s.BatchStateOf(batchClass)
-				if bs != state.BatchResolved {
+				if bs != state.BatchResolved && bs != state.BatchLocked {
 					return nil, nil, &ops.Refusal{
 						Err:  fmt.Sprintf("%s has an unresolved batch (%s)", concept, batchClass),
 						Fix:  fmt.Sprintf("answer and grade every question in %s, then reserve %s", batchClass, concept),

@@ -38,6 +38,39 @@ const reserveTestGraph = `flowchart TB
     classDef pending stroke-dasharray:4 3
 `
 
+// lockedFallbackReserveGraph has one untested concept "cl" mid-teaching-round:
+//   - probe_1 (q1) resolved with a fail
+//   - probe_2 (q2) the fallback probe batch: no answers, locked by teach_3
+//   - teach_3 (q3) resolved with a fail
+const lockedFallbackReserveGraph = `flowchart TB
+    subgraph passed["Concepts User understands"]
+    end
+    subgraph untested["Concepts User has not been tested on"]
+        %% tm:format 2
+        cl["Concept L<br/>f5ca3875b379@src.txt:1-5"]
+    end
+    subgraph reserve["Concepts held in reserve"]
+    end
+    subgraph testing["Open tests validating and teaching User understanding"]
+        q1["Probe one<br/>f5ca3875b379@src.txt:1-5"]:::probe_1
+        a1["wrong answer"]:::fail
+        q2["Fallback probe<br/>f5ca3875b379@src.txt:1-5"]:::probe_2
+        q3["Teach question<br/>f5ca3875b379@src.txt:1-5"]:::teach_3
+        a3["still wrong"]:::fail
+        cl --> q1
+        q1 --> a1
+        cl --> q2
+        a1 --> q3
+        q3 --> a3
+    end
+    classDef probe_1,probe_2 stroke:#4aa3ff
+    classDef teach_3 stroke:#c9a227
+    classDef pass stroke:#3fb950
+    classDef fail stroke:#f85149
+    classDef unclear stroke:#d29922
+    classDef pending stroke-dasharray:4 3
+`
+
 // activateTestGraph is a four-block graph with "rr" in reserve (parent of "ca").
 const activateTestGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
@@ -203,6 +236,48 @@ func TestReserve(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestReserve_LockedFallbackBatch: a concept whose only unresolved batch is a
+// locked fallback probe batch can be parked with --reason, and tm activate
+// brings it back with the batch still locked (#103).
+func TestReserve_LockedFallbackBatch(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tempErrlog(t)
+	setupSrcFile(t, dir)
+	path := writeGraph(t, dir, lockedFallbackReserveGraph)
+	t.Setenv("TM_FILE", path)
+	t.Setenv("TM_PROBE_MIN", "1") // one-question batches pass the post-write lint
+
+	// Precondition: probe_2 is locked, so it can never be answered.
+	out, errOut, code := run(t, "status", "--concept", "cl")
+	if code != 0 || !strings.Contains(out, "probe_2 locked") {
+		t.Fatalf("precondition: want probe_2 locked; code=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+
+	out, errOut, code = run(t, "reserve", "cl", "--reason", "out of scope for the goal")
+	if code != 0 {
+		t.Fatalf("reserve: want exit 0, got %d; stderr=%q", code, errOut)
+	}
+	if strings.TrimSpace(out) != "ok" {
+		t.Errorf("reserve stdout: want %q got %q", "ok", strings.TrimSpace(out))
+	}
+	rows := readEventLog(t, path)
+	last := rows[len(rows)-1]
+	if last["ev"] != "reserve" || last["concept"] != "cl" {
+		t.Errorf("event: want reserve{cl}, got %v", last)
+	}
+
+	// activate restores the concept with its round intact.
+	_, errOut, code = run(t, "activate", "cl")
+	if code != 0 {
+		t.Fatalf("activate: want exit 0, got %d; stderr=%q", code, errOut)
+	}
+	out, errOut, code = run(t, "status", "--concept", "cl")
+	if code != 0 || !strings.Contains(out, "probe_2 locked") {
+		t.Errorf("after activate: want probe_2 locked; code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
 }
 
