@@ -96,6 +96,9 @@ func sessionSeeds() map[string][]byte {
 	// (q4) aimed at the failed probe q1. Once q4 passes, q3 is askable again.
 	locked := join(failedBatch, []move{mProbe(root, 2), mGap(root), mTeach(root, 3, 0)})
 	taught := join(locked, []move{mAnswer(3), mPass(3)})
+	// Fail the first probe batch, then the fallback batch once teaching
+	// unlocks it: two failed probe batches gate the concept.
+	gated := []move{mProbe(root, 0), mConcede(0), mProbe(root, 1), mGap(root), mTeach(root, 2, 0), mAnswer(2), mPass(2), mConcede(1)}
 	return map[string][]byte{
 		"78-answer-rest-of-failed-batch": moves(join(failedBatch, []move{mAsk(root), mStatus(root)})...),
 		"94-ask-after-teach-pass":        moves(join(taught, []move{mAsk(root), mStatus(root)})...),
@@ -103,9 +106,12 @@ func sessionSeeds() map[string][]byte {
 		"103-reserve-during-teach":       moves(join(locked, []move{mReserve(root), mActivate(root)})...),
 		// Fail the first probe batch, then the fallback batch once teaching
 		// unlocks it: two failed probe batches gate the concept.
-		"gated-after-two-failed-probe-batches": moves(join(
-			[]move{mProbe(root, 0), mConcede(0), mProbe(root, 1), mGap(root), mTeach(root, 2, 0), mAnswer(2), mPass(2), mConcede(1)},
+		"gated-after-two-failed-probe-batches": moves(join(gated,
 			[]move{mAsk(root), mStatus(root), mOverride(root), mAsk(root)})...),
+		// #110: an override writes a gate line; reserve must then still park the
+		// concept and activate must restore it gated as before.
+		"110-reserve-after-override": moves(join(gated,
+			[]move{mOverride(root), mReserve(root), mActivate(root), mStatus(root)})...),
 		"goal-while-root-untested": moves(
 			mProbe(goal, 0), mAsk(goal), mStatus(goal),
 			mAnswer(0), mPass(0), mReserve(goal), mActivate(goal),
