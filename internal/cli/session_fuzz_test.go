@@ -41,7 +41,6 @@ var (
 	sessionConcepts = [...]string{"root", "goal"}
 	sessionCites    = [...]string{"src.txt:1-2", "src.txt:3-4", "src.txt:5-6", "src.txt:7-8"}
 	sessionQID      = regexp.MustCompile(`^q[0-9]+$`)
-	askLines        = regexp.MustCompile(`(?m)^q[0-9]+ \|`)
 )
 
 // move is one decoded learner action. concept indexes sessionConcepts, cite
@@ -104,6 +103,11 @@ func sessionSeeds() map[string][]byte {
 		"94-ask-after-teach-pass":        moves(join(taught, []move{mAsk(root), mStatus(root)})...),
 		"103-reserve-locked-fallback":    moves(join(taught, []move{mReserve(root), mActivate(root), mAsk(root)})...),
 		"103-reserve-during-teach":       moves(join(locked, []move{mReserve(root), mActivate(root)})...),
+		// The teach answer q4 awaits a grade while the fallback probe q3 stays
+		// locked: ask and the status chain print nothing until q4 is graded.
+		"ask-silent-while-teach-awaits-grade": moves(join(locked, []move{mAnswer(3), mOverride(root), mStatus(root)})...),
+		// ask, q and gap on a reserved concept refuse with an activate fix.
+		"reserve-refuses-ask-q-gap": moves(mReserve(root), mAsk(root), mProbe(root, 0), mGap(root), mOverride(root), mActivate(root), mAsk(root)),
 		// Fail the first probe batch, then the fallback batch once teaching
 		// unlocks it: two failed probe batches gate the concept.
 		"gated-after-two-failed-probe-batches": moves(join(gated,
@@ -132,9 +136,13 @@ func sessionSeeds() map[string][]byte {
 //     known ids and valid syntax), and every nonzero exit writes to stderr;
 //   - a successful q prints a question id;
 //   - reserve succeeds on an untested concept whose batches are all resolved or locked;
+//   - ask, q and gap on a reserved concept refuse with exit 1 and a
+//     "tm activate" fix;
 //   - ask exiting 0 with no output never happens for an active frontier
-//     concept that still has an unanswered question;
-//   - status --concept chains "> tm ask" whenever ask would emit;
+//     concept with an unanswered question, unless every such question is in
+//     a locked batch and an answer awaits a grade;
+//   - status --concept chains "> tm ask" followed by exactly what ask prints
+//     when ask prints anything, and chains nothing otherwise;
 //   - after the last move, every untested frontier concept has at least one
 //     command that succeeds, and every reserved concept can be activated.
 func FuzzSession(f *testing.F) {
@@ -174,6 +182,8 @@ type session struct {
 	dir  string
 	file string
 	log  []string
+	// stderr is the standard error of the last command run through do.
+	stderr string
 }
 
 // playSession builds a fresh graph, plays data against it, then checks
@@ -223,6 +233,7 @@ func (s *session) fatalf(format string, args ...any) {
 func (s *session) do(args ...string) (stdout string, code int) {
 	s.t.Helper()
 	stdout, stderr, code := run(s.t, args...)
+	s.stderr = stderr
 	quoted := make([]string, len(args))
 	for i, a := range args {
 		quoted[i] = fmt.Sprintf("%q", a)
@@ -250,9 +261,9 @@ func (s *session) apply(op int, operand byte) {
 	}
 	switch op {
 	case opAsk, opProbe, opTeach, opGap, opAskOverride:
-		// ask, q and gap answer a reserved concept with exit 3 "unknown
-		// concept" by design, so those moves are skipped until it is activated.
+		// ask, q and gap refuse a reserved concept with an activate fix (§7).
 		if s.reserved(c) {
+			s.checkReserveRefusal(c, op, cite)
 			return
 		}
 	}
@@ -305,11 +316,14 @@ func (s *session) apply(op int, operand byte) {
 		}
 		out, code := s.do("ask", c)
 		s.checkAskSilence(c, out, code)
-		// Only question lines count as ask emitting: with every question of an
-		// open batch answered and awaiting a grade, ask prints the batch class
-		// alone while status chains nothing.
-		if code == 0 && askLines.MatchString(out) && !strings.Contains(status, "> tm ask "+c+"\n") {
-			s.fatalf("ask %s emits a batch but status --concept %s has no chain line:\n%s", c, c, status)
+		// status --concept chains "> tm ask <c>" and then exactly what ask
+		// prints, and chains nothing when ask prints nothing or refuses.
+		chain := "> tm ask " + c + "\n"
+		switch emits := code == 0 && out != ""; {
+		case emits && !strings.HasSuffix(status, chain+out):
+			s.fatalf("status --concept %s does not end with the ask chain:\n%s\nask %s:\n%s", c, status, c, out)
+		case !emits && strings.Contains(status, chain):
+			s.fatalf("status --concept %s chains ask, but ask exits %d with output %q:\n%s", c, code, out, status)
 		}
 	}
 }
@@ -323,6 +337,27 @@ func (s *session) checkQOutput(stdout string, code int) {
 	id := strings.TrimSpace(stdout)
 	if !sessionQID.MatchString(id) {
 		s.fatalf("q exited 0 but printed %q instead of a question id", stdout)
+	}
+}
+
+// checkReserveRefusal runs the ask, q or gap move op on reserved concept c and
+// fails unless it refuses with exit 1 and a "tm activate" fix (§7).
+func (s *session) checkReserveRefusal(c string, op int, cite string) {
+	s.t.Helper()
+	var args []string
+	switch op {
+	case opAsk:
+		args = []string{"ask", c}
+	case opAskOverride:
+		args = []string{"ask", c, "--override", "o"}
+	case opProbe, opTeach:
+		args = []string{"q", c, cite, "probe"}
+	case opGap:
+		args = []string{"gap", c, "g"}
+	}
+	_, code := s.do(args...)
+	if want := "err: " + c + " is in reserve\nfix: tm activate " + c + "\n"; code != 1 || s.stderr != want {
+		s.fatalf("tm %v on reserved %s: want exit 1 and %q, got exit %d %q", args, c, want, code, s.stderr)
 	}
 }
 
@@ -372,7 +407,9 @@ func onFrontier(st *state.State, id string) bool {
 }
 
 // checkAskSilence fails when ask exited 0 with no output although the concept
-// is active, on the frontier, and still has an unanswered question.
+// is active, on the frontier, and has a question ask should emit. Silence is
+// right only while every unanswered question sits in a locked batch and some
+// answer awaits a grade: the locked fallback probes wait on that grade (§8).
 func (s *session) checkAskSilence(c, stdout string, code int) {
 	s.t.Helper()
 	if code != 0 || strings.TrimSpace(stdout) != "" {
@@ -383,11 +420,24 @@ func (s *session) checkAskSilence(c, stdout string, code int) {
 		return
 	}
 	answers := answerClasses(st)
+	pending := false
+	lockedUnanswered := ""
 	for _, q := range conceptQuestions(st, c) {
-		if _, ok := answers[q.ID]; !ok {
+		class, answered := answers[q.ID]
+		switch {
+		case answered && class == "pending":
+			pending = true
+		case answered:
+		case st.BatchStateOf(q.Class) != state.BatchLocked:
 			s.fatalf("ask %s exited 0 with no output but %s is unanswered\n%s", c, q.ID, s.describe(st, c))
 			return
+		case lockedUnanswered == "":
+			lockedUnanswered = q.ID
 		}
+	}
+	if lockedUnanswered != "" && !pending {
+		s.fatalf("ask %s exited 0 with no output but %s is unanswered and no answer awaits a grade\n%s",
+			c, lockedUnanswered, s.describe(st, c))
 	}
 }
 
