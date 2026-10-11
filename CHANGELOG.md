@@ -7,6 +7,14 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Fixed
+- `tm ask`, `tm q`, and `tm gap` on a reserve concept exited 3 with "unknown
+  concept"; they now exit 1 with `fix: tm activate <concept>`, as `tm add` does
+  (spec v0.33, decision 81).
+- `tm ask` printed a bare batch line when every question in its batch had an
+  answer awaiting a grade; it now prints nothing, and `--format json` gives the
+  empty batch, matching `tm status --concept`, which chains no `tm ask` then.
+
 ## [0.5.3] - 2026-10-10
 
 Spec v0.32. Skill `tm-version` is `0.5`.

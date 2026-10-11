@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.32
+# tm: teaching-map CLI, draft spec v0.33
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.31: reserve concepts keep a gate line, so `tm reserve` no longer exits 2 on a gated concept and `tm activate` restores the round as it was; §4, §6, §11, §14 updated.
+Changes from v0.32: `ask`, `q`, and `gap` refuse a reserve concept with exit 1 and `fix: tm activate <concept>`, as `add` does, instead of exit 3 for an unknown ID; `ask` prints nothing when every question in its batch has an answer awaiting a grade; §6, §7, §8, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -291,7 +291,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm prune <goal> [--keep N]` | park every untested concept with no questions that is outside the goal's ancestor closure; with `--keep N`, also park closure members beyond the N nearest untested concepts by hop distance, the goal counted first and ties broken by ID. Concepts with questions are never moved. Logged with the moved IDs | `reserved <n>` |
 | `tm q <concept> <cite> "<narrow scope>" [--re <qid>]` | add a probe to the concept's draft probe batch, opening one if none is draft. `--re` marks a replacement for an unclear probe. Refuses when the cited text exceeds 120 lines or 6,000 characters (§7) | `qN` |
 | `tm q <concept> <cite> "<narrow scope>" --teach --re <qid>` | add a teach question hung off that question's answer. `--re` is required: it names the failed answer being taught, directly or through an earlier teach question | `qN` |
-| `tm ask <concept> [--format lines\|json] [--src-text]` | read-only: emit the batch to ask next (section 8) | batch ID, then one line per unanswered question |
+| `tm ask <concept> [--format lines\|json] [--src-text]` | read-only: emit the batch to ask next (section 8) | batch ID, then one line per unanswered question; nothing when the batch has none |
 | `tm answer <qid> "<raw>" [--asked "<wording>"] [--concede]` | record the human's answer as `pending`; with `--concede`, also writes a `fail` verdict with summary `conceded` and runs the section 8 transitions; no grader is involved | `ok` |
 | `tm check <qid>` | grader: emit the grading payload (section 9) | the payload |
 | `tm grade <qid> pass\|fail\|unclear "<summary>" [--guided] [--oos]` | grader: write the verdict, run the transitions in section 8 | `ok` |
@@ -383,6 +383,7 @@ The `reserve` count is printed only when it is nonzero.
 | `grade --errata` | the verdict is not `keep` or `reopen` |
 | `answer`, `check` | the question's citation has drifted (`fix: tm drop <qid>, then tm q --re <qid> <cite>`) |
 | `q` | the concept is passed or gated; the draft batch is at max; a probe question while a probe batch under the concept is locked or open; a teach question while a teach batch under the concept is open; `--teach` without `--re`; `--teach` once teaching is spent; `--teach` while the concept has no GAP; `--teach` with no failed probe batch above `base`; `--teach` without a fallback probe batch at min size that has no answers yet; `--re` on a probe whose target is not an `unclear` probe; `--re` on a teach question whose target is not a `fail` or `unclear` answer, or is flagged `OOS` |
+| `ask`, `q`, `gap` | the concept is in `reserve` (`err: <concept> is in reserve`; `fix: tm activate <concept>`) |
 | `ask`, `answer` | the batch is under min; any parent of the concept is in `untested`; the concept is gated; the batch is the fallback probes and any teach batch under the concept is unresolved; or the latest one is not all `pass` and teaching is not spent |
 | `answer` | the question already has an answer |
 | `check`, `grade` | the question has no `pending` answer |
@@ -405,7 +406,7 @@ The frontier rule has no bypass flag. Goal-first diagnosis comes from `reserve` 
 
 ## 8. Transitions
 
-`tm ask <concept>` changes nothing. It emits the concept's unresolved teach batch if one exists, otherwise its unanswered probe batch.
+`tm ask <concept>` changes nothing. It emits the concept's unresolved teach batch if one exists, otherwise its unanswered probe batch. When every question in that batch has an answer awaiting a grade, it prints nothing, as when there is nothing to ask, and `status --concept` chains no `tm ask`.
 
 The teacher leaves a teaching round by getting the latest teach batch to resolve all `pass`. It may add another teach batch before the first fallback probe is answered, and then that batch must resolve too.
 
@@ -857,6 +858,7 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 78 | `tm unlink <from> <to>` removes a prerequisite edge; reserve endpoints accepted; no cycle check (removal cannot introduce a cycle) | adding edges is already symmetrically commanded; the teacher occasionally discovers that a dependency is wrong and needs a clean path to remove it; reserve consistency matches `tm link` (75) | hand-editing the graph; a `tm drop --edge` variant; refusing reserve endpoints on unlink | agreed, 2026-09-25 |
 | 79 | `tm reserve` also accepts a concept whose unresolved batches are all locked fallback probe batches; draft and open batches still refuse | a locked batch has no answers and cannot be asked, answered, or graded, so parking it adds nothing the open-batch guard (77) protects against; without this a learner who finds a concept out of scope mid-teaching-round has no exit but finishing the round, because `tm answer` refuses locked probes and `tm drop` takes only drifted questions (#103); `tm activate` restores the round as it was | a command to withdraw unasked locked probes; `tm unlink` from the goal as the documented path (leaves the concept open) | agreed, 2026-10-09 |
 | 80 | Reserve concepts keep their gate line: lint check 12 no longer flags one, and `tm reserve` leaves it in place | `--override` and upstream actions (`activate` on a parent, `add --child`, `reopen`) write `%% tm:gate <concept> base=<N>`, and the gate base is part of the round state; `tm reserve` never looked at gate lines, so the post-write lint exited 2 and a gated concept could never be parked (#110); the line stays for the same reason locked fallback batches stay (79): `tm activate` restores the round as it was, and dropping the base would re-gate the concept the moment it is activated | `tm reserve` deleting the gate line (re-gates on activate); refusing reserve while a gate line exists (the learner has no exit); a separate un-gate command | agreed, 2026-10-09 |
+| 81 | `ask`, `q`, and `gap` refuse a reserve concept with exit 1 and `fix: tm activate <concept>`; `ask` prints nothing when its batch has no unanswered question | exit 3 "unknown concept" sent the teacher looking for a typo when the concept exists and one command brings it back, and `add` already refused a reserve ID this way; a batch line with no questions under it looked like something to ask while every answer waited on the grader, and `status --concept` already chained nothing in that state | keep exit 3 for reserve IDs; print the batch line with a `pending` marker | agreed, v0.33 |
 
 ## 15. Deferred
 
