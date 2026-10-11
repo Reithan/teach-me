@@ -107,7 +107,7 @@ func sessionSeeds() map[string][]byte {
 		// locked: ask and the status chain print nothing until q4 is graded.
 		"ask-silent-while-teach-awaits-grade": moves(join(locked, []move{mAnswer(3), mOverride(root), mStatus(root)})...),
 		// ask, q and gap on a reserved concept refuse with an activate fix.
-		"reserve-refuses-ask-q-gap": moves(mReserve(root), mAsk(root), mProbe(root, 0), mGap(root), mOverride(root), mActivate(root), mAsk(root)),
+		"reserve-refuses-ask-q-gap": moves(mReserve(goal), mAsk(goal), mProbe(goal, 0), mGap(goal), mOverride(goal), mActivate(goal), mAsk(goal)),
 		// Fail the first probe batch, then the fallback batch once teaching
 		// unlocks it: two failed probe batches gate the concept.
 		"gated-after-two-failed-probe-batches": moves(join(gated,
