@@ -2,7 +2,7 @@
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.32: `ask`, `q`, and `gap` refuse a reserve concept with exit 1 and `fix: tm activate <concept>`, as `add` does, instead of exit 3 for an unknown ID; `ask` prints nothing when every question in its batch has an answer awaiting a grade; §6, §7, §8, §14 updated.
+Changes from v0.32: `ask`, `q`, and `gap` refuse a reserve concept with exit 1 and `fix: tm activate <concept>`, as `add` does, instead of exit 3 for an unknown ID; `ask` prints nothing when every question in its batch is answered and at least one answer awaits a grade; §6, §7, §8, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -406,7 +406,7 @@ The frontier rule has no bypass flag. Goal-first diagnosis comes from `reserve` 
 
 ## 8. Transitions
 
-`tm ask <concept>` changes nothing. It emits the concept's unresolved teach batch if one exists, otherwise its unanswered probe batch. When every question in that batch has an answer awaiting a grade, it prints nothing, as when there is nothing to ask, and `status --concept` chains no `tm ask`.
+`tm ask <concept>` changes nothing. It emits the concept's unresolved teach batch if one exists, otherwise its unanswered probe batch. When every question in that batch is answered and at least one answer awaits a grade, it prints nothing, as when there is nothing to ask, and `status --concept` chains no `tm ask`.
 
 The teacher leaves a teaching round by getting the latest teach batch to resolve all `pass`. It may add another teach batch before the first fallback probe is answered, and then that batch must resolve too.
 
