@@ -304,7 +304,6 @@ func TestAsk_OpenBatchAfterFail(t *testing.T) {
 	}
 }
 
-
 func TestAsk_AllAnsweredAwaitingGrade_Silent(t *testing.T) {
 	// Once q2 is answered, every question in probe_1 has an answer and q2 waits
 	// for a grade: ask prints nothing (no bare batch line), JSON is the empty
@@ -328,6 +327,7 @@ func TestAsk_AllAnsweredAwaitingGrade_Silent(t *testing.T) {
 		t.Errorf("status --concept: want exit 0 and no ask chain, got %d:\n%s%s", code, out, errOut)
 	}
 }
+
 func TestAnswer_OpenBatch_FullCycle(t *testing.T) {
 	// Full cycle for the issue-#78 deadlock fix: answer the remaining question
 	// in the open-failed batch, grade it, add a fallback probe batch, then add

@@ -839,7 +839,6 @@ func TestReserveIDTreatedAsUnknown(t *testing.T) {
 	}
 }
 
-
 // TestReserveIDRefusedWithActivate pins that ask, q, and gap refuse a reserve
 // concept with exit 1 and an activate fix, as add does, rather than calling the
 // ID unknown (exit 3) (§7).
@@ -879,6 +878,7 @@ func TestReserveIDRefusedWithActivate(t *testing.T) {
 		})
 	}
 }
+
 // TestReserveEndpoints pins that add and link attach edges to reserve concepts
 // without blocking active work, and that the cycle check spans reserve. The
 // fixture already has rr --> ca.
