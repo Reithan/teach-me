@@ -21,8 +21,9 @@ type nodeSets struct {
 
 // graphNodeSets builds every nodeSets field from g. Activate, prune, and
 // reserve operate on reserve concepts, and add and link may attach edges to
-// them; every other command must treat a reserve ID as unknown, so they pass
-// withReserve=false.
+// them; every other command passes withReserve=false, so a reserve ID looks
+// unknown to it. Ask, q, and gap check ReserveSet first and refuse a reserve
+// ID with reserveRefusal instead.
 func graphNodeSets(g *graph.Graph, withReserve bool) nodeSets {
 	nc := len(g.PassedConcepts) + len(g.UntestedConcepts) + len(g.ReserveConcepts)
 	allConcepts := make(map[string]bool, nc)
@@ -126,4 +127,15 @@ func runMutationWithFile(ctx *Context, file string, apply ops.Apply) int {
 
 	_, _ = fmt.Fprintln(ctx.Out, "ok")
 	return 0
+}
+
+// reserveRefusal is the §7 refusal for a command that works only on an active
+// concept but was given a reserve one. The ID exists, so it is exit 1 with an
+// activate fix rather than exit 3 for an unknown ID.
+func reserveRefusal(id string) *ops.Refusal {
+	return &ops.Refusal{
+		Err:  id + " is in reserve",
+		Fix:  "tm activate " + id,
+		Exit: 1,
+	}
 }

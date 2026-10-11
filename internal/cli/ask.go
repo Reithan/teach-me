@@ -63,6 +63,14 @@ func askRun(ctx *Context) int {
 
 	ns := graphNodeSets(g, false)
 
+	// §7: a reserve concept exists but is parked; refuse with an activate fix.
+	if ns.ReserveSet[conceptID] {
+		r := reserveRefusal(conceptID)
+		ctx.ErrMsg, ctx.FixMsg = r.Err, r.Fix
+		writeErrFix(ctx.ErrOut, r.Err, r.Fix)
+		return r.Exit
+	}
+
 	// Unknown concept → exit 3.
 	if !ns.AllConcepts[conceptID] {
 		ctx.ErrMsg = fmt.Sprintf("unknown concept %q", conceptID)
@@ -347,6 +355,10 @@ func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code in
 
 	ns := graphNodeSets(g, false)
 
+	if ns.ReserveSet[conceptID] {
+		r := reserveRefusal(conceptID)
+		return r.Exit, r.Err, r.Fix
+	}
 	if !ns.AllConcepts[conceptID] {
 		return 3, fmt.Sprintf("unknown concept %q", conceptID), ""
 	}
