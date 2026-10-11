@@ -111,6 +111,11 @@ func qRun(ctx *Context) int {
 
 		ns := graphNodeSets(g, false)
 
+		// Exit 1: the concept is in reserve (§7).
+		if ns.ReserveSet[conceptID] {
+			return nil, nil, reserveRefusal(conceptID)
+		}
+
 		// Exit 3: unknown concept.
 		if !ns.AllConcepts[conceptID] {
 			return nil, nil, &ops.Refusal{

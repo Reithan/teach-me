@@ -803,16 +803,15 @@ func TestUpgradeThreeBlockOnMutation(t *testing.T) {
 	lintFile(t, path, dir)
 }
 
-// TestReserveIDTreatedAsUnknown pins that commands other than activate,
-// prune, reserve, add, and link do not see reserve concepts: they refuse the ID instead
-// of acting on it (edit and gap only search untested when rewriting a node).
+// TestReserveIDTreatedAsUnknown pins that commands other than activate, prune,
+// reserve, add, link, ask, q, and gap do not see reserve concepts: they refuse
+// the ID instead of acting on it (edit only searches untested when rewriting a
+// node).
 func TestReserveIDTreatedAsUnknown(t *testing.T) {
 	for _, args := range [][]string{
 		{"edit", "rr", "new scope"},
-		{"gap", "rr", "a gap"},
 		{"drop", "rr"},
 		{"reopen", "rr", "a gap"},
-		{"ask", "rr"},
 	} {
 		t.Run(args[0], func(t *testing.T) {
 			dir := t.TempDir()
@@ -828,6 +827,46 @@ func TestReserveIDTreatedAsUnknown(t *testing.T) {
 			}
 			if !strings.Contains(errOut, `"rr"`) && !strings.Contains(errOut, "rr is not") {
 				t.Errorf("stderr should name rr; got %q", errOut)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != activateTestGraph {
+				t.Errorf("graph changed on refusal")
+			}
+		})
+	}
+}
+
+// TestReserveIDRefusedWithActivate pins that ask, q, and gap refuse a reserve
+// concept with exit 1 and an activate fix, as add does, rather than calling the
+// ID unknown (exit 3) (§7).
+func TestReserveIDRefusedWithActivate(t *testing.T) {
+	for _, args := range [][]string{
+		{"ask", "rr"},
+		{"ask", "rr", "--format", "json"},
+		{"ask", "rr", "--override", "reason"},
+		{"q", "rr", "src.txt:1-2", "a probe"},
+		{"gap", "rr", "a gap"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			tempErrlog(t)
+			setupSrcFile(t, dir)
+			path := writeGraph(t, dir, activateTestGraph)
+			t.Setenv("TM_FILE", path)
+
+			out, errOut, code := run(t, args...)
+			if code != 1 {
+				t.Fatalf("want exit 1, got %d; stderr: %q", code, errOut)
+			}
+			if want := "err: rr is in reserve\nfix: tm activate rr\n"; errOut != want {
+				t.Errorf("stderr = %q, want %q", errOut, want)
+			}
+			if out != "" {
+				t.Errorf("stdout = %q, want empty", out)
 			}
 			got, err := os.ReadFile(path)
 			if err != nil {

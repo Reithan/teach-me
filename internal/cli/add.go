@@ -86,11 +86,7 @@ func addRun(ctx *Context) int {
 			}
 		}
 		if ns.ReserveSet[id] {
-			return nil, nil, &ops.Refusal{
-				Err:  id + " is in reserve",
-				Fix:  "tm activate " + id,
-				Exit: 1,
-			}
+			return nil, nil, reserveRefusal(id)
 		}
 		if ns.UntestedSet[id] {
 			return nil, nil, &ops.Refusal{

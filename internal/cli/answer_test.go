@@ -304,6 +304,30 @@ func TestAsk_OpenBatchAfterFail(t *testing.T) {
 	}
 }
 
+func TestAsk_AllAnsweredAwaitingGrade_Silent(t *testing.T) {
+	// Once q2 is answered, every question in probe_1 has an answer and q2 waits
+	// for a grade: ask prints nothing (no bare batch line), JSON is the empty
+	// batch, and status --concept chains no tm ask, as with nothing to ask.
+	dir, _ := qSetupDir(t)
+	qWriteGraph(t, dir, answerFailMidBatchGraph())
+	if _, errOut, code := run(t, "answer", "q2", "late answer"); code != 0 {
+		t.Fatalf("answer q2: want exit 0, got %d; stderr:\n%s", code, errOut)
+	}
+
+	out, errOut, code := run(t, "ask", "mycon")
+	if code != 0 || out != "" {
+		t.Errorf("ask: want exit 0 and no output, got %d %q; stderr:\n%s", code, out, errOut)
+	}
+	out, errOut, code = run(t, "ask", "mycon", "--format", "json")
+	if want := `{"batch":"","questions":[]}` + "\n"; code != 0 || out != want {
+		t.Errorf("ask --format json: want exit 0 and %q, got %d %q; stderr:\n%s", want, code, out, errOut)
+	}
+	out, errOut, code = run(t, "status", "--concept", "mycon")
+	if code != 0 || strings.Contains(out, "> tm ask") {
+		t.Errorf("status --concept: want exit 0 and no ask chain, got %d:\n%s%s", code, out, errOut)
+	}
+}
+
 func TestAnswer_OpenBatch_FullCycle(t *testing.T) {
 	// Full cycle for the issue-#78 deadlock fix: answer the remaining question
 	// in the open-failed batch, grade it, add a fallback probe batch, then add

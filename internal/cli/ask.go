@@ -63,6 +63,14 @@ func askRun(ctx *Context) int {
 
 	ns := graphNodeSets(g, false)
 
+	// §7: a reserve concept exists but is parked; refuse with an activate fix.
+	if ns.ReserveSet[conceptID] {
+		r := reserveRefusal(conceptID)
+		ctx.ErrMsg, ctx.FixMsg = r.Err, r.Fix
+		writeErrFix(ctx.ErrOut, r.Err, r.Fix)
+		return r.Exit
+	}
+
 	// Unknown concept → exit 3.
 	if !ns.AllConcepts[conceptID] {
 		ctx.ErrMsg = fmt.Sprintf("unknown concept %q", conceptID)
@@ -144,11 +152,7 @@ func askRun(ctx *Context) int {
 
 	// Nothing to ask — no suitable batch found; exit 0 with no output.
 	if selectedBatch == "" {
-		if format == "json" {
-			out, _ := json.Marshal(askJSONResponse{Batch: "", Questions: []askJSONQuestion{}})
-			_, _ = fmt.Fprintf(ctx.Out, "%s\n", out)
-		}
-		return 0
+		return askEmitNothing(ctx, format)
 	}
 
 	// §7: refuse when the selected batch is under its minimum.
@@ -193,12 +197,28 @@ func askRun(ctx *Context) int {
 		}
 	}
 
+	// Every question in the batch is answered and awaiting a grade (§8): there
+	// is nothing to ask, and status --concept chains nothing either.
+	if len(unanswered) == 0 {
+		return askEmitNothing(ctx, format)
+	}
+
 	srcRoot := s.Cfg().SrcRoot
 
 	if format == "json" {
 		return askEmitJSON(ctx, selectedBatch, unanswered, s, srcRoot, wantSrcText)
 	}
 	return askEmitLines(ctx, selectedBatch, unanswered, s, srcRoot, wantSrcText)
+}
+
+// askEmitNothing emits the nothing-to-ask output: no lines, or an empty batch
+// in JSON.
+func askEmitNothing(ctx *Context, format string) int {
+	if format == "json" {
+		out, _ := json.Marshal(askJSONResponse{Batch: "", Questions: []askJSONQuestion{}})
+		_, _ = fmt.Fprintf(ctx.Out, "%s\n", out)
+	}
+	return 0
 }
 
 // askEmitLines emits the lines-format output for tm ask.
@@ -347,6 +367,10 @@ func emitAskForConcept(out io.Writer, s *state.State, conceptID string) (code in
 
 	ns := graphNodeSets(g, false)
 
+	if ns.ReserveSet[conceptID] {
+		r := reserveRefusal(conceptID)
+		return r.Exit, r.Err, r.Fix
+	}
 	if !ns.AllConcepts[conceptID] {
 		return 3, fmt.Sprintf("unknown concept %q", conceptID), ""
 	}

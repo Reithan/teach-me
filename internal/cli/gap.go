@@ -28,6 +28,11 @@ func gapRun(ctx *Context) int {
 	apply := func(g *graph.Graph, _ *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		ns := graphNodeSets(g, false)
 
+		// Reserve concept → exit 1 (§7).
+		if ns.ReserveSet[concept] {
+			return nil, nil, reserveRefusal(concept)
+		}
+
 		// Unknown ID → exit 3.
 		if !ns.AllNodes[concept] {
 			return nil, nil, &ops.Refusal{
