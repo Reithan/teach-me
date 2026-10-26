@@ -7,6 +7,10 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-10-26
+
+Spec v0.34. Skill `tm-version` is `0.5`.
+
 ### Changed
 - Graphs are named `<name>.tm.mmd` by convention, and the recommended deny
   rules in `README.md` and `skill/teach-me/reference/setup.md` target
@@ -277,7 +281,8 @@ with content hashes, source resolution and converters, drift and recheck,
 `tm report`), the release pipeline, and the teacher, grader, and planner
 adapters under `skill/teach-me/`. (#1 through #39)
 
-[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/Reithan/teach-me/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/Reithan/teach-me/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/Reithan/teach-me/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/Reithan/teach-me/compare/v0.5.1...v0.5.2
