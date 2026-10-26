@@ -23,8 +23,8 @@ learner. The session is done when `tm status` shows the goal concept passed.
 
 Read the graph through `tm status`, `tm show`, `tm find`, `tm report`, and
 `tm show --history`; write it through a `tm` command. Never read or write
-`<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` by any tool, including
-shell reads.
+the graph file (`<name>.tm.mmd`, or `<name>.mmd` in older lessons), its
+`.jsonl` log, or its `.lock` file by any tool, including shell reads.
 
 On every `tm new`, before the first `tm add`, tell the user to configure harness
 deny rules for those three files and for writes under src-root, and point at

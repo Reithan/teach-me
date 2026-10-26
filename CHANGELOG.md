@@ -7,6 +7,14 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Changed
+- Graphs are named `<name>.tm.mmd` by convention, and the recommended deny
+  rules in `README.md` and `skill/teach-me/reference/setup.md` target
+  `**/*.tm.mmd` instead of `**/*.mmd`, which blocked every Mermaid diagram in
+  every project (#117; spec v0.34, decision 82). The CLI accepts any graph
+  path, so existing `<name>.mmd` lessons keep working; `setup.md` explains how
+  to rename one so the new rule covers it.
+
 ### Security
 
 - Build with Go 1.27.3. `govulncheck` reported GO-2026-6809 (`crypto/x509`

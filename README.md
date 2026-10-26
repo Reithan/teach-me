@@ -171,7 +171,7 @@ Keep the agent out of the lesson files so every change goes through `tm`. Add to
 {
   "permissions": {
     "deny": [
-      "Read(**/*.mmd)", "Edit(**/*.mmd)",
+      "Read(**/*.tm.mmd)", "Edit(**/*.tm.mmd)",
       "Read(**/*.mmd.jsonl)", "Edit(**/*.mmd.jsonl)",
       "Read(**/*.mmd.lock)", "Edit(**/*.mmd.lock)"
     ]

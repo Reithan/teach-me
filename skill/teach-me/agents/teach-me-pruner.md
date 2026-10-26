@@ -26,8 +26,9 @@ undo (`tm activate`); sitting through an unneeded concept is not.
 ## File-access rule
 
 Read the graph through `tm status`, `tm show`, `tm find`, and `tm report`;
-write it through a `tm` command. Never read or write `<name>.mmd`,
-`<name>.mmd.jsonl`, or `<name>.mmd.lock` by any tool, including shell reads. If
+write it through a `tm` command. Never read or write the graph file
+(`<name>.tm.mmd`, or `<name>.mmd` in older lessons), its `.jsonl` log, or its
+`.lock` file by any tool, including shell reads. If
 you find you have touched one of those files, report it at once as a
 misconfiguration and point at `skill/teach-me/reference/setup.md`.
 
