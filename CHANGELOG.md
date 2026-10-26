@@ -7,6 +7,12 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Security
+
+- Build with Go 1.27.3. `govulncheck` reported GO-2026-6809 (`crypto/x509`
+  trusted compromised intermediate certificates) in Go 1.27.2, reachable from
+  URL source fetches; it is fixed in 1.27.3.
+
 ## [0.5.4] - 2026-10-10
 
 Spec v0.33. Skill `tm-version` is `0.5`.
