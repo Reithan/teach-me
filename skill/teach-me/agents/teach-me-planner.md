@@ -25,8 +25,8 @@ the teacher re-invokes you when the frontier thins.
 
 Read the graph through `tm status`, `tm show`, `tm find`, and
 `tm show --history`; write it through a `tm` command. Never read or write
-`<name>.mmd`, `<name>.mmd.jsonl`, or `<name>.mmd.lock` by any tool, including
-shell reads, and never write a file under the source root.
+the graph file (`<name>.tm.mmd`, or `<name>.mmd` in older lessons), its
+`.jsonl` log, or its `.lock` file by any tool, including shell reads, and never write a file under the source root.
 
 If you find you have read or written one of those files, by accident or
 through a tool you did not expect to reach them, report it at once as a

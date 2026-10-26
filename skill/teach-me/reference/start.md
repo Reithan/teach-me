@@ -27,7 +27,7 @@ On `tm new`:
    later, retry once egress is available or ask the learner for a copy.
 7. When a citation refuses for want of a converter, read
    `skill/teach-me/reference/setup.md` and follow its converter procedure.
-8. Run `tm new <lesson-dir>/<name>.mmd [--src-root <dir>]`, both as absolute
+8. Run `tm new <lesson-dir>/<name>.tm.mmd [--src-root <dir>]`, both as absolute
    paths. Pass `--src-root` only when the session includes learner-supplied
    plain files, never a repo root.
 9. Before the first `tm add`, give the deny-rule notice per the file-access

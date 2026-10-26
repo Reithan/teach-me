@@ -155,12 +155,21 @@ Harness permissions) cannot carve an exception for aids-dir.
 ## Harness permissions
 
 For a harness with permission rules, deny direct read and write access to the
-three graph files, scoped to the lesson directory, so the model cannot bypass
-the CLI's invariants:
+three graph files so the model cannot bypass the CLI's invariants:
 
-- `**/*.mmd`
+- `**/*.tm.mmd`
 - `**/*.mmd.jsonl`
 - `**/*.mmd.lock`
+
+Never deny `**/*.mmd`: `.mmd` is the standard Mermaid extension, so that rule
+blocks every Mermaid diagram in every project. Graphs are named
+`<name>.tm.mmd` for this reason; the `.jsonl` and `.lock` suffixes are already
+specific to `tm`. A lesson created as `<name>.mmd` keeps working, but its
+graph file is not covered by the rule above. To cover it, rename all three
+files together (`<name>.mmd` to `<name>.tm.mmd`, `<name>.mmd.jsonl` to
+`<name>.tm.mmd.jsonl`, and `<name>.mmd.lock` if present), then run
+`tm load <lesson-dir>/<name>.tm.mmd`, passing `--src-root` again if the lesson
+has one.
 
 Also deny writes under src-root, using its absolute path, so the model cannot
 author a file there and cite it as a learner-supplied source. Reads under
@@ -172,8 +181,8 @@ src-root stay allowed so the model can inspect what the learner placed there.
 {
   "permissions": {
     "deny": [
-      "Read(**/*.mmd)",
-      "Edit(**/*.mmd)",
+      "Read(**/*.tm.mmd)",
+      "Edit(**/*.tm.mmd)",
       "Read(**/*.mmd.jsonl)",
       "Edit(**/*.mmd.jsonl)",
       "Read(**/*.mmd.lock)",
