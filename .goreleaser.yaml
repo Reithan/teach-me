@@ -18,6 +18,23 @@ builds:
     ldflags:
       - -s -w
     mod_timestamp: "{{ .CommitTimestamp }}"
+  - id: tmcards
+    main: ./cmd/tmcards
+    binary: tmcards
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
   - id: default

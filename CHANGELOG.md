@@ -37,6 +37,12 @@ Spec v0.35.
   prints `<concept>  passed  leech <m>/<n> cards` for a passed concept with a
   card that has lapsed `TM_CARD_LEECH` times (spec v0.36 §17.6).
 - `tm show <concept>` lists the concept's cards: number, state, and front.
+- `tmcards`, a second binary for the learner, shipped in the same release
+  archive as `tm`. `tmcards review` runs a review in the terminal: it shows a
+  due card's front, Enter shows the back, and `1` to `4` rate it again, hard,
+  good, or easy. Cards come in a new random order every sitting. It finds the
+  graph the way `tm` does (`--file`, `TM_FILE`, `.tmconfig`, user config) and
+  records each rating with `via: term` (spec v0.36 §17.5).
 - `tm recite` now prints a source refusal (an aid or a cards file cited as a
   source) as its own `err:` line with exit 1, as `tm add` and `tm q` do. It
   used to wrap the text in `cannot hash ...` with exit 3.
