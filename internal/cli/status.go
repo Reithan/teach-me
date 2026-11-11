@@ -132,20 +132,27 @@ func statusSummary(ctx *Context, s *state.State, showPassed bool) int {
 		blockedSet[b] = true
 	}
 
-	// Line 1: counts. Append "  reserve N" only when nonzero (spec §6 sample).
-	reserveN := len(g.ReserveConcepts)
-	if reserveN > 0 {
-		_, _ = fmt.Fprintf(ctx.Out, "passed %d  open %d  blocked %d  reserve %d\n",
-			len(g.PassedConcepts), len(frontier), len(blocked), reserveN)
-	} else {
-		_, _ = fmt.Fprintf(ctx.Out, "passed %d  open %d  blocked %d\n",
-			len(g.PassedConcepts), len(frontier), len(blocked))
+	// Line 1: counts. "  reserve N" and "  cards due N" are each appended
+	// only when nonzero (spec §6 sample).
+	counts := fmt.Sprintf("passed %d  open %d  blocked %d", len(g.PassedConcepts), len(frontier), len(blocked))
+	if reserveN := len(g.ReserveConcepts); reserveN > 0 {
+		counts += fmt.Sprintf("  reserve %d", reserveN)
 	}
+	deck, cardSet, haveCards := cardsForView(ctx)
+	if haveCards {
+		counts += cardsDueSuffix(deck, cardSet, passedSet)
+	}
+	_, _ = fmt.Fprintln(ctx.Out, counts)
 
-	// Optional: list passed concepts (--passed flag).
-	if showPassed {
-		for _, c := range g.PassedConcepts {
-			_, _ = fmt.Fprintf(ctx.Out, "%s  passed\n", c.ID)
+	// Passed concept lines: every one with --passed, and always one for a
+	// concept that has a leech card (§17.6).
+	for _, c := range g.PassedConcepts {
+		leech := ""
+		if haveCards {
+			leech = leechSuffix(deck, cardSet, c.ID)
+		}
+		if showPassed || leech != "" {
+			_, _ = fmt.Fprintf(ctx.Out, "%s  passed%s\n", c.ID, leech)
 		}
 	}
 
