@@ -85,7 +85,7 @@ func TestStdin_SecondDash_Exit3(t *testing.T) {
 	// protects a future one, since stdin can feed only one.
 	cmd := &cli.Command{PosArgs: []cli.PosArg{{Name: "<a>", Stdin: true}, {Name: "<b>", Stdin: true}}}
 	pos := []string{"-", "-"}
-	if msg := cli.ReadStdinArgs(cmd, pos, strings.NewReader("text")); msg != "only one argument may be -" {
+	if _, _, msg := cli.ReadStdinArgs(cmd, pos, strings.NewReader("text")); msg != "only one argument may be -" {
 		t.Fatalf("want one-dash err, got %q", msg)
 	}
 }
@@ -109,5 +109,25 @@ func TestStdin_DashOnNonStdinArgIsLiteral(t *testing.T) {
 	_, errOut, code := runIn(t, "q1", "answer", "-", "text")
 	if code != 3 || !strings.Contains(errOut, `err: unknown question "-"`) {
 		t.Fatalf("want unknown question err, got %d; stderr:\n%s", code, errOut)
+	}
+}
+
+func TestStdin_ErrlogRecordsDashAndLength(t *testing.T) {
+	dir, errPath := qSetupDir(t)
+	file := qWriteGraph(t, dir, answerProbeGraph())
+
+	// q99 is unknown, so the command fails after stdin was read. The flags
+	// before the positionals check that the right token is rewritten.
+	_, errOut, code := runIn(t, "four\n", "answer", "--file", file, "--asked", "-", "q99", "-")
+	if code != 3 {
+		t.Fatalf("want exit 3, got %d; stderr:\n%s", code, errOut)
+	}
+	rows := readErrlog(t, errPath)
+	if len(rows) != 1 {
+		t.Fatalf("ERRORS.jsonl: want 1 row; got %v", rows)
+	}
+	want := []string{"tm", "answer", "--file", file, "--asked", "-", "q99", "-4"}
+	if strings.Join(rows[0].Argv, "\x00") != strings.Join(want, "\x00") {
+		t.Errorf("argv: want %q, got %q", want, rows[0].Argv)
 	}
 }
