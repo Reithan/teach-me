@@ -18,7 +18,7 @@ func gradeProbeIncompleteGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -41,7 +41,7 @@ func gradeAllPassGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -67,7 +67,7 @@ func gradeAlreadyGradedGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -92,7 +92,7 @@ func gradeReplacementProbeGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -124,7 +124,7 @@ func gradeProbeUnclearRootGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -150,7 +150,7 @@ func gradeProbeWithPassAndPendingGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -176,7 +176,7 @@ func gradeTeachPendingGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -866,7 +866,7 @@ func TestGrade_AllPass_Unblocked(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
         child_con["Child concept<br/>f5ca3875b379@src.txt:1-5"]
         mycon --"requires"--> child_con

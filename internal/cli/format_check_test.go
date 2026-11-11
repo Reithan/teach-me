@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// format3Graph is a minimal graph claiming format 3, above CurrentFormat.
-const format3Graph = `flowchart TB
+// futureFormatGraph is a minimal graph claiming format 4, above CurrentFormat.
+const futureFormatGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 3
+        %% tm:format 4
     end
     subgraph reserve["Concepts held in reserve"]
     end
@@ -35,7 +35,7 @@ func writeFormatGraph(t *testing.T, dir, content string) string {
 }
 
 // TestFormatCheck_CentralRefusal verifies that commands without SkipFormatCheck
-// refuse format-1 and format-3 graphs and accept format-2.
+// refuse format-1 and format-4 graphs and accept format-3.
 func TestFormatCheck_CentralRefusal(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -50,20 +50,20 @@ func TestFormatCheck_CentralRefusal(t *testing.T) {
 			graph:    minimalFormat1Graph,
 			args:     []string{"status"},
 			wantExit: 1,
-			wantErr:  "g.mmd is format 1, this is tm format 2",
+			wantErr:  "g.mmd is format 1, this is tm format 3",
 			wantFix:  "tm migrate",
 		},
 		{
-			name:     "status refuses format-3 with upgrade fix",
-			graph:    format3Graph,
+			name:     "status refuses format-4 with upgrade fix",
+			graph:    futureFormatGraph,
 			args:     []string{"status"},
 			wantExit: 1,
-			wantErr:  "g.mmd is format 3, this is tm format 2",
+			wantErr:  "g.mmd is format 4, this is tm format 3",
 			wantFix:  "upgrade tm",
 		},
 		{
-			name:     "status accepts format-2",
-			graph:    minimalFormat2Graph,
+			name:     "status accepts format-3",
+			graph:    minimalCurrentGraph,
 			args:     []string{"status"},
 			wantExit: 0,
 		},
@@ -72,7 +72,7 @@ func TestFormatCheck_CentralRefusal(t *testing.T) {
 			graph:    minimalFormat1Graph,
 			args:     []string{"add", "mycon", "src.txt:1-2", "My concept"},
 			wantExit: 1,
-			wantErr:  "g.mmd is format 1, this is tm format 2",
+			wantErr:  "g.mmd is format 1, this is tm format 3",
 			wantFix:  "tm migrate",
 		},
 	}
@@ -108,7 +108,7 @@ func TestFormatCheck_CentralRefusal(t *testing.T) {
 	}
 }
 
-// TestFormatCheck_Load verifies that load refuses format-1 and format-3 graph
+// TestFormatCheck_Load verifies that load refuses format-1 and format-4 graph
 // files passed as a positional argument, and that the fix line names the exact
 // positional file path so it cannot be confused with the central check's fix.
 func TestFormatCheck_Load(t *testing.T) {
@@ -123,14 +123,14 @@ func TestFormatCheck_Load(t *testing.T) {
 			name:        "load refuses format-1 with migrate fix naming the file",
 			graph:       minimalFormat1Graph,
 			wantExit:    1,
-			wantErr:     "g.mmd is format 1, this is tm format 2",
+			wantErr:     "g.mmd is format 1, this is tm format 3",
 			wantUpgrade: false,
 		},
 		{
-			name:        "load refuses format-3 with upgrade fix",
-			graph:       format3Graph,
+			name:        "load refuses format-4 with upgrade fix",
+			graph:       futureFormatGraph,
 			wantExit:    1,
-			wantErr:     "g.mmd is format 3, this is tm format 2",
+			wantErr:     "g.mmd is format 4, this is tm format 3",
 			wantUpgrade: true,
 		},
 	}
@@ -175,7 +175,7 @@ func TestFormatCheck_Load(t *testing.T) {
 
 // TestFormatCheck_LoadSkipsCentralCheck is the regression test for the
 // SkipFormatCheck: true fix on the load command: when TM_FILE points to a
-// format-1 graph, `tm load <format-2 file>` must succeed and write the pointer.
+// format-1 graph, `tm load <format-3 file>` must succeed and write the pointer.
 func TestFormatCheck_LoadSkipsCentralCheck(t *testing.T) {
 	dir := t.TempDir()
 	tempErrlog(t)
@@ -186,13 +186,13 @@ func TestFormatCheck_LoadSkipsCentralCheck(t *testing.T) {
 	f1Path := writeFormatGraph(t, dir, minimalFormat1Graph)
 	t.Setenv("TM_FILE", f1Path)
 
-	// The file to load is a fresh format-2 graph created by tm new.
+	// The file to load is a fresh format-3 graph created by tm new.
 	f2Path := filepath.Join(dir, "target.mmd")
 	if _, _, code := run(t, "new", f2Path); code != 0 {
 		t.Fatalf("new: want exit 0, got %d", code)
 	}
 
-	// load <format-2 file> must succeed even though TM_FILE is format-1.
+	// load <format-3 file> must succeed even though TM_FILE is format-1.
 	_, errOut, code := run(t, "load", f2Path)
 	if code != 0 {
 		t.Fatalf("load: want exit 0, got %d; stderr:\n%s", code, errOut)
@@ -220,7 +220,7 @@ func TestFormatCheck_SkippedCommands(t *testing.T) {
 			name:     "migrate accepts format-1 and upgrades it",
 			args:     []string{"migrate"},
 			wantExit: 0,
-			wantOut:  "format 1 -> 2",
+			wantOut:  "format 1 -> 3",
 		},
 		{
 			name:     "--help accepts format-1",
@@ -257,7 +257,7 @@ func TestFormatCheck_SkippedCommands(t *testing.T) {
 	}
 }
 
-// TestFormatCheck_NewSkipped verifies that new creates a format-2 graph and is
+// TestFormatCheck_NewSkipped verifies that new creates a format-3 graph and is
 // not blocked by TM_FILE pointing to a format-1 graph.
 func TestFormatCheck_NewSkipped(t *testing.T) {
 	dir := t.TempDir()
@@ -276,7 +276,7 @@ func TestFormatCheck_NewSkipped(t *testing.T) {
 }
 
 // TestFormatCheck_Lifecycle verifies that new → add → q → ask → answer → grade
-// all succeed: the %% tm:format 2 marker written by new survives every mutation.
+// all succeed: the %% tm:format 3 marker written by new survives every mutation.
 func TestFormatCheck_Lifecycle(t *testing.T) {
 	dir := t.TempDir()
 	tempErrlog(t)
@@ -328,7 +328,7 @@ func TestFormatCheck_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "%% tm:format 2") {
-		t.Errorf("lifecycle: %% tm:format 2 missing after all mutations")
+	if !strings.Contains(string(data), "%% tm:format 3") {
+		t.Errorf("lifecycle: %% tm:format 3 missing after all mutations")
 	}
 }

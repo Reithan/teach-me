@@ -14,7 +14,7 @@ const aidBaseGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         ca["Concept A<br/>f5ca3875b379@src.txt:1-5"]
         cc["Concept C<br/>f5ca3875b379@src.txt:1-5"]
     end
@@ -40,7 +40,7 @@ const aidAllPassGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph reserve["Concepts held in reserve"]

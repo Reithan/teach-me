@@ -18,7 +18,7 @@ func monotonicGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
         other["Other concept<br/>f5ca3875b379@src.txt:1-5"]
     end
