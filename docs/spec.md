@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.35
+# tm: teaching-map CLI, draft spec v0.36
 
-`tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
+`tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state of what the learner has been taught and tested on; flashcards for remembering it afterwards live in one file beside it (section 17). Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.34: `tm answer` refuses an answer that is empty or only whitespace, so a failed pipe into `tm answer <qid> -` cannot be recorded and graded `unclear`; the stdin rule for `-` arguments now states that trailing line endings are dropped and that one argument per command may be `-`; §6, §7, §10.1, §14 updated.
+Changes from v0.35: flashcards (new section 17): a cards file beside the graph; `tm card`, `tm due`, and `tm review`; a second binary `tmcards` for the learner's reviews; an FSRS schedule; graph format 3 with the `%% tm:cards` meta line. This realizes the deferred "decay and re-test" item. The intro and §2, §2.1, §3, §4.6, §6, §7, §8, §10, §11, §12, §13, §13.2, §14, §15, §16 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -37,16 +37,17 @@ What follows from the rule:
 
 | Role | Reads | Writes |
 |---|---|---|
-| Human | rendered graph, questions from the teacher | answers; hand edits to the graph, followed by `tm lint` |
+| Human | rendered graph, questions from the teacher, cards in `tmcards` | answers; hand edits to the graph, followed by `tm lint`; card reviews and card edits through `tmcards` |
 | Teacher agent | `tm` output, source files | every command except `check` and `grade` |
 | Grader sub-agent | `tm check` output only | `tm grade` |
 | Planner sub-agent | source files, `tm status`, `tm show`, `tm find` | `tm add`, `tm link`, `tm edit`, `tm drop` |
 | Pruner sub-agent | `tm status`, `tm show`, `tm find`, `tm report` | `tm prune`, `tm reserve`, `tm activate`, `tm edit` |
-| CLI | graph file, cited source files | graph file, event log |
+| CLI | graph file, cited source files, cards file | graph file, event log, cards file |
+| `tmcards` (section 17.5) | graph file, cards file | cards file |
 
 ### 2.1 Harness boundary
 
-The CLI is harness-agnostic. It reads arguments, stdin, environment variables, and files; it writes stdout, the graph, and the log. It names no model, harness, or agent, and it runs no external command except user-configured converters and git (section 13).
+The CLI is harness-agnostic. It reads arguments, stdin, environment variables, and files; it writes stdout, the graph, and the log. It names no model, harness, or agent, and it runs no external command except user-configured converters and git (section 13). The same holds for `tmcards`, which also listens on a local port when asked to (section 17.5).
 
 Everything harness-specific is an adapter outside the CLI. An adapter may use any feature its harness offers. The CLI surface never changes to suit one.
 
@@ -63,10 +64,11 @@ Everything harness-specific is an adapter outside the CLI. An adapter may use an
 
 ## 3. Files
 
-- Graph: `<name>.tm.mmd` by convention. The CLI accepts any path and derives the other two files by appending `.jsonl` and `.lock` to it; the `.tm` infix exists so a harness deny rule can target graph files without matching every Mermaid diagram (decision 82). Single source of truth. Every command re-parses it; the graph carries no cache or side state. Its first `untested` meta line records the graph format when present; absent, the format is 1 (§4.6). Every command except `migrate`, `lint`, and help refuses a graph whose format is below the binary's with `fix: tm migrate`.
+- Graph: `<name>.tm.mmd` by convention. The CLI accepts any path and derives the other three files by appending `.jsonl`, `.lock`, and `.cards.jsonl` to it; the `.tm` infix exists so a harness deny rule can target graph files without matching every Mermaid diagram (decision 82). Single source of truth for concepts, questions, and verdicts. Every command re-parses it; the graph carries no cache or side state. Its first `untested` meta line records the graph format when present; absent, the format is 1 (§4.6). Every command except `migrate`, `lint`, and help refuses a graph whose format is below the binary's with `fix: tm migrate`.
 - Event log: `<name>.tm.mmd.jsonl`. Append-only. The CLI never reads it except for `tm show --history`, `tm check --drift`, and `tm check --errata`.
 - Error log: `ERRORS.jsonl` in the graph's directory, or the working directory when no graph resolves at all (a usage error with no pointer set). Append-only; the CLI never reads it. `$TM_ERRORS` overrides the path.
 - Lock: `<name>.tm.mmd.lock`. Every mutating command takes the lock, writes a temp file, lints the result, then renames over the graph. Graders run in parallel, so this is required.
+- Cards: `<name>.tm.mmd.cards.jsonl`. Append-only. It holds every flashcard and every review, and it is state: the only state outside the graph (decision 85). `tm` and `tmcards` both read and append to it (section 17.2).
 - File resolution: `--file` > `$TM_FILE` > `file` key in `.tmconfig` in the working directory > `file` key in the user config. `tm new` and `tm load` write the `file` key (and `src-root` when given) into the user config as absolute paths, so the pointer holds from any working directory; with `--local` they write `.tmconfig` in the working directory instead, for two lessons on one machine. Use the env var or `--file` when two concurrent sessions need different graphs.
 - Citations resolve against `$TM_SRC_ROOT`, defaulting to the graph's directory.
 - Aids: `<graph dir>/aids` by default, overridden by the `aids-dir` config key. Everything the teacher authors — examples, study guides, generated diffs, copies it fetches for itself — lives here. Aids are linked to concepts or questions (§4.6) and are never cited (§7, §11).
@@ -216,22 +218,23 @@ Concepts carry no class. Their state is their block plus what hangs off them; a 
 
 ### 4.6 Meta lines
 
-- `%% tm:format <N>` — the graph format version. When present it is the first meta line in the `untested` block, before `%% tm:next`. At most one per file. Absent means format 1 (every graph written before v0.22); `tm new` writes `%% tm:format 2`. The format is the graph file's own version and is unrelated to the `tm-version` marker in the doc file. Every command except `migrate`, `lint`, and help refuses a graph below the binary's format; every command refuses one above it. See section 6 (`migrate`) and section 11. A graph below the binary's format refuses:
+- `%% tm:format <N>` — the graph format version. When present it is the first meta line in the `untested` block, before `%% tm:next`. At most one per file. Absent means format 1 (every graph written before v0.22); `tm new` writes `%% tm:format 3`. Format 3 adds the `%% tm:cards` line and changes nothing else. The format is the graph file's own version and is unrelated to the `tm-version` marker in the doc file. Every command except `migrate`, `lint`, and help refuses a graph below the binary's format; every command refuses one above it. See section 6 (`migrate`) and section 11. A graph below the binary's format refuses:
 
   ```
-  err: <file> is format 1, this is tm format 2
+  err: <file> is format 2, this is tm format 3
   fix: tm migrate
   ```
 
   A graph above it refuses:
 
   ```
-  err: <file> is format 3, this is tm format 2
+  err: <file> is format 4, this is tm format 3
   fix: upgrade tm
   ```
 - `%% tm:next q=<N> batch=<M>` — the monotonic allocation counter (§4.3). At most one per file. In the `untested` block, after `%% tm:format` and before any `%% tm:gate` lines. `N` and `M` are integers ≥ 1: the next question/answer number and the next batch number to allocate. Only commands that allocate new IDs (`tm q`) write or update this line; read-only commands and commands that do not allocate leave it unchanged.
 - `%% tm:gate <concept> base=<N>` — in the `untested` block; written when an upstream action clears a gate (section 7). It stays in the `untested` block when its concept moves to `reserve`, and `tm activate` restores the concept with its gate base.
 - `%% tm:aid <concept|qid> <path>` — links an aid (section 3) to a concept or question. It sits in the block that holds the concept, or in `testing` for a qid, and moves with the concept. `<path>` is relative to the graph directory or absolute; it is not a citation and carries no hash. Written by `tm aid`, removed by `tm aid rm`. `tm show <id>` and `tm report` list aids. The gc that clears a passed concept's tests leaves concept aid lines alone; an aid on a qid is removed with the question and logged in the `gc` event's `meta` (section 8).
+- `%% tm:cards <concept>` — marks a concept that has had cards created for it (section 17). At most one per concept. It sits in the block that holds the concept and moves with it, like a concept's aid line. Written by `tm card add` and `tm card import --concept` on the concept's first card. It carries no count, because `tmcards` removes cards without writing the graph and a count would go stale; `tm show <concept>` prints the live number from the cards file. The pass procedure and `tm reopen` leave it alone; it is removed only with its concept.
 
 Anything else outside this subset is a lint error. No command mutates a file that fails lint.
 
@@ -274,7 +277,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 |---|---|---|
 | `tm new <file> [--title "<t>"] [--src-root <dir>] [--local]` | create the skeleton, make it active by writing the `file` (and `src-root`) pointer to the user config, or to `.tmconfig` with `--local` | `ok` |
 | `tm load <file> [--src-root <dir>] [--local]` | make an existing graph active; same pointer write as `new` | chained `status` |
-| `tm status [--passed]` | counts, one line per open or blocked concept, frontier IDs | see sample |
+| `tm status [--passed]` | counts, one line per open or blocked concept, one line per passed concept with a leech card (section 17.6), frontier IDs | see sample |
 | `tm status --concept <id>` | that concept's batches, verdicts, failed count, and open teaching targets | see sample; chains per section 1 |
 | `tm find "<text>" [--kind concept\|q\|a]` | search scopes and summaries | one line per hit: ID, state, truncated scope |
 | `tm show <id> [--history]` | node, edges, Q/A beneath it; `--history` adds its log events | the node record |
@@ -304,7 +307,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm grade --drift <concept> keep\|reopen "<summary>"` | grader: record the recheck verdict; `keep` re-hashes the concept citation; `reopen` runs `reopen` with the summary as the GAP | `ok` |
 | `tm check --errata <concept>` | grader: for a passed concept corrected with `tm errata`, print the old scope, new scope, and reason, then each graded answer for judging whether the pass survives the correction | the recheck payload |
 | `tm grade --errata <concept> keep\|reopen "<summary>"` | grader: record the errata recheck verdict; `keep` leaves the pass; `reopen` runs `reopen` with the summary as the GAP | `ok` |
-| `tm migrate [<file>]` | upgrade a format-1 graph to format 2 (section 4.6), rewriting each citation only to a locator that resolves to the same hash and listing what it cannot convert; always writes `%% tm:format 2` and exits 0. `--dry-run` prints without writing. Logged | one line per citation, then a summary |
+| `tm migrate [<file>]` | upgrade a graph to format 3 (section 4.6). From format 1 it rewrites each citation only to a locator that resolves to the same hash and lists what it cannot convert; from format 2 it changes only the marker. It always writes `%% tm:format 3` and exits 0. `--dry-run` prints without writing. Logged | one line per citation, then a summary |
 | `tm repo add <alias> <path> [--local]` | register a repo alias in machine config for `git:` locators (section 13), or to `.tmconfig` with `--local` | `ok` |
 | `tm repo rm <alias> [--local]` | remove a repo alias, or from `.tmconfig` with `--local` | `ok` |
 | `tm repo list` | list registered aliases and their paths | one line per alias |
@@ -313,6 +316,13 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm src <locator> [START-END] [--find <regex>] [--fulldump]` | read-only: resolve the locator exactly as `add` and `q` do (src-root, repo aliases, converters, cache, aids-dir refusal) and print its text with 1-based line numbers, restricted to the range or to lines matching the regex. The window (§1) applies to the whole file, an explicit range, and `--find` hits alike; the trailer is `more: tm src <locator> <next-start>-<next-end>` (with `--find <regex>` appended when it was given), where `<next-start>` is the line after the last printed line and `<next-end>` is `<next-start>+199` capped at the last line, and there is no trailer when nothing remains. `--fulldump` prints everything with no trailer. A `git:` locator or a redirected URI prints the resolved locator first | `src: <locator>` then `N\t<text>` lines, then a `more:` line unless done |
 | `tm aid <id> <path>` | link an aid to a concept or question (section 4.6). Logged | `ok` |
 | `tm aid rm <id> <path>` | unlink an aid. Logged | `ok` |
+| `tm card add <concept> <cite> "<front>" "<back>"` | teacher: add one card to a passed concept, worded from the cited passage (section 17.1). Writes `%% tm:cards` on the concept's first card. Logged | the card number |
+| `tm card import <locator> [--concept <id>] [--origin source\|user\|teacher]` | add one card per line of a tab-separated list (section 17.3). With `--concept` the cards belong to that concept, which may be in any block, and wait until it is passed. Logged | `cards <added> skipped <n>` |
+| `tm card show <n>` | read-only: one card | number, state, origin, concept, citation, front, back, one per line |
+| `tm card rm <n>` | remove a card. Logged | `ok` |
+| `tm due [--format lines\|json] [--limit N]` | read-only: cards due now with answer options, for review through the question UI when `tmcards serve` cannot be reached (section 17.5). `--limit` defaults to 4 | one line per card: number, front, options; nothing when none is due |
+| `tm review <n> again\|hard\|good\|easy` | record the learner's own rating of a card | `ok` |
+| `tm review <n> --pick "<text>"` | score a multiple-choice pick against the card's back and record `good` or `again` | `right`, or `wrong \| <back>` |
 | Bare `tm`, `tm --help`, or an unknown subcommand | baseline help | `see <path> (tm <version>)` when a doc is configured; otherwise one usage line per command |
 | `tm --help --all` | one usage line per command, whatever the doc setting | usage lines |
 | `tm --help <command>`, `tm <command> --help [<flag>]` | specific inquiry | that command's usage line, or one line on the flag |
@@ -323,7 +333,7 @@ Samples:
 
 ```
 $ tm status
-passed 2  open 1  blocked 1  reserve 1
+passed 2  open 1  blocked 1  reserve 1  cards due 12
 log_matching  failed 1/2  teach_3 open
 commit_rules  blocked by log_matching
 
@@ -349,7 +359,7 @@ $ tm prune commit_rules --keep 2
 reserved 0
 ```
 
-The `reserve` count is printed only when it is nonzero.
+The `reserve` count and the `cards due` count are each printed only when nonzero.
 
 ## 7. Invariants
 
@@ -387,8 +397,14 @@ The `reserve` count is printed only when it is nonzero.
 | `ask`, `answer` | the batch is under min; any parent of the concept is in `untested`; the concept is gated; the batch is the fallback probes and any teach batch under the concept is unresolved; or the latest one is not all `pass` and teaching is not spent |
 | `answer` | the question already has an answer; or the answer is empty or only whitespace (`err: answer is empty`, exit 3, `fix:` the usage line) |
 | `check`, `grade` | the question has no `pending` answer |
+| `card add` | the concept is not in `passed` (`err: <concept> is not passed`; `fix: pass it first, or attach a list with tm card import <locator> --concept <concept>`); the front or back is empty or over 1,000 characters; the citation refuses as it would for `q`, without the size cap |
+| `card import` | `--concept` names an unknown ID or a question or answer; a line is malformed (section 17.3; `err: line <N>: <what is wrong>`); with origin `source`, the locator refuses as it would for `add` |
+| `card add`, `card import`, `card show`, `card rm`, `due`, `review` | the cards file has a line that is not a card row (`err: <file> line <N> is not a card row`) |
+| `card show`, `card rm`, `review` | the card number is unknown or removed (exit 3) |
+| `review` | the card is waiting or held; both a rating and `--pick` are given, or neither |
+| `add`, `q`, `recite`, `src` | the locator resolves to a cards file (`err: <path> is a cards file, not a source`) |
 | `grade` | `TM_ROLE=teacher`; `--oos` on a probe |
-| everything except `check`, `grade`, `show` | `TM_ROLE=grader` |
+| everything except `check`, `grade`, `show` (the card commands included) | `TM_ROLE=grader` |
 
 Write order in a teaching round is GAP, then fallback probes, then teach questions. The `q --teach` refusals enforce it, and the first teach question freezes the probes.
 
@@ -417,7 +433,7 @@ A conceded answer (`--concede` on `answer`) is a graded `fail` in every rule bel
 1. Replace the answer's raw label with the summary and set the class. Log the raw answer, summary, verdict, and `--guided`.
 2. If the question has `--re` lineage to an `unclear` probe and the verdict is `unclear`, record `fail`. The log keeps the original verdict.
 3. If the batch has unanswered or ungraded questions, stop.
-4. Probe batch, all `pass`: run the pass procedure. Log every node, edge, and meta line under the concept as one `gc` event, delete them, strip the GAP field, move the declaration to the top of `passed`, relocate edges per 4.2, log `pass` with the concepts it unblocks.
+4. Probe batch, all `pass`: run the pass procedure. Log every node, edge, and meta line under the concept as one `gc` event, delete them (the concept's aid and `%% tm:cards` lines stay), strip the GAP field, move the declaration to the top of `passed`, relocate edges per 4.2, log `pass` with the concepts it unblocks.
 5. Probe batch, no `fail`, some `unclear`: the next probe batch must hold exactly one `--re` replacement per unclear question and nothing else. Min and max do not apply to it. No teaching round.
 6. Probe batch, any `fail`: the concept needs a teaching round. The remaining questions of the current probe batch are still answerable — they must be answered to close the batch. Once the batch is resolved, the next (fallback) probe batch cannot be answered until a teach batch resolves all `pass`.
 7. `--oos` on a teach question writes the `OOS` field on its answer. That question is left out of steps 8 and 9 and out of the stall count, whatever its verdict.
@@ -527,7 +543,7 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `link` | `from`, `to`, `rel` |
 | `edit` | `id`, `before`, `after` |
 | `errata` | `id`, `reason`, `before`, `after`; optional: `src_before`, `src_after` (when `--src` re-points the citation) |
-| `drop` | `id`, `node`, `edges`; for drift drops: `reason: drift` and `answer: <pending answer text>` if a pending answer existed |
+| `drop` | `id`, `node`, `edges`; for a concept with cards: `cards` (the numbers removed); for drift drops: `reason: drift` and `answer: <pending answer text>` if a pending answer existed |
 | `gap` | `concept`, `before`, `after` |
 | `q` | `q`, `concept`, `batch`, `kind`, `scope`, `src`, `re`; optional: `ref`, `commit`, `url`, `mime`, `converter`, `converter_version`, `fetched_at` |
 | `answer` | `q`, `raw`, `asked`; optional: `concede: true` (when `--concede`) |
@@ -543,6 +559,7 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `recite` | `id`, `before` (old citation), `after` (new citation at new range); optional: `ref` (the git ref as typed), `commit` (resolved SHA for a `git:` file-at-ref citation) |
 | `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; optional: `kind: errata` (a scope-errata recheck, which carries no per-question fields); for a drift recheck, per question: `q`, `src_text_before`, `src_text_after` |
 | `aid` | `id` (concept or qid), `path`, `action` (`add`, `rm`) |
+| `card` | `action` (`add`, `import`, `rm`), `cards` (the card numbers), `concept` (ID or null); for `import`: `src` (the locator) and `origin`. Card text and reviews are in the cards file, not here |
 | `migrate` | `from`, `to` (format numbers), `rewritten` (count), `left` (count), `unresolved` (IDs left as plain paths) |
 
 `src_text` in `grade` records what the grader saw, so a later audit survives edits to the source file.
@@ -581,13 +598,14 @@ Logging prints nothing. If the file cannot be written, the command's own output 
 9. Every question in a batch resolves to the same concept. Batches respect max, and a batch with any answer respects min (replacement batches per 8.5 excepted).
 10. Concept edges carry a relation label and form a DAG.
 11. Every citation names an existing file and an in-bounds line range.
-12. Passed concepts have no tests, no GAP, and no gate line. Reserve concepts may keep tests, GAP, and a gate line, which `tm activate` restores.
+12. Passed concepts have no tests, no GAP, and no gate line; they may keep a `%% tm:cards` line. Reserve concepts may keep tests, GAP, and a gate line, which `tm activate` restores.
 13. Every citation carries a hash (the 12-hex-character prefix). Lint refuses a hashless citation with `fix: tm rehash`.
 14. No unencoded `"` appears inside any locator. Lint refuses it with `fix: percent-encode " as %22`. No unencoded `:` appears inside a `git:` locator's `<path>`; lint refuses it with `fix: percent-encode : as %3A`.
 15. When `%% tm:next` is present, its `q` value must be strictly greater than every `qN` and `aN` suffix in the file, and its `batch` value must be strictly greater than every `probe_N` and `teach_N` suffix. Lint refuses a stale counter with `fix: raise the counters in %% tm:next`.
 16. No citation's locator lies under aids-dir (section 3). Lint refuses one with `fix: cite the primary source; link the aid with tm aid <id> <path>`. This is path arithmetic on the locator, not a file read.
 17. The `%% tm:format` marker, when present, is at most the binary's format. Lint refuses a higher format with a `fix:` to upgrade tm. A lower format is a `migrate` matter, not a lint failure; `lint` accepts it so `migrate` can lint its own result.
 18. `tm lint` without `--drift` is a static check only: no file resolution, no fetches. `tm lint --drift` resolves local citations and lists mismatches (exit 1 if any).
+19. A `%% tm:cards` line names a concept declared in the same block, at most once per concept. Lint reads the graph only; it never opens the cards file.
 
 Runtime lint checks the subset grammar only and links no Mermaid parser. Whether the subset is valid Mermaid is a property of the grammar and the writer, so it is proven in CI by the conformance suite (16.6), against the real parser.
 
@@ -647,11 +665,12 @@ The behaviors the CLI cannot enforce belong in the teacher's prompt:
 
 1. Teach questions target the diagnosed gap, not the scopes of the locked probes.
 2. The grader's spawn prompt carries the question ID and nothing about the user.
-3. The no-memory rule: model knowledge may draft questions and explain during teaching, but it never becomes source. When no real source can be obtained, the teacher says so and stops. Nothing model-authored is stored as source or cited, including summaries, examples, scripts, and study guides derived from real sources.
-4. The file-access rule: the model never reads or writes `<name>.tm.mmd`, `<name>.tm.mmd.jsonl`, or `<name>.tm.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on `**/*.tm.mmd`, `**/*.mmd.jsonl`, and `**/*.mmd.lock` (never on `**/*.mmd`, which blocks every Mermaid diagram on the machine); the CLI cannot. Alongside that deny, the adapter recommends a deny on writes under src-root with an allow for aids-dir; that pairing is the only enforcement against a teacher-authored file placed outside aids-dir and cited as a plain path.
+3. The no-memory rule: model knowledge may draft questions and explain during teaching, but it never becomes source. When no real source can be obtained, the teacher says so and stops. Nothing model-authored is stored as source or cited, including summaries, examples, scripts, and study guides derived from real sources. A flashcard may hold model-authored text because it is a drill and not a source (rule 8).
+4. The file-access rule: the model never reads or writes `<name>.tm.mmd`, `<name>.tm.mmd.jsonl`, `<name>.tm.mmd.cards.jsonl`, or `<name>.tm.mmd.lock` directly, by any tool, including shell reads. Every read goes through `tm status`, `tm show`, `tm find`, `tm report`, and `tm show --history`; every write goes through a `tm` command. The harness may enforce this rule via deny entries on `**/*.tm.mmd`, `**/*.mmd.jsonl`, `**/*.mmd.cards.jsonl`, and `**/*.mmd.lock` (never on `**/*.mmd`, which blocks every Mermaid diagram on the machine); the CLI cannot. Alongside that deny, the adapter recommends a deny on writes under src-root with an allow for aids-dir; that pairing is the only enforcement against a teacher-authored file placed outside aids-dir and cited as a plain path.
 5. The aids rule: everything the teacher writes — examples, study guides, generated diffs, copies it fetches for itself — goes in aids-dir and is linked with `tm aid`; it is never cited. `tm add`, `tm q`, and `tm recite` refuse a citation resolving under aids-dir and lint refuses one in the graph, but a teacher-authored file placed elsewhere is undetectable by the CLI; the harness deny in rule 4 is the only guard.
 6. The line-range rule: line ranges come only from `tm src`. An agent never derives a range from Read, WebFetch, a search result, or its own memory of a document; it runs `tm src <locator>` (with `--find` or a range to narrow), then cites the numbers it printed. Read and WebFetch remain useful for deciding whether a source is worth citing.
 7. The reader rule: when a `tm src` trailer shows the source exceeds one window and the teacher needs the whole of it to find ranges, the teacher spawns a reader (§2.1) with the locator and a question, then cites the ranges the reader returns after confirming them with `tm src <locator> START-END`. The teacher and planner never run `--fulldump` themselves; only the reader does.
+8. The cards rule: a card added with `tm card add` states one fact from the passage it cites, in the teacher's wording; the teacher adds nothing the passage does not say. Cards the teacher writes from its own knowledge are imported with `--origin teacher`, and cards the learner dictates with `--origin user`, so the review page can show where each came from. The teacher never cites a card, never quotes one to a grader, and never reviews cards on the learner's behalf.
 
 The **Source step** (before Orient on `tm new`): the teacher asks the learner for materials — notes, textbook chapters, docs, a repo, papers — and records their root with `tm new --src-root <dir>`. It registers every repo the learner names with `tm repo add <alias> <path>`, so repo content cites through one portable `git:` form. It cites web docs by URL and lets the cache carry the fetch and conversion cost; drift on a live URL is caught at most one cache TTL late. Learner-supplied local files — corporate downloads, output of other programs or agents — are cited as plain paths. The teacher never saves a copy of anything: a copy it makes is an aid, and only a copy the learner supplies is a legitimate plain-path source. Web sources should be immutable or versioned URLs where possible. When a citation refuses for want of a converter, the teacher reads the setup reference, advises the user on the config lines, tests the conversion, and confirms with the user before writing the config. The setup reference (`skill/teach-me/reference/setup.md`) is loaded only when needed. On every `tm new`, before the first `tm add`, the teacher tells the user to configure harness deny rules for the three graph files and for writes under src-root outside aids-dir, and points at the setup reference.
 
@@ -670,6 +689,7 @@ The **Prune phase** follows every Map. The planner's prompt primes inclusion, an
 - A learner who asks to skip or set aside a concept: `tm reserve` it if it has no questions. It stops blocking its children and can be activated later.
 - An old graph on a new binary: a command refuses with `fix: tm migrate`. Run `tm migrate`, read its output, register with `tm repo add` any repo it names, and re-run until nothing more resolves. Leftover plain paths that still resolve are legitimate and stay; for a concept whose source is now registered, `tm recite` points it at the `git:` form.
 - **Answering**: the question UI offers an explicit "I don't know" choice for every question. Picking it is the only trigger for `--concede`; record it with `tm answer <qid> "I don't know" --concede` and no grader is spawned. Any typed answer, however weak or short, is recorded without the flag and graded by a grader; the teacher never decides on its own that an answer amounts to a concession.
+- **Cards**: after a concept passes, the teacher offers to make cards for it and, if the learner agrees, writes them with `tm card add`, favoring the facts the learner missed on the way. When a lesson's source comes with a list (vocabulary, command flags, dates), the teacher imports it against its concept during Map with `tm card import --concept`. When `tm status` shows `cards due`, the teacher says so and offers to start `tmcards serve`; when it shows a leech line, the teacher asks the learner before any `tm reopen` (section 17.6).
 
 ## 13. Configuration
 
@@ -687,6 +707,9 @@ The **Prune phase** follows every Map. The planner's prompt primes inclusion, an
 | `TM_MAX_FAILS` | 2 | failed probe batches before the gate |
 | `TM_MAX_TEACH` | 8 | in-scope teach questions per teaching round before teaching ends and the locked probes are asked |
 | `TM_MAX_STALL` | 4 | in-scope teach questions in a row, across zero-pass batches, before the gate |
+| `TM_CARD_RETENTION` | 0.9 | the share of reviews the schedule aims for the learner to get right; overrides the `card-retention` key for one call (section 17.4) |
+| `TM_CARD_NEW` | 20 | new cards introduced per day; overrides `card-new` |
+| `TM_CARD_LEECH` | 4 | lapses after which a card is a leech (section 17.6); overrides `card-leech` |
 
 Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per project). Precedence for the pointer keys is flag, then environment variable, then `.tmconfig`, then the user config:
 
@@ -704,6 +727,7 @@ Config file keys (user-level `~/.config/tm/config`; `.tmconfig` overrides per pr
 | `cache-ttl` | `= <duration>` | conversion and fetch cache TTL (Go duration); default `24h`; `0` disables the cache |
 | `aids-dir` | `= <dir>` | where teacher aids live (section 3); default `<graph dir>/aids` |
 
+| `card-retention`, `card-new`, `card-leech` | `= <number>` | flashcard settings (section 17); read by `tm` and `tmcards`, which a learner often starts without the teacher's environment |
 
 ### 13.1 Source resolution
 
@@ -766,13 +790,13 @@ fix: set version pandoc = 3.2.0 in <config>; citations made under 3.1.11 may dri
 
 ### 13.2 Migration
 
-`tm migrate [<file>]` upgrades a format-1 graph to format 2 (section 4.6). It never changes a hash or a range: a citation is rewritten only to a locator that resolves to the same hash, so immutable questions (section 5) are rewritten safely, the hash proving their content is unchanged. Per citation with a plain-path locator, in order:
+`tm migrate [<file>]` upgrades a graph to format 3 (section 4.6). A format-2 graph needs only the marker changed, since format 3 adds one optional meta line; the citation steps below apply to a format-1 graph. It never changes a hash or a range: a citation is rewritten only to a locator that resolves to the same hash, so immutable questions (section 5) are rewritten safely, the hash proving their content is unchanged. Per citation with a plain-path locator, in order:
 
 1. If the `add`/`q` event logged a `commit` and the path is inside a repo matching a configured alias (by path prefix), try `git:<alias>@<commit>:<repo-relative path>` and keep it if the hash matches. If no alias matches, report `needs: tm repo add <alias> <repo path>` and leave the citation.
 2. Else if the event logged a `url`, fetch it through the current converter and keep `<url>` if the hash matches.
 3. Else leave it: a legitimate plain path.
 
-Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per citation left with its reason, then a summary. `tm migrate` always writes `%% tm:format 2` and exits 0 even when some citations stay, because plain paths keep resolving. `--dry-run` prints the same report without writing. The run takes the lock like any mutation, lints the result, and logs one `migrate` event (section 10). The teacher resolves leftovers by hand: once a source is registered, `tm recite` re-points a concept citation; a question's plain path stays as written.
+Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per citation left with its reason, then a summary. `tm migrate` always writes `%% tm:format 3` and exits 0 even when some citations stay, because plain paths keep resolving. `--dry-run` prints the same report without writing. The run takes the lock like any mutation, lints the result, and logs one `migrate` event (section 10). The teacher resolves leftovers by hand: once a source is registered, `tm recite` re-points a concept citation; a question's plain path stays as written.
 
 ## 14. Decision record
 
@@ -861,6 +885,18 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 81 | `ask`, `q`, and `gap` refuse a reserve concept with exit 1 and `fix: tm activate <concept>`; `ask` prints nothing when its batch has no unanswered question | exit 3 "unknown concept" sent the teacher looking for a typo when the concept exists and one command brings it back, and `add` already refused a reserve ID this way; a batch line with no questions under it looked like something to ask while every answer waited on the grader, and `status --concept` already chained nothing in that state | keep exit 3 for reserve IDs; print the batch line with a `pending` marker | agreed, v0.33 |
 | 82 | Graph files are named `<name>.tm.mmd` by convention and the adapter's deny rule targets `**/*.tm.mmd`; the CLI enforces no extension | `.mmd` is the standard Mermaid extension, so the recommended `**/*.mmd` deny, installed in user-level settings, kept the model off every Mermaid diagram in every project (#117); the `.jsonl` and `.lock` sidecars were already teach-me-specific; a naming convention costs no code and leaves existing `.mmd` graphs working | lesson-root-scoped deny rules only (user-level settings are often shared across hosts, so one absolute path rarely fits); a CLI-enforced extension (breaks every existing graph for no gain the convention lacks) | agreed, v0.34 |
 | 83 | `tm answer` refuses an empty or whitespace-only answer with a usage error | an empty answer holds nothing to judge, so the grader can only return `unclear`, and under §8 a second `unclear` records as `fail`; the common cause is mechanical, a command piped into `tm answer <qid> -` that failed and printed nothing, and the learner should not lose a batch to it; a learner who has no answer has `--concede` | recording it and letting the grader return `unclear` (costs a grader spawn and can end in a `fail` the learner did not earn); treating an empty answer as a concession (decision 63 makes the learner's explicit choice the only trigger) | agreed, 2026-11-11 |
+| 84 | "Decay and re-test of passed concepts" is realized as flashcards (section 17): front-and-back cards reviewed on a spaced schedule | a pass records understanding once, and facts fade without review; a card review takes seconds, where re-probing a concept takes a question, an answer, and a grader spawn | re-probing passed concepts on a timer (costs a grader per review and re-opens settled graph state); leaving decay deferred | agreed, 2026-11-11 |
+| 85 | Cards and reviews live in one file beside the graph, `<graph>.cards.jsonl`; the graph stops being the only state | review history grows without bound and changes on every review; in the graph it would bloat the rendered diagram, put a lint pass on every review, and make `tmcards` a graph writer | cards as graph nodes (all three costs above); a database file (not readable or diffable, and needs a dependency or a hand-written format) | agreed, 2026-11-11 |
+| 86 | The cards file is append-only JSONL and a card's state is derived by reading it from the top | a review is one `O_APPEND` write with no lock and no rewrite, so `tmcards` and `tm` can run at once; the history needed to fit parameters later is kept for free; the same choice as the event log (section 10) | a rewritten snapshot file (needs the lock on every review and loses history); snapshot plus log (two files to keep consistent) | proposed, 2026-11-11 |
+| 87 | Reviews run in a second binary, `tmcards`, built from the same module | the review tool needs an HTTP server and an embedded page, which the teaching CLI should not carry; `tm` keeps its command table for agents and `tmcards` is for the human; one repo, one release, one version | a `tm serve` subcommand (puts a network listener in the agent-facing CLI); a separate repo (two releases to keep in step) | agreed, 2026-11-11 |
+| 88 | Cards for a concept are written by the teacher after the pass, at concept level, with `tm card add`; the CLI derives none from probe questions | a probe is open-ended and a good card is one fact; the pass procedure deletes the questions; after the pass the teacher knows which facts the learner missed | promoting a probe question to a card (wrong shape, and it is gone at pass time); cards before the pass (drills a concept not yet taught) | agreed, 2026-11-11 |
+| 89 | A card may hold text written by the teacher or the learner; its `origin` is recorded and shown; a card is never cited | loose facts and learner-dictated cards have no source, and refusing them would send learners to another tool; the no-memory rule (section 12, rule 3) protects sources and grading, and a card is neither | source-cited cards only (blocks the learner's own lists); unlabeled origins (the learner cannot tell a sourced card from a model-written one) | agreed, 2026-11-11 |
+| 90 | The learner rates their own recall; no grader reads a card review | a review must cost no model tokens to be done daily; a wrong self-rating only moves that card's next date; the multiple-choice path through the question UI is scored by the CLI by text match, so the teacher never judges it | a grader per review (tokens and seconds on every card); the teacher judging free-text recall (the teacher has learner context, which grader isolation exists to keep out of grading) | agreed, 2026-11-11 |
+| 91 | A concept with cards carries `%% tm:cards <concept>` in the graph, with no count; this is graph format 3 | the owner asked for the link to be visible in the graph; a count would go stale because `tmcards` removes cards without writing the graph; an older binary would reject the new line as a lint error, and the format number turns that into `fix: upgrade tm` | no marker (the graph cannot show which concepts have cards); a count on the line (stale, or forces `tmcards` to write the graph); accepting the line at format 2 (older binaries fail with a lint error that names no fix) | proposed, 2026-11-11 |
+| 92 | The schedule is FSRS-6 with its published default parameters, reimplemented in Go, with no random spread on intervals | the formulas are public and fit in one short package, so decision 39's standard-library rule holds; defaults need no review history to start; without random spread the same history gives the same dates, which the tests rely on | importing `go-fsrs` (a dependency, against decision 39); SM-2 (fixed ease steps, no target retention setting); fitting parameters per learner (needs a history that does not exist yet; deferred) | proposed, 2026-11-11 |
+| 93 | `tmcards serve`, a local web page, is the main review path; `tmcards review` in a terminal and `tm due` with `tm review --pick` through the harness question UI are fallbacks | a learner's harness may be a desktop or web app with no terminal; a page the learner opens costs no tokens per card; the question-UI path works when no browser can reach the machine | terminal only (unusable from a GUI harness); question UI only (tokens and a model turn on every card) | agreed, 2026-11-11 |
+| 94 | Forgetting never changes the graph by itself: lapses surface as a leech line in `tm status` and the teacher asks before `tm reopen`; a reopened concept's cards wait, by derivation, until it passes again | a missed card can mean a slip or a badly worded card as often as a lost concept, and reopening discards a pass the learner earned; deriving the wait from the graph needs no row and cannot disagree with it | automatic reopen at a lapse count (punishes bad cards, and makes `tmcards` a graph writer); cards staying reviewable while their concept is open (drills what is being re-taught) | proposed, 2026-11-11 |
+| 95 | Lists are imported as UTF-8 tab-separated text, front then back, shown as plain text only | Anki and spreadsheet programs read and write it, it needs no quoting rules for the common case, and plain-text display means a list from an untrusted source cannot inject markup into the review page | CSV (quoting rules, and commas are common in card text); a `%% tm:list` line in the graph pointing at a file (a second place for card state to disagree); Anki `.apkg` (a zipped database; needs a dependency) | proposed, 2026-11-11 |
 
 ## 15. Deferred
 
@@ -878,9 +914,9 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 - Remote git fetch.
 - `tm lint --remote` (resolve fetched citations).
 - Mermaid size limits under long URIs: measure in M9.
-- Decay and re-test of passed concepts across days.
 - Adapters from `tm ask --format json` to a specific harness's question UI.
-- Multiple citations per concept via a `%% tm:cite <id> <cite>` meta line at format 3. Not needed until a lesson shows a concept whose foundation is two disjoint passages.
+- Multiple citations per concept via a `%% tm:cite <id> <cite>` meta line at a later format. Not needed until a lesson shows a concept whose foundation is two disjoint passages.
+- Flashcards (section 17): parameters fitted to the learner's own review history; cloze cards; images and audio on cards; export to Anki; compaction of the cards file; a drift check on card citations; card capture from the review page's microphone or camera.
 
 ## 16. Implementation
 
@@ -914,6 +950,7 @@ Runtime code imports the standard library and this module only. `depguard` in `.
 
 ```
 cmd/tm/main.go            entry point; wires cli to os.Args, stdin, stdout, env
+cmd/tmcards/main.go       entry point for the review tool (section 17.5)
 internal/cli/             command table, argument parser, help and usage lines, output, exit codes
 internal/graph/           model, subset parser, writer, label escaping, edge placement (section 4)
 internal/state/           derived state (section 5): frontier, batch states, targets, gate, stall, spent
@@ -924,6 +961,9 @@ internal/config/          config file lookup and targeted key writes: file, src-
 internal/source/          source resolution: resolve, fetch, convert, git locators, cache
 internal/report/          tm report: walk, format, inline text
 internal/eventlog/        section 10
+internal/cards/           cards file rows, derived card state, import parsing (sections 17.2, 17.3)
+internal/fsrs/            the schedule (section 17.4)
+internal/review/          tmcards: terminal loop, HTTP server, embedded page (section 17.5)
 internal/errlog/          section 10.1
 internal/lockfile/        lock, atomic write
 internal/docver/          TM_DOC frontmatter read, tm-version check
@@ -966,13 +1006,16 @@ LICENSE  NOTICE  THIRD_PARTY_NOTICES.md  CITATION.cff  CONTRIBUTING.md  CHANGELO
 | Fuzz | `FuzzEscape` (escape then unescape is identity) and `FuzzParse` (no panics; anything accepted re-serializes to something accepted) and `FuzzSession` (random learner sessions against a two-concept graph; every frontier concept keeps a command that advances it, and `ask` and `status` never go silent while questions remain). CI runs each for 30 s |
 | Invariants | one case per refusal in section 7, asserting exit code, `err:` line, `fix:` line, and the `ERRORS.jsonl` row |
 | Lifecycle | end-to-end transcripts against the built binary covering every transition in section 12: pass, unclear replacement, teaching round, `--oos`, stall gate, probe gate, teaching spent, `reopen`, upstream insert, gate with pending probes, prune then pass through a reserve parent, gate cleared by `activate`, conceded probe opens a teaching round, two conceded probe batches trip the gate. Monotonic ID lifecycle: grade a concept's probes to pass; allocate a new question for a second concept; assert the new ID (e.g. `q3`) exceeds every `qN`/`aN` ID recorded in the event log before the allocation (verifies §4.3 non-reuse after the pass procedure clears the testing block). |
-| Format and migrate | a format-1 graph refuses on every command but `migrate`, `lint`, and help; `tm migrate` rewrites a repo-path citation to `git:`, leaves an unresolvable one with a reason, writes `%% tm:format 2`, exits 0, and the result lints; a format above the binary refuses everywhere |
+| Format and migrate | a format-1 or format-2 graph refuses on every command but `migrate`, `lint`, and help; `tm migrate` rewrites a format-1 repo-path citation to `git:`, leaves an unresolvable one with a reason, changes only the marker of a format-2 graph, writes `%% tm:format 3`, exits 0, and the result lints; a format above the binary refuses everywhere |
 | Git resolution | a fixture repo built in a temp dir by the test; each `git:` form (file at a ref, a commit, a diff, a diff for one path) resolves to the expected text and hash; `<ref>` is rewritten to a short SHA on write; an unknown alias, an unresolvable ref, and no `git` configured each refuse |
 | Cache | a fetch is served from the cache within the TTL and re-fetched after expiry; `cache-ttl=0` disables it; `tm cache clear` empties it |
 | Aids | `tm add`, `tm q`, and `tm recite` refuse a citation resolving under aids-dir and lint refuses one; `tm aid` and `tm aid rm` write and remove the meta line; a qid's aid is removed with its question and logged in the `gc` event |
 | Source text | `tm src` numbering equals the lines `tm add` hashes across plain, converted, git, and URI locators; `--find` and ranges narrow it |
 | Concurrency | 20 parallel `grade` calls on one graph all land, the file lints, and the event log has 20 `grade` rows |
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
+| Cards | rows round-trip; derived state for every row of 17.2's table, including a concept reopened and passed again; every import refusal in 17.3; a malformed line refuses every card command; 20 parallel `review` appends all land |
+| Schedule | the worked values in 17.4 to four decimal places; every clamp; a fixed-clock sequence of ratings yields the expected due dates |
+| Review server | a request without the token gets 404; a foreign `Host` gets 403; a non-JSON `POST` is refused; card text containing markup is served escaped; the server exits after the idle time |
 
 Tests run with `-race` on Linux, macOS, and Windows.
 
@@ -995,7 +1038,7 @@ Runs on every pull request and on pushes to `main`. `actions/checkout` uses `fet
 | `lint` | golangci-lint v2.14.0 | any finding |
 | `test` | `go test -race ./...` on `ubuntu-latest`, `macos-latest`, `windows-latest` | any failure |
 | `fuzz` | both fuzz targets, 30 s each, Linux | any crasher |
-| `diff-coverage` | pull requests only, Linux: `go test -race -covermode=atomic -coverprofile=coverage.out ./...`, excluding `cmd/tm` and `internal/tools`; convert with `go tool gocover-cobertura`; rewrite filenames from module path to repository-relative; then `diff-cover coverage.xml --compare-branch=origin/main --fail-under=85` | statement coverage of lines added or changed on the branch, relative to `main`, below 85% |
+| `diff-coverage` | pull requests only, Linux: `go test -race -covermode=atomic -coverprofile=coverage.out ./...`, excluding `cmd/tm`, `cmd/tmcards`, and `internal/tools`; convert with `go tool gocover-cobertura`; rewrite filenames from module path to repository-relative; then `diff-cover coverage.xml --compare-branch=origin/main --fail-under=85` | statement coverage of lines added or changed on the branch, relative to `main`, below 85% |
 | `conformance` | 16.6 | any parse failure or membership mismatch |
 | `vuln` | `go tool govulncheck ./...` | any finding |
 | `version-sync` | compares `internal/version/VERSION` with `version` in `CITATION.cff` and with `metadata.tm-version` in `skill/teach-me/SKILL.md` | the `CITATION.cff` version differs, or major.minor differ from `tm-version` |
@@ -1023,8 +1066,8 @@ Hooks can be skipped with `--no-verify`. That is acceptable for human users, and
 1. A pull request bumps `internal/version/VERSION` and `version` in `CITATION.cff` (with `date-released`), and `metadata.tm-version` when major or minor changes. `version-sync` guards it.
 2. After merge, the owner tags `main` with `v<VERSION>` and pushes the tag. Nothing else triggers a release.
 3. The workflow fails unless the tag equals `v` plus the contents of `VERSION`, then runs every `ci.yml` job.
-4. GoReleaser v2 builds `./cmd/tm` as `tm` for linux, darwin, and windows on amd64 and arm64, with `CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`, and `mod_timestamp` set to the commit time so builds are reproducible.
-5. Archives are `tar.gz`, and `zip` on Windows, named `tm_<version>_<os>_<arch>`. Each holds the binary, `README.md`, `CHANGELOG.md`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `CITATION.cff`, and the whole `skill/teach-me/` tree (`SKILL.md`, `agents/`, `reference/`), so a release always ships the adapters that match it.
+4. GoReleaser v2 builds `./cmd/tm` as `tm` and `./cmd/tmcards` as `tmcards` for linux, darwin, and windows on amd64 and arm64, with `CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`, and `mod_timestamp` set to the commit time so builds are reproducible.
+5. Archives are `tar.gz`, and `zip` on Windows, named `tm_<version>_<os>_<arch>`. Each holds both binaries, `README.md`, `CHANGELOG.md`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `CITATION.cff`, and the whole `skill/teach-me/` tree (`SKILL.md`, `agents/`, `reference/`), so a release always ships the adapters that match it.
 6. GoReleaser writes `checksums.txt` and publishes the GitHub release with notes grouped by Conventional Commit type. Tags with a prerelease suffix publish as prereleases.
 7. `actions/attest-build-provenance` attests every archive; the step is skipped while the repository is private, since GitHub refuses attestations there. The workflow needs `contents: write`, `id-token: write`, and `attestations: write`.
 
@@ -1042,4 +1085,197 @@ Each milestone is one or more pull requests that pass every CI job that exists b
 6. Question mutations (`q`, `answer`, `grade`) with every transition, the gate, the stall streak, and teaching spent; lifecycle and concurrency tests.
 7. `release.yml`, `.goreleaser.yaml`, `release-check` and `version-sync` jobs; tag `v0.1.0`.
 
+Flashcards (section 17) land after `v0.1.0`, in this order:
+
+8. Graph format 3: the `%% tm:cards` line in the parser, writer, and lint; `tm migrate` from format 2.
+9. `cards`: rows, derived state, import parsing; `tm card add`, `tm card import`, `tm card show`, `tm card rm`; the `card` event; the cards-file refusals.
+10. `fsrs`; `tm due`, `tm review`; the `cards due` count and leech lines in `tm status`; cards in `tm show`.
+11. `cmd/tmcards`: `tmcards review`, then `tmcards serve` with the embedded page; the second binary in `.goreleaser.yaml`.
+12. Adapters: the cards rule and usage in `skill/teach-me/SKILL.md`, and the cards-file deny entry in the setup reference and `README.md`.
+
 `v0.1.0` is done when every command in section 6 behaves as specified, every refusal in section 7 has a test, the lifecycle transcripts cover every edge in section 12's diagram, and all CI jobs are green on all three operating systems.
+
+## 17. Flashcards
+
+A passed concept records that the learner understood it once. Flashcards keep it remembered: short front-and-back cards the learner reviews on a schedule that spaces each card further apart as long as it is recalled. This section is the "decay and re-test" item that section 15 listed as deferred through v0.35 (decision 84).
+
+Three rules hold throughout:
+
+- A card is a drill, never a source. Nothing cites a card, and no grader reads one.
+- A concept is taught before it is drilled. Cards tied to a concept are reviewable only while that concept is in `passed`.
+- Reviews cost no model tokens on the main path. The learner rates their own recall in `tmcards`; no grader is spawned (decision 90).
+
+### 17.1 Where cards come from
+
+| Source | Command | Origin recorded |
+|---|---|---|
+| A passed concept: after the pass, the teacher writes one or more cards worded from a cited passage | `tm card add <concept> <cite> "<front>" "<back>"` | `source` |
+| A list that accompanies a concept, such as a chapter's vocabulary: imported at any time, reviewable once the concept passes | `tm card import <locator> --concept <id>` | `source`, or the `--origin` given |
+| Loose facts with no concept, from an outside file, the learner, or the teacher | `tm card import <locator> [--origin user\|teacher]` | `source`, `user`, or `teacher` |
+
+The teacher writes the cards for a passed concept; the CLI does not derive them from probe questions. A probe is open-ended and a good card is one fact, the questions are deleted at pass time (section 8, step 4), and after the pass the teacher knows which facts the learner struggled with (decision 88). A concept with several facts worth keeping gets several cards.
+
+### 17.2 Cards file
+
+Cards live in `<graph>.cards.jsonl`, beside the graph (section 3). It is state: deleting it loses the cards and their review history. It is append-only, one JSON object per line, and the current state of every card is derived by reading it from the top (decision 86). Common fields: `t` (ISO 8601 UTC) and `ev`.
+
+| `ev` | Fields | Written by |
+|---|---|---|
+| `card` | `n` (card number), `concept` (ID or null), `origin` (`source`, `user`, `teacher`), `front`, `back`, `src` (citation with hash, or null) | `tm card add`, `tm card import` |
+| `review` | `n`, `rating` (1 again, 2 hard, 3 good, 4 easy), `via` (`serve`, `term`, `rate`, `pick`), then the scheduler's result: `s`, `d`, `step`, `due` (section 17.4) | `tmcards`, `tm review` |
+| `edit` | `n`, `front`, `back` | `tmcards` |
+| `hold` | `n`, `on` (true or false) | `tmcards` |
+| `rm` | `n` | `tm card rm`, `tm drop`, `tmcards` |
+
+Card numbers are integers starting at 1, allocated in order and never reused. They are their own namespace: only the card commands take them, so no concept ID is reserved for them.
+
+Writing a `card` row takes the graph's lock, because the next number comes from reading the file. Every other row is a single `O_APPEND` write and takes no lock, so a review never waits on a mutating `tm` command.
+
+A line that is not a valid row stops the command: `err: <file> line <N> is not a card row`. The file is not for hand edits, and the file-access rule (section 12, rule 4) covers it.
+
+Derived state of a card:
+
+| State | Condition |
+|---|---|
+| removed | an `rm` row exists for it |
+| waiting | its concept is not in `passed` (it is in `untested` or `reserve`, or no longer exists) |
+| held | its latest `hold` row has `on: true` |
+| new | active, with no `review` row |
+| learning | active, and its latest review left it on a learning step (section 17.4) |
+| review | active, past the learning steps |
+
+A card with no concept is never waiting. Reopening a concept makes its cards wait, and passing it again makes them reviewable with their history intact; neither writes a row, because the state is derived from the graph (decision 94).
+
+### 17.3 Import format
+
+`tm card import` reads tab-separated text, the shape Anki and spreadsheet programs import and export:
+
+- UTF-8; LF or CRLF line endings.
+- One card per line: front, a tab, back. Fields after the second are ignored.
+- Blank lines and lines starting with `#` are skipped.
+- A line with no tab, an empty front or back, or a field over 1,000 characters refuses the whole import with the line number; nothing is written.
+- A line whose concept, front, and back equal those of a card that is not removed is skipped and counted.
+
+Fields are stored as written and always displayed as plain text. Markup in a field is never interpreted.
+
+With `--origin source` (the default) the locator resolves exactly as `tm src` resolves one, including converters, `git:` forms, the cache, and the aids-dir refusal, and every card's `src` is the citation of the whole file with its hash. With `--origin user` or `--origin teacher` the locator is a file path, or `-` for stdin; it is not treated as a source, may sit under aids-dir, and `src` is null.
+
+### 17.4 Scheduling
+
+The schedule is FSRS-6 (Free Spaced Repetition Scheduler, version 6) with its published default parameters, reimplemented in `internal/fsrs` (decision 92). The formulas below follow the algorithm description at `github.com/open-spaced-repetition/awesome-fsrs/wiki/The-Algorithm` and were checked against the MIT-licensed reference code `github.com/open-spaced-repetition/go-fsrs/v4` v4.0.0. Where the two differ in detail (the floors, the ceiling on a lapse, the ordering of intervals), this section follows the code.
+
+Each card carries two numbers. Stability `S` is the number of days after which the chance of recall has fallen to 90%. Difficulty `D` runs from 1 to 10. A rating `G` is 1 (again), 2 (hard), 3 (good), or 4 (easy). The parameters `w0` to `w20` are fixed:
+
+```
+0.212   1.2931  2.3065  8.2956  6.4133  0.8334  3.0194
+0.001   1.8722  0.1666  0.796   1.4835  0.0614  0.2629
+1.6483  0.6014  1.8729  0.5425  0.0912  0.0658  0.1542
+```
+
+Formulas, with `t` the days since the card's last review, `r` the target retention, and `exp` the natural exponential:
+
+```
+decay  = -w20
+factor = 0.9^(1/decay) - 1
+
+recall chance     R  = (1 + factor * t / S)^decay
+interval in days  I  = S / factor * (r^(1/decay) - 1), rounded to the nearest whole day, then held to [1, 36500]
+
+first review      S  = w[G-1], at least 0.1
+                  D  = D0(G), where D0(G) = w4 - exp(w5 * (G - 1)) + 1
+
+difficulty        D' = D - w6 * (G - 3) * (10 - D) / 9
+                  D  = w7 * D0(4) + (1 - w7) * D'            with D0(4) not clamped
+
+recalled, t >= 1  S  = S * (1 + exp(w8) * (11 - D) * S^(-w9) * (exp(w10 * (1 - R)) - 1) * h * e)
+(G >= 2)               h = w15 when G = 2, else 1;  e = w16 when G = 4, else 1
+
+lapsed, t >= 1    S  = min( w11 * D^(-w12) * ((S + 1)^w13 - 1) * exp(w14 * (1 - R)),  S / exp(w17 * w18) )
+(G = 1)
+
+same day, t = 0   S  = S * m, where m = exp(w17 * (G - 3 + w18)) * S^(-w19), and m is at least 1 when G >= 2
+```
+
+After every step `S` is held to [0.001, 36500] and `D` to [1, 10]. The stability formulas use the difficulty from before the review; the review row records the new one.
+
+Steps. A new card passes through two learning steps of 1 minute and 10 minutes before it gets an interval in days. A card forgotten in review passes through one relearning step of 10 minutes.
+
+| Card is | Rating | Result |
+|---|---|---|
+| new, learning, or relearning | again | back to the first step: due in 1 minute (10 when relearning) |
+| new, learning, or relearning | hard | stays on its step: due in 6 minutes (15 when relearning) |
+| new, learning, or relearning | good | moves to the next step and is due after that step's time; from the last step it moves to review with interval `I` |
+| new, learning, or relearning | easy | moves to review with interval `I` |
+| review | again | a lapse: moves to the relearning step, due in 10 minutes |
+| review | hard, good, easy | stays in review with interval `I` |
+
+For a card in review, the intervals for hard, good, and easy are all computed and then ordered: hard is at most good, good is at least hard plus 1, and easy is at least good plus 1. The interval for the rating given is the one used.
+
+Each `review` row records the result: `s` and `d` after the review, `step` (learning or relearning steps left, 0 for a card in review), and `due` (a UTC time). The scheduler reads a card's latest review row and nothing earlier, except to count lapses.
+
+Days. A day is a calendar day in the local time zone of the machine that runs the command. `t` is the number of days between the local date of the last review and today's. A card on a step is due once the time in `due` has passed. A card in review is due from the start of the local day that `due` falls on, so a card reviewed in the evening can be reviewed again in the morning of its due day.
+
+Order. Due cards are shown in this order: cards on a step, earliest `due` first; then cards in review, earliest `due` first; then new cards, lowest number first. At most `TM_CARD_NEW` cards (default 20) get their first review on one local day; the rest stay new and are not counted as due.
+
+Lapses. A card's lapse count is the number of `again` ratings it received while in review. Section 17.6 uses it.
+
+Settings. `TM_CARD_RETENTION` (default 0.9) is `r`. A value outside 0.70 to 0.97 is a usage error. A higher value means shorter intervals and more reviews: a card with `S` of 10 days gets an interval of 10 days at 0.9, 4 days at 0.95, and 33 days at 0.8.
+
+No random spread is added to intervals, so the same review history always gives the same dates.
+
+Worked values at the defaults, for the tests of section 16.5:
+
+| Sequence | `S` | `D` | Next due |
+|---|---|---|---|
+| first review good | 2.3065 | 2.1181 | 10 minutes (second step) |
+| first review easy | 8.2956 | 1.0000 | 8 days |
+| first review again | 0.2120 | 6.4133 | 1 minute |
+| good, then good the same day | 2.3065 | 2.1112 | 2 days |
+| good, then again the same day | 0.7751 | 7.3945 | 1 minute |
+| good, good, then good 2 days later (`R` 0.9095) | 10.9710 | 2.1043 | 11 days |
+| good, good, then hard 2 days later | 7.5174 | 4.7483 | 8 days |
+| good, good, then easy 2 days later | 18.5343 | 1.0000 | 19 days |
+| good, good, then again 2 days later | 0.6077 | 7.3922 | 10 minutes (relearning) |
+
+### 17.5 `tmcards`
+
+`tmcards` is a second binary built from `cmd/tmcards` in the same module (decision 87). It is the human's tool: it shows cards and records reviews. It reads the graph to learn which concepts are passed, reads and appends to the cards file, and never writes the graph or the event log. It imports the standard library and this module only, and like `tm` it names no model, harness, or agent. It resolves the graph as section 3 describes (`--file`, `$TM_FILE`, `.tmconfig`, user config).
+
+| Command | Effect | Prints |
+|---|---|---|
+| `tmcards serve [--port <n>] [--bind <addr>] [--idle <duration>]` | serve the review page until idle for `--idle` (default `30m`) | one line: the page URL |
+| `tmcards review` | review due cards in the terminal: the front, Enter to show the back, then `1` to `4` to rate | the cards |
+| `tmcards --version` | version | the version |
+
+`tmcards serve` is the main review path (decision 93). The learner's harness may be a desktop or web GUI with no terminal, so the teacher starts `tmcards serve` in the background and gives the learner the URL. A review session then costs no tokens.
+
+The page:
+
+- One HTML file with inline CSS and JavaScript, embedded in the binary. It loads nothing from the network.
+- Shows the due count, then one card at a time: front, a control to reveal the back, and the four ratings (keys `1` to `4`). Each card shows its origin, and its citation when it has one, so the learner can tell a card taken from a source from one the teacher or the learner wrote.
+- Lists all cards with their state, and lets the learner edit, hold, release, or remove a card.
+- Inserts card text as text, never as HTML.
+
+The server:
+
+- Binds `127.0.0.1` unless `--bind` names another address; `--port 0` (the default) lets the system pick a free port. `--bind` exists for a `tmcards` that runs inside a container whose ports are forwarded; binding a routable address exposes the cards to that network.
+- Puts a random 128-bit token in the URL path (`http://127.0.0.1:<port>/<token>/`). Every route sits under it and anything else returns 404.
+- Refuses with 403 a request whose `Host` header is not the bound address or `localhost` with the served port, so a web page that rebinds a DNS name to the loopback address cannot reach it.
+- Accepts changes only as `POST` with `Content-Type: application/json`, which a cross-site form cannot send.
+
+When no browser can reach the machine, the teacher reviews through the harness question UI instead, at a token cost per card:
+
+1. `tm due --format json` prints up to `--limit` (default 4) due cards, each with its number, front, and up to four options: the card's back and backs of other cards, taken from the same concept first, in an order shuffled by the CLI.
+2. The teacher shows each front with its options through the question UI.
+3. `tm review <n> --pick "<chosen text>"` scores it: the CLI compares the text with the card's back, records `good` when they are equal and `again` when they are not, and prints `right` or `wrong | <back>`.
+
+The teacher never decides whether a pick was right. A card with no other card to draw options from is printed with none; the teacher shows its front, then its back from `tm card show <n>`, and records the learner's own rating with `tm review <n> again|hard|good|easy`.
+
+### 17.6 What the teacher sees
+
+Forgetting never changes the graph by itself (decision 94). It reaches the teacher as two signals:
+
+- `tm status` adds `cards due <n>` to its counts line when any card is due. The teacher tells the learner and offers to start `tmcards serve`.
+- A card is a leech when its lapses reach `TM_CARD_LEECH`. `tm status` prints one line for each passed concept that has a leech: `<concept>  passed  leech <m>/<n> cards`. The teacher then asks the learner whether the concept needs teaching again, and runs `tm reopen` if so. A leech can also mean a badly worded card, which the learner fixes in `tmcards`.
+
+`tm show <concept>` lists the concept's cards: number, state, and front.
