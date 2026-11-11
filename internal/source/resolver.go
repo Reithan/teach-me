@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reithan/teach-me/internal/cards"
 	"github.com/reithan/teach-me/internal/cite"
 )
 
@@ -386,6 +387,13 @@ func (r *Resolver) readPathContent(c cite.Citation) ([]byte, Meta, error) {
 				Fix:     "cite the primary source",
 				AidPath: c.File,
 			}
+		}
+	}
+
+	// Refuse a cards file: it is state, never a source (§7).
+	if cards.IsCardsFile(path) {
+		return nil, Meta{}, &RefusalError{
+			Err: fmt.Sprintf("%s is a cards file, not a source", c.File),
 		}
 	}
 
