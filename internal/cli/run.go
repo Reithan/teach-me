@@ -75,7 +75,14 @@ func RunWithIO(args []string, in io.Reader, out, errOut io.Writer) int {
 
 	// ── --help <command> [<flag>] ────────────────────────────────────────────
 	if (first == "--help" || first == "-h") && len(args) >= 2 {
-		cmd := findCommand(args[1])
+		cmd, words := findCommandWords(args[1:])
+		if cmd == nil && len(subcommandsOf(args[1])) > 0 {
+			// A command group such as `card`: one usage line per subcommand.
+			for _, sub := range subcommandsOf(args[1]) {
+				writeUsageLines(*sub, out)
+			}
+			return 0
+		}
 		if cmd == nil {
 			writeUnknown(errOut, args[1], args, role)
 			if mismatch := baselineHelp(out); mismatch != "" {
@@ -84,16 +91,33 @@ func RunWithIO(args []string, in io.Reader, out, errOut io.Writer) int {
 			return 3
 		}
 		flagArg := ""
-		if len(args) >= 3 {
-			flagArg = args[2]
+		if len(args) >= 2+words {
+			flagArg = args[1+words]
 		}
 		specificHelp(cmd, flagArg, out)
 		return 0
 	}
 
-	// ── Dispatch on first token as command name ──────────────────────────────
-	cmd := findCommand(first)
+	// ── Dispatch on the command name: one word, or two for a subcommand ──────
+	cmd, words := findCommandWords(args)
 	if cmd == nil {
+		if subs := subcommandsOf(first); len(subs) > 0 {
+			if len(args) >= 2 && (args[1] == "--help" || args[1] == "-h") {
+				for _, sub := range subs {
+					writeUsageLines(*sub, out)
+				}
+				return 0
+			}
+			names := make([]string, len(subs))
+			for i, sub := range subs {
+				names[i] = strings.TrimPrefix(sub.Name, first+" ")
+			}
+			errMsg := fmt.Sprintf("%s needs one of: %s", first, strings.Join(names, ", "))
+			fixMsg := "tm --help " + first
+			writeErrFix(errOut, errMsg, fixMsg)
+			appendErrLog(role, args, 3, errMsg, &fixMsg)
+			return 3
+		}
 		writeUnknown(errOut, first, args, role)
 		if mismatch := baselineHelp(out); mismatch != "" {
 			appendErrLog(role, args, 3, mismatch, nil)
@@ -101,7 +125,7 @@ func RunWithIO(args []string, in io.Reader, out, errOut io.Writer) int {
 		return 3
 	}
 
-	remaining := args[1:]
+	remaining := args[words:]
 
 	// ── <command> --help [<flag>] ────────────────────────────────────────────
 	if len(remaining) > 0 && (remaining[0] == "--help" || remaining[0] == "-h") {
@@ -189,6 +213,7 @@ func RunWithIO(args []string, in io.Reader, out, errOut io.Writer) int {
 		Positionals: pos,
 		Flags:       flags,
 		FileFlag:    fileFlag,
+		In:          in,
 		Out:         out,
 		ErrOut:      errOut,
 	}
@@ -471,7 +496,7 @@ func readStdinArgs(cmd *Command, pos []string, in io.Reader) (idx, n int, errMsg
 func markStdinArg(cmd *Command, argv []string, idx, n int) []string {
 	out := append([]string(nil), argv...)
 	seen := 0
-	for i := 1; i < len(out); i++ {
+	for i := strings.Count(cmd.Name, " ") + 1; i < len(out); i++ {
 		tok := out[i]
 		if strings.HasPrefix(tok, "--") {
 			if tok == "--file" || flagTakesValue(cmd, tok[2:]) {
