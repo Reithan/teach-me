@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // State is the derived state of a card (§17.2).
@@ -40,6 +41,9 @@ type Card struct {
 	// Lapses is the number of again ratings the card got while in review
 	// (§17.4).
 	Lapses int
+	// First is the time of the first review row, zero for a card never
+	// reviewed. The daily limit on new cards counts by it (§17.4).
+	First time.Time
 	// Last is the latest review row, nil for a card never reviewed. The
 	// scheduler reads this row and nothing earlier.
 	Last *Row
@@ -144,6 +148,9 @@ func (d *Deck) apply(r Row) bool {
 	case EvReview:
 		if r.Rating == Again && c.Last != nil && c.Last.Step == 0 {
 			c.Lapses++
+		}
+		if c.Reviews == 0 {
+			c.First = r.T
 		}
 		c.Reviews++
 		row := r
