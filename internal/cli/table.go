@@ -1,5 +1,11 @@
 package cli
 
+import (
+	"strings"
+
+	"github.com/reithan/teach-me/internal/cards"
+)
+
 // Table is the single declarative command table. Every §6 command is listed
 // here; the dispatcher, help renderer, and role guard all derive their
 // behavior from this slice. No command logic is scattered elsewhere.
@@ -184,6 +190,58 @@ var Table = []Command{
 		},
 		ForbidGrader: true,
 		Run:          aidRun,
+	},
+	{
+		Name: "card add",
+		PosArgs: []PosArg{
+			{Name: "<concept>"},
+			{Name: "<cite>"},
+			{Name: `"<front>"`, Stdin: true},
+			{Name: `"<back>"`, Stdin: true},
+		},
+		ForbidGrader: true,
+		Run:          cardAddRun,
+	},
+	{
+		Name: "card import",
+		PosArgs: []PosArg{
+			{Name: "<locator>"},
+		},
+		Flags: []FlagSpec{
+			{Name: "concept", TakesValue: true, ValueName: "<id>"},
+			{
+				Name: "origin", TakesValue: true, ValueName: "source|user|teacher",
+				Values: []string{cards.OriginSource, cards.OriginUser, cards.OriginTeacher},
+			},
+		},
+		ForbidGrader: true,
+		Run:          cardImportRun,
+	},
+	{
+		Name: "card show",
+		PosArgs: []PosArg{
+			{Name: "<n>"},
+		},
+		ForbidGrader: true,
+		Run:          cardShowRun,
+	},
+	{
+		Name: "card edit",
+		PosArgs: []PosArg{
+			{Name: "<n>"},
+			{Name: `"<front>"`, Stdin: true},
+			{Name: `"<back>"`, Stdin: true},
+		},
+		ForbidGrader: true,
+		Run:          cardEditRun,
+	},
+	{
+		Name: "card rm",
+		PosArgs: []PosArg{
+			{Name: "<n>"},
+		},
+		ForbidGrader: true,
+		Run:          cardRmRun,
 	},
 	{
 		Name: "prune",
@@ -398,9 +456,27 @@ func init() {
 	}
 }
 
-// findCommand returns the Command with the given name, or nil.
-func findCommand(name string) *Command {
-	return tableIndex[name]
+// findCommandWords resolves the command at the start of args. A two-word
+// name such as "card add" wins over a one-word one. It returns the command
+// and how many tokens its name took, or nil and 1.
+func findCommandWords(args []string) (*Command, int) {
+	if len(args) >= 2 {
+		if cmd := tableIndex[args[0]+" "+args[1]]; cmd != nil {
+			return cmd, 2
+		}
+	}
+	return tableIndex[args[0]], 1
+}
+
+// subcommandsOf returns the commands named "<group> <sub>", in table order.
+func subcommandsOf(group string) []*Command {
+	var out []*Command
+	for i := range Table {
+		if strings.HasPrefix(Table[i].Name, group+" ") {
+			out = append(out, &Table[i])
+		}
+	}
+	return out
 }
 
 // FindCommand returns the Command with the given name, or nil. Exported for
