@@ -319,6 +319,7 @@ Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error o
 | `tm card add <concept> <cite> "<front>" "<back>"` | teacher: add one card to a passed concept, worded from the cited passage (section 17.1). Writes `%% tm:cards` on the concept's first card. Logged | the card number |
 | `tm card import <locator> [--concept <id>] [--origin source\|user\|teacher]` | add one card per line of a tab-separated list (section 17.3). With `--concept` the cards belong to that concept, which may be in any block, and wait until it is passed. Logged | `cards <added> skipped <n>` |
 | `tm card show <n>` | read-only: one card | number, state, origin, concept, citation, front, back, one per line |
+| `tm card edit <n> "<front>" "<back>"` | reword a card; its review history and schedule are kept (section 17.2). Logged | `ok` |
 | `tm card rm <n>` | remove a card. Logged | `ok` |
 | `tm due [--format lines\|json] [--limit N]` | read-only: cards due now with answer options, for review through the question UI when `tmcards serve` cannot be reached (section 17.5). `--limit` defaults to 4 | one line per card: number, front, options; nothing when none is due |
 | `tm review <n> again\|hard\|good\|easy` | record the learner's own rating of a card | `ok` |
@@ -400,7 +401,8 @@ The `reserve` count and the `cards due` count are each printed only when nonzero
 | `card add` | the concept is not in `passed` (`err: <concept> is not passed`; `fix: pass it first, or attach a list with tm card import <locator> --concept <concept>`); the front or back is empty or over 1,000 characters; the citation refuses as it would for `q`, without the size cap |
 | `card import` | `--concept` names an unknown ID or a question or answer; a line is malformed (section 17.3; `err: line <N>: <what is wrong>`); with origin `source`, the locator refuses as it would for `add` |
 | `card add`, `card import`, `card show`, `card rm`, `due`, `review` | the cards file has a line that is not a card row (`err: <file> line <N> is not a card row`) |
-| `card show`, `card rm`, `review` | the card number is unknown or removed (exit 3) |
+| `card show`, `card edit`, `card rm`, `review` | the card number is unknown or removed (exit 3) |
+| `card edit` | the front or back is empty or over 1,000 characters |
 | `review` | the card is waiting or held; both a rating and `--pick` are given, or neither |
 | `add`, `q`, `recite`, `src` | the locator resolves to a cards file (`err: <path> is a cards file, not a source`) |
 | `grade` | `TM_ROLE=teacher`; `--oos` on a probe |
@@ -559,7 +561,7 @@ One JSON object per line. Common fields: `t` (ISO 8601 UTC), `ev`, `role` (`$TM_
 | `recite` | `id`, `before` (old citation), `after` (new citation at new range); optional: `ref` (the git ref as typed), `commit` (resolved SHA for a `git:` file-at-ref citation) |
 | `recheck` | `concept`, `verdict` (`keep`, `reopen`), `summary`; optional: `kind: errata` (a scope-errata recheck, which carries no per-question fields); for a drift recheck, per question: `q`, `src_text_before`, `src_text_after` |
 | `aid` | `id` (concept or qid), `path`, `action` (`add`, `rm`) |
-| `card` | `action` (`add`, `import`, `rm`), `cards` (the card numbers), `concept` (ID or null); for `import`: `src` (the locator) and `origin`. Card text and reviews are in the cards file, not here |
+| `card` | `action` (`add`, `import`, `edit`, `rm`), `cards` (the card numbers), `concept` (ID or null); for `import`: `src` (the locator) and `origin`. Card text and reviews are in the cards file, not here |
 | `migrate` | `from`, `to` (format numbers), `rewritten` (count), `left` (count), `unresolved` (IDs left as plain paths) |
 
 `src_text` in `grade` records what the grader saw, so a later audit survives edits to the source file.
@@ -1014,7 +1016,7 @@ LICENSE  NOTICE  THIRD_PARTY_NOTICES.md  CITATION.cff  CONTRIBUTING.md  CHANGELO
 | Concurrency | 20 parallel `grade` calls on one graph all land, the file lints, and the event log has 20 `grade` rows |
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
 | Cards | rows round-trip; derived state for every row of 17.2's table, including a concept reopened and passed again; every import refusal in 17.3; a malformed line refuses every card command; 20 parallel `review` appends all land |
-| Schedule | the worked values in 17.4 to four decimal places; every clamp; a fixed-clock sequence of ratings yields the expected due dates |
+| Schedule | the worked values in 17.4 to four decimal places; every clamp; a fixed-clock sequence of ratings yields the expected due dates; two sessions over the same due cards with different seeds give different orders, and one seed gives one order; a step card due within 20 minutes is shown when the queue is empty |
 | Review server | a request without the token gets 404; a foreign `Host` gets 403 and the `--public` host is accepted; the printed URL carries the token and the `--public` host; a non-JSON `POST` is refused; card text containing markup is served escaped; the server exits after the idle time |
 
 Tests run with `-race` on Linux, macOS, and Windows.
@@ -1088,7 +1090,7 @@ Each milestone is one or more pull requests that pass every CI job that exists b
 Flashcards (section 17) land after `v0.1.0`, in this order:
 
 8. Graph format 3: the `%% tm:cards` line in the parser, writer, and lint; `tm migrate` from format 2.
-9. `cards`: rows, derived state, import parsing; `tm card add`, `tm card import`, `tm card show`, `tm card rm`; the `card` event; the cards-file refusals.
+9. `cards`: rows, derived state, import parsing; `tm card add`, `tm card import`, `tm card show`, `tm card edit`, `tm card rm`; the `card` event; the cards-file refusals.
 10. `fsrs`; `tm due`, `tm review`; the `cards due` count and leech lines in `tm status`; cards in `tm show`.
 11. `cmd/tmcards`: `tmcards review`, then `tmcards serve` with the embedded page; the second binary in `.goreleaser.yaml`.
 12. Adapters: the cards rule and usage in `skill/teach-me/SKILL.md`, and the cards-file deny entry in the setup reference and `README.md`.
@@ -1123,9 +1125,11 @@ Cards live in `<graph>.cards.jsonl`, beside the graph (section 3). It is state: 
 |---|---|---|
 | `card` | `n` (card number), `concept` (ID or null), `origin` (`source`, `user`, `teacher`), `front`, `back`, `src` (citation with hash, or null) | `tm card add`, `tm card import` |
 | `review` | `n`, `rating` (1 again, 2 hard, 3 good, 4 easy), `via` (`serve`, `term`, `rate`, `pick`), then the scheduler's result: `s`, `d`, `step`, `due` (section 17.4) | `tmcards`, `tm review` |
-| `edit` | `n`, `front`, `back` | `tmcards` |
+| `edit` | `n`, `front`, `back` | `tmcards`, `tm card edit` |
 | `hold` | `n`, `on` (true or false) | `tmcards` |
 | `rm` | `n` | `tm card rm`, `tm drop`, `tmcards` |
+
+Append-only describes the file, not the cards. A card is changed by adding a row: an `edit` row replaces its text from then on, a `hold` row pauses or releases it, and an `rm` row removes it. The latest row of each kind wins and earlier rows stay as history. An edit keeps the card's schedule and lapse count.
 
 Card numbers are integers starting at 1, allocated in order and never reused. They are their own namespace: only the card commands take them, so no concept ID is reserved for them.
 
@@ -1215,7 +1219,9 @@ Each `review` row records the result: `s` and `d` after the review, `step` (lear
 
 Days. A day is a calendar day in the local time zone of the machine that runs the command. `t` is the number of days between the local date of the last review and today's. A card on a step is due once the time in `due` has passed. A card in review is due from the start of the local day that `due` falls on, so a card reviewed in the evening can be reviewed again in the morning of its due day.
 
-Order. Due cards are shown in this order: cards on a step, earliest `due` first; then cards in review, earliest `due` first; then new cards, lowest number first. At most `TM_CARD_NEW` cards (default 20) get their first review on one local day; the rest stay new and are not counted as due.
+Order. Cards are never shown in a fixed order. When a session starts (a `tmcards` page load or terminal run, or one `tm due` call), the due cards in review and the day's new cards are mixed into one queue in random order, shuffled afresh each time. A card on a step cannot be shuffled freely, because its time is part of the schedule: when its `due` passes it is placed at a random position among the next few cards, not at the front. At most `TM_CARD_NEW` cards (default 20) get their first review on one local day, taken lowest number first; the rest stay new and are not counted as due.
+
+Showing early. When the queue is empty and a card on a step is due within 20 minutes, it is shown at once, so a short session ends with every card through its steps and none left stranded on the 10-minute step. The review is scheduled as if it had come on time.
 
 Lapses. A card's lapse count is the number of `again` ratings it received while in review. Section 17.6 uses it.
 
@@ -1278,6 +1284,6 @@ The teacher never decides whether a pick was right. A card with no other card to
 Forgetting never changes the graph by itself (decision 94). It reaches the teacher as two signals:
 
 - `tm status` adds `cards due <n>` to its counts line when any card is due. The teacher tells the learner and offers to start `tmcards serve`.
-- A card is a leech when its lapses reach `TM_CARD_LEECH`. `tm status` prints one line for each passed concept that has a leech: `<concept>  passed  leech <m>/<n> cards`. The teacher then asks the learner whether the concept needs teaching again, and runs `tm reopen` if so. A leech can also mean a badly worded card, which the learner fixes in `tmcards`.
+- A card is a leech when its lapses reach `TM_CARD_LEECH`. `tm status` prints one line for each passed concept that has a leech: `<concept>  passed  leech <m>/<n> cards`. The teacher then asks the learner whether the concept needs teaching again, and runs `tm reopen` if so. A leech can also mean a badly worded card, which the learner fixes in `tmcards` or the teacher rewords with `tm card edit` once the learner agrees.
 
 `tm show <concept>` lists the concept's cards: number, state, and front.
