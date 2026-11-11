@@ -112,6 +112,9 @@ Each question cites the passage it tests, and each answer goes to a fresh grader
 #### Gate
 **The gate** is the circuit breaker. If a concept keeps failing, the teacher stops drilling and steps back: usually a prerequisite is missing, so it maps one in. You can also ask to skip a concept, and it goes to reserve without blocking what comes after it.
 
+#### Flashcards
+**Flashcards** help you keep what you passed. After a concept passes, the teacher offers to make cards for it, and you can bring your own lists (vocabulary, dates, command flags) as tab-separated text. When cards are due, the teacher gives you a link to a review page that runs on your machine: show the back, then rate how well you recalled it with keys `1` to `4`. A review costs no tokens. Cards are scheduled with FSRS-6 and come in a new random order every time. A missed card never fails a concept; if you keep missing one, the teacher asks whether to reword the card or teach the concept again.
+
 ## Quick Start
 1. [Install `tm` and the skill](#setup--installation).
 2. In Claude Code, run `/teach-me` and say what you want to learn.<br>
@@ -133,12 +136,13 @@ Each question cites the passage it tests, and each answer goes to a fresh grader
 <summary>Binary and source install</summary>
 
 #### From a release
-Download the archive for your platform from [Releases](https://github.com/Reithan/teach-me/releases) (Linux, macOS, and Windows on amd64 and arm64). Each archive holds the `tm` binary plus the `skill/teach-me/` tree. Put `tm` somewhere on your `PATH`.
+Download the archive for your platform from [Releases](https://github.com/Reithan/teach-me/releases) (Linux, macOS, and Windows on amd64 and arm64). Each archive holds the `tm` binary, the `tmcards` binary for flashcard reviews, and the `skill/teach-me/` tree. Put `tm` and `tmcards` somewhere on your `PATH`.
 
 #### From source
 With Go 1.27 or newer:
 ```sh
 go install github.com/reithan/teach-me/cmd/tm@latest
+go install github.com/reithan/teach-me/cmd/tmcards@latest
 ```
 
 Check it with `tm --help --all`, which prints one usage line per command.
@@ -173,14 +177,15 @@ Keep the agent out of the lesson files so every change goes through `tm`. Add to
     "deny": [
       "Read(**/*.tm.mmd)", "Edit(**/*.tm.mmd)",
       "Read(**/*.mmd.jsonl)", "Edit(**/*.mmd.jsonl)",
+      "Read(**/*.mmd.cards.jsonl)", "Edit(**/*.mmd.cards.jsonl)",
       "Read(**/*.mmd.lock)", "Edit(**/*.mmd.lock)"
     ]
   },
-  "sandbox": { "excludedCommands": ["tm"] }
+  "sandbox": { "excludedCommands": ["tm", "tmcards"] }
 }
 ```
 
-**Sandbox note**: with the bash sandbox on, the deny rules also block `tm` from its own files. The `excludedCommands` entry lets `tm` through while everything else stays blocked.
+**Sandbox note**: with the bash sandbox on, the deny rules also block `tm` from its own files. The `excludedCommands` entries let `tm` and `tmcards` (the flashcard review tool) through while everything else stays blocked.
 
 See [setup.md](skill/teach-me/reference/setup.md) for the full reference, including a deny rule for your source folder.
 </details>
@@ -210,6 +215,7 @@ The teacher walks you through this the first time a source needs it. Details: [s
 - **State your goal narrowly.** "Understand Raft leader election" makes a tighter map than "learn distributed systems", and the pruner cuts everything the goal doesn't need.
 - **Tell the teacher what you already know.** Known material is probed quickly instead of taught.
 - **Disagree with a grade?** Say so. The teacher re-asks with a fresh question and a fresh grader decides; it never overrules a grader itself.
+- **Review cards your own way.** The teacher starts `tmcards serve` and hands you the link. At a terminal you can run `tmcards review` yourself. The review page also lists every card, and you can edit, hold, or remove any of them there.
 - **Sources change.** If a cited page changes, `tm` flags the drift and the teacher re-checks what it affects. Versioned URLs and pinned commits avoid this.
 
 ## License
