@@ -16,11 +16,17 @@ import (
 // Run is the primary entry point for the tm CLI. It accepts os.Args[1:] and
 // returns the process exit code. cmd/tm/main.go calls os.Exit(cli.Run(os.Args[1:])).
 func Run(args []string) int {
-	return RunWithWriters(args, os.Stdout, os.Stderr)
+	return RunWithIO(args, os.Stdin, os.Stdout, os.Stderr)
 }
 
-// RunWithWriters is the testable entry point. out receives command output
-// (stdout); errOut receives err:/fix: diagnostic lines (stderr).
+// RunWithWriters is RunWithIO with an empty stdin.
+func RunWithWriters(args []string, out, errOut io.Writer) int {
+	return RunWithIO(args, strings.NewReader(""), out, errOut)
+}
+
+// RunWithIO is the testable entry point. in supplies the text for a free-text
+// argument given as "-" (§6); out receives command output (stdout); errOut
+// receives err:/fix: diagnostic lines (stderr).
 //
 // Output routing policy:
 //   - Requested help (bare tm/--help, specific --help, --version): stdout.
@@ -33,7 +39,7 @@ func Run(args []string) int {
 //	1  invariant refusal (includes role-guard refusal)
 //	2  graph fails lint
 //	3  usage error, unknown command, or not-yet-implemented command
-func RunWithWriters(args []string, out, errOut io.Writer) int {
+func RunWithIO(args []string, in io.Reader, out, errOut io.Writer) int {
 	// Role is read at the top so every logging path below can include it.
 	role := os.Getenv("TM_ROLE")
 
@@ -140,6 +146,14 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 		fixMsg := cmd.Usage()
 		writeErrFix(errOut, parseErrMsg, fixMsg)
 		appendErrLog(role, args, 3, parseErrMsg, &fixMsg)
+		return 3
+	}
+
+	// ── Stdin substitution (§6) ──────────────────────────────────────────────
+	if errMsg := readStdinArgs(cmd, pos, in); errMsg != "" {
+		fixMsg := cmd.Usage()
+		writeErrFix(errOut, errMsg, fixMsg)
+		appendErrLog(role, args, 3, errMsg, &fixMsg)
 		return 3
 	}
 
@@ -417,4 +431,27 @@ func contains(vals []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// readStdinArgs replaces a positional given as "-" with the text read from in,
+// for positionals whose PosArg sets Stdin (§6). Trailing line endings are
+// dropped, because a shell pipeline appends one. Stdin is read once, so at most
+// one argument may be "-". It returns an error message, or "" on success.
+func readStdinArgs(cmd *Command, pos []string, in io.Reader) string {
+	used := false
+	for i := range pos {
+		if i >= len(cmd.PosArgs) || !cmd.PosArgs[i].Stdin || pos[i] != "-" {
+			continue
+		}
+		if used {
+			return "only one argument may be -"
+		}
+		used = true
+		data, err := io.ReadAll(in)
+		if err != nil {
+			return fmt.Sprintf("cannot read stdin: %v", err)
+		}
+		pos[i] = strings.TrimRight(string(data), "\r\n")
+	}
+	return ""
 }
