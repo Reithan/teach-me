@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Card review</title>
+<style>
+  :root { color-scheme: light dark; --line: #8886; --dim: #888; --accent: #2f81f7; }
+  * { box-sizing: border-box; }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 1rem; max-width: 44rem; }
+  h1 { font-size: 1.1rem; margin: 0; }
+  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
+  button { font: inherit; padding: .45rem .9rem; border: 1px solid var(--line); border-radius: .4rem; background: transparent; color: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .card { border: 1px solid var(--line); border-radius: .6rem; padding: 1.25rem; }
+  .meta, .dim { color: var(--dim); font-size: .85rem; }
+  .text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 1.2rem; margin: .75rem 0; }
+  .back { border-top: 1px solid var(--line); padding-top: .75rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+  .row button { flex: 1 1 6rem; }
+  kbd { font: inherit; font-size: .8rem; color: var(--dim); margin-right: .35rem; }
+  #error { color: #f85149; min-height: 1.5rem; margin: .5rem 0; }
+  h2 { font-size: 1rem; margin: 2rem 0 .5rem; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { border-top: 1px solid var(--line); padding: .6rem 0; }
+  li .text { font-size: 1rem; margin: .2rem 0; }
+  li .row { margin-top: .4rem; }
+  li .row button { flex: 0 0 auto; padding: .2rem .6rem; font-size: .85rem; }
+  textarea { font: inherit; width: 100%; min-height: 4rem; margin: .25rem 0; padding: .4rem; border: 1px solid var(--line); border-radius: .4rem; background: transparent; color: inherit; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Card review</h1>
+  <span id="left" class="dim"></span>
+</header>
+
+<section id="review" class="card" hidden>
+  <div id="meta" class="meta"></div>
+  <div id="front" class="text"></div>
+  <div id="back" class="text back" hidden></div>
+  <div id="reveal-row" class="row">
+    <button id="reveal"><kbd>Space</kbd>Show the back</button>
+  </div>
+  <div id="rate-row" class="row" hidden>
+    <button data-rating="1"><kbd>1</kbd>Again</button>
+    <button data-rating="2"><kbd>2</kbd>Hard</button>
+    <button data-rating="3"><kbd>3</kbd>Good</button>
+    <button data-rating="4"><kbd>4</kbd>Easy</button>
+  </div>
+</section>
+<section id="done" class="card" hidden>
+  <div class="text">No cards are due.</div>
+  <div class="row"><button id="again">Check again</button></div>
+</section>
+<div id="error" role="alert"></div>
+
+<h2>All cards</h2>
+<ul id="list"></ul>
+
+<script>
+"use strict";
+// Card text reaches the page only through textContent and textarea values,
+// never as HTML.
+const $ = (id) => document.getElementById(id);
+let current = null;   // the card on screen
+let shown = false;    // whether its back is showing
+let busy = false;     // a request is in flight
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+async function call(route, body) {
+  const opt = body === undefined ? {} : {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+  let res;
+  try {
+    res = await fetch(route, opt);
+  } catch (e) {
+    throw new Error("The review server did not answer. It stops after a while with no use; ask for a new link.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("request failed: " + res.status));
+  return data;
+}
+
+// run does one action, with the buttons off while it is in flight, and
+// shows an error in place.
+async function run(fn) {
+  if (busy) return;
+  busy = true;
+  $("error").textContent = "";
+  try {
+    await fn();
+  } catch (e) {
+    $("error").textContent = e.message;
+  } finally {
+    busy = false;
+  }
+}
+
+function provenance(c) {
+  let s = "card " + c.n + " · origin " + c.origin;
+  if (c.concept) s += " · " + c.concept;
+  if (c.src) s += " · " + c.src;
+  return s;
+}
+
+function show(next) {
+  current = next.card;
+  shown = false;
+  $("left").textContent = next.left === 1 ? "1 card left" : next.left + " cards left";
+  $("review").hidden = !current;
+  $("done").hidden = !!current;
+  if (!current) return;
+  $("meta").textContent = provenance(current);
+  $("front").textContent = current.front;
+  $("back").textContent = current.back;
+  $("back").hidden = true;
+  $("reveal-row").hidden = false;
+  $("rate-row").hidden = true;
+}
+
+function reveal() {
+  if (!current || shown) return;
+  shown = true;
+  $("back").hidden = false;
+  $("reveal-row").hidden = true;
+  $("rate-row").hidden = false;
+}
+
+function rate(rating) {
+  if (!current || !shown) return;
+  run(async () => {
+    show(await call("api/review", { n: current.n, rating }));
+    await list();
+  });
+}
+
+function dueText(c) {
+  if (!c.due || (c.state !== "learning" && c.state !== "review")) return "";
+  const days = Math.round((new Date(c.due) - Date.now()) / 86400000);
+  if (days <= 0) return " · due";
+  return " · due in " + days + (days === 1 ? " day" : " days");
+}
+
+async function list() {
+  const data = await call("api/cards");
+  const ul = $("list");
+  ul.replaceChildren();
+  if (data.cards.length === 0) ul.append(el("li", "dim", "There are no cards yet."));
+  for (const c of data.cards) ul.append(item(c));
+}
+
+function item(c) {
+  const li = el("li");
+  let meta = provenance(c) + " · " + c.state + dueText(c);
+  if (c.lapses > 0) meta += " · lapses " + c.lapses;
+  li.append(el("div", "meta", meta), el("div", "text", c.front), el("div", "text dim", c.back));
+  const row = el("div", "row");
+  const edit = el("button", "", "Edit");
+  edit.onclick = () => editor(li, c);
+  // A waiting card can be held too: the hold takes effect once its concept
+  // is passed.
+  const held = c.state === "held";
+  const hold = el("button", "", held ? "Release" : "Hold");
+  hold.onclick = () => change("api/hold", { n: c.n, on: !held });
+  const rm = el("button", "", "Remove");
+  rm.onclick = () => {
+    if (confirm("Remove card " + c.n + "? This cannot be undone here.")) change("api/remove", { n: c.n });
+  };
+  row.append(edit, hold, rm);
+  li.append(row);
+  return li;
+}
+
+function editor(li, c) {
+  const front = el("textarea");
+  front.value = c.front;
+  front.setAttribute("aria-label", "Front");
+  const back = el("textarea");
+  back.value = c.back;
+  back.setAttribute("aria-label", "Back");
+  const row = el("div", "row");
+  const save = el("button", "", "Save");
+  save.onclick = () => change("api/edit", { n: c.n, front: front.value, back: back.value });
+  const cancel = el("button", "", "Cancel");
+  cancel.onclick = () => li.replaceWith(item(c));
+  row.append(save, cancel);
+  li.replaceChildren(el("div", "meta", provenance(c)), front, back, row);
+  front.focus();
+}
+
+// change makes one change to a card, then redraws the card on screen and the
+// list, since the change may have reworded or removed the card being shown.
+function change(route, body) {
+  run(async () => {
+    await call(route, body);
+    show(await call("api/next"));
+    await list();
+  });
+}
+
+$("reveal").onclick = reveal;
+for (const b of document.querySelectorAll("[data-rating]")) {
+  b.onclick = () => rate(Number(b.dataset.rating));
+}
+$("again").onclick = () => change("api/start", {});
+
+document.addEventListener("keydown", (e) => {
+  const t = e.target;
+  if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!shown && (e.key === " " || e.key === "Enter")) {
+    // On a focused button the browser clicks it itself.
+    if (t && t.tagName === "BUTTON") return;
+    e.preventDefault();
+    reveal();
+  } else if (shown && e.key >= "1" && e.key <= "4") {
+    rate(Number(e.key));
+  }
+});
+
+// Every page load starts a sitting, which draws a new random order.
+run(async () => {
+  show(await call("api/start", {}));
+  await list();
+});
+</script>
+</body>
+</html>
