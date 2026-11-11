@@ -21,6 +21,9 @@ Spec v0.35.
   Before this the CLI stored the literal `-`, so
   `tm answer <qid> -` recorded `-` as the learner's answer. Trailing line
   endings are dropped, and one argument per command may be `-`.
+- `ERRORS.jsonl` rows for a command run with `--file` recorded a mangled
+  `argv` (later tokens shifted over the flag and repeated). The row now holds
+  the command as typed, with stdin text shown as `-` plus its byte length.
 
 ## [0.5.5] - 2026-10-26
 

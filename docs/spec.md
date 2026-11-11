@@ -2,7 +2,7 @@
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.34: `tm answer` refuses an answer that is empty or only whitespace, so a failed pipe into `tm answer <qid> -` cannot be recorded and graded `unclear`; the stdin rule for `-` arguments now states that trailing line endings are dropped and that one argument per command may be `-`; §6, §7, §14 updated.
+Changes from v0.34: `tm answer` refuses an answer that is empty or only whitespace, so a failed pipe into `tm answer <qid> -` cannot be recorded and graded `unclear`; the stdin rule for `-` arguments now states that trailing line endings are dropped and that one argument per command may be `-`; §6, §7, §10.1, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -559,7 +559,7 @@ One JSON object per line, written with a single append so parallel callers canno
 | `v` | CLI version |
 | `role` | `$TM_ROLE` or null |
 | `file` | resolved graph path, or null |
-| `argv` | the command as typed; text read from stdin is recorded as `-` plus its length |
+| `argv` | the command as typed; text read from stdin is recorded as `-` plus its length in bytes, for example `-17` |
 | `exit` | the process exit code: 1, 2, or 3, or 0 for a doc-version mismatch on `tm --help` |
 | `err`, `fix` | the lines printed; `fix` null when none was |
 | `violations` | `tm lint` only: the full list, as one row per run |
