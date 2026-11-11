@@ -7,6 +7,21 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+Spec v0.35.
+
+### Changed
+
+- `tm answer` refuses an answer that is empty or only whitespace with
+  `err: answer is empty` (exit 3), so a failed pipe into `tm answer <qid> -`
+  is not recorded and graded `unclear` (spec v0.35, decision 83).
+
+### Fixed
+
+- A free-text argument given as `-` now reads stdin, as spec §6 says.
+  Before this the CLI stored the literal `-`, so
+  `tm answer <qid> -` recorded `-` as the learner's answer. Trailing line
+  endings are dropped, and one argument per command may be `-`.
+
 ## [0.5.5] - 2026-10-26
 
 Spec v0.34. Skill `tm-version` is `0.5`.
