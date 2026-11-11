@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
+	"github.com/reithan/teach-me/internal/source"
 	"github.com/reithan/teach-me/internal/state"
 )
 
@@ -83,6 +85,10 @@ func reciteRun(ctx *Context) int {
 		newHashed, hashErr := hashCiteTextInDir(newRangeStr, srcRoot, graphDir)
 		if hashErr != nil {
 			hashErr = aidRefusalWithID(hashErr, concept)
+			var ref *source.RefusalError
+			if errors.As(hashErr, &ref) {
+				return nil, nil, &ops.Refusal{Err: ref.Err, Fix: ref.Fix, Exit: 1}
+			}
 			return nil, nil, &ops.Refusal{
 				Err:  fmt.Sprintf("cannot hash %q: %v", newRangeStr, hashErr),
 				Fix:  usageLine,
