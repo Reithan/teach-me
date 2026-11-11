@@ -85,7 +85,9 @@ Spec v0.35.
 - Build with Go 1.27.4. `govulncheck` reported GO-2026-6859 (an HTTP/1
   server crash from a `MaxBytesReader` header race in `net/http`) in Go
   1.27.3. `tm` runs no HTTP server; the scan flags the package's symbols as
-  reachable from URL source fetches. It is fixed in 1.27.4.
+  reachable from URL source fetches. `tmcards serve` does run one and caps
+  request bodies with `MaxBytesReader`, so it needs the fix. It is fixed in
+  1.27.4.
 
 ## [0.5.5] - 2026-10-26
 
