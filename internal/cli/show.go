@@ -250,6 +250,8 @@ func showConcept(ctx *Context, s *state.State, g *graph.Graph, id string,
 		}
 	}
 
+	showCards(ctx, g, id)
+
 	if withHistory {
 		showHistory(ctx, id, graphFile)
 	}

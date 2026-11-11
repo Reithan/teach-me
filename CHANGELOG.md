@@ -33,6 +33,10 @@ Spec v0.35.
 - `TM_CARD_RETENTION`, `TM_CARD_NEW`, and `TM_CARD_LEECH`, with the config
   keys `card-retention`, `card-new`, and `card-leech`, set the target
   retention, the new cards per day, and the leech threshold.
+- `tm status` adds `cards due <n>` to its counts line when a card is due, and
+  prints `<concept>  passed  leech <m>/<n> cards` for a passed concept with a
+  card that has lapsed `TM_CARD_LEECH` times (spec v0.36 §17.6).
+- `tm show <concept>` lists the concept's cards: number, state, and front.
 - `tm recite` now prints a source refusal (an aid or a cards file cited as a
   source) as its own `err:` line with exit 1, as `tm add` and `tm q` do. It
   used to wrap the text in `cannot hash ...` with exit 3.
