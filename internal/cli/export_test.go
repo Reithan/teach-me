@@ -22,3 +22,6 @@ func SetMigrateRulesForTest(stubs []func(id, cite string) (string, string, bool)
 	migrateRules = rules
 	return func() { migrateRules = saved }
 }
+
+// ReadStdinArgs exposes readStdinArgs for tests.
+var ReadStdinArgs = readStdinArgs

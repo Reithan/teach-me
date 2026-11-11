@@ -16,11 +16,17 @@ import (
 // Run is the primary entry point for the tm CLI. It accepts os.Args[1:] and
 // returns the process exit code. cmd/tm/main.go calls os.Exit(cli.Run(os.Args[1:])).
 func Run(args []string) int {
-	return RunWithWriters(args, os.Stdout, os.Stderr)
+	return RunWithIO(args, os.Stdin, os.Stdout, os.Stderr)
 }
 
-// RunWithWriters is the testable entry point. out receives command output
-// (stdout); errOut receives err:/fix: diagnostic lines (stderr).
+// RunWithWriters is RunWithIO with an empty stdin.
+func RunWithWriters(args []string, out, errOut io.Writer) int {
+	return RunWithIO(args, strings.NewReader(""), out, errOut)
+}
+
+// RunWithIO is the testable entry point. in supplies the text for a free-text
+// argument given as "-" (§6); out receives command output (stdout); errOut
+// receives err:/fix: diagnostic lines (stderr).
 //
 // Output routing policy:
 //   - Requested help (bare tm/--help, specific --help, --version): stdout.
@@ -33,7 +39,7 @@ func Run(args []string) int {
 //	1  invariant refusal (includes role-guard refusal)
 //	2  graph fails lint
 //	3  usage error, unknown command, or not-yet-implemented command
-func RunWithWriters(args []string, out, errOut io.Writer) int {
+func RunWithIO(args []string, in io.Reader, out, errOut io.Writer) int {
 	// Role is read at the top so every logging path below can include it.
 	role := os.Getenv("TM_ROLE")
 
@@ -116,7 +122,9 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 	// Strip --file <value> from remaining before per-command parsing so that
 	// individual commands do not need to declare it in their FlagSpec.
 	var fileFlag string
-	filtered := remaining[:0:len(remaining)]
+	// A fresh slice: filtering in place would overwrite args, which the error
+	// log records as typed (§10.1).
+	filtered := make([]string, 0, len(remaining))
 	for i := 0; i < len(remaining); i++ {
 		if remaining[i] == "--file" {
 			if i+1 >= len(remaining) {
@@ -141,6 +149,19 @@ func RunWithWriters(args []string, out, errOut io.Writer) int {
 		writeErrFix(errOut, parseErrMsg, fixMsg)
 		appendErrLog(role, args, 3, parseErrMsg, &fixMsg)
 		return 3
+	}
+
+	// ── Stdin substitution (§6) ──────────────────────────────────────────────
+	stdinIdx, stdinLen, errMsg := readStdinArgs(cmd, pos, in)
+	if errMsg != "" {
+		fixMsg := cmd.Usage()
+		writeErrFix(errOut, errMsg, fixMsg)
+		appendErrLog(role, args, 3, errMsg, &fixMsg)
+		return 3
+	}
+	if stdinIdx >= 0 {
+		// ERRORS.jsonl records stdin text as "-" plus its length (§10.1).
+		args = markStdinArg(cmd, args, stdinIdx, stdinLen)
 	}
 
 	// ── Format check (§4.6, §3) ─────────────────────────────────────────────
@@ -414,6 +435,64 @@ func contains(vals []string, s string) bool {
 	for _, v := range vals {
 		if v == s {
 			return true
+		}
+	}
+	return false
+}
+
+// readStdinArgs replaces a positional given as "-" with the text read from in,
+// for positionals whose PosArg sets Stdin (§6). Trailing line endings are
+// dropped, because a shell pipeline appends one. Stdin is read once, so at most
+// one argument may be "-". It returns the index of the replaced positional (-1
+// when none was) and the byte length of the text, or an error message.
+func readStdinArgs(cmd *Command, pos []string, in io.Reader) (idx, n int, errMsg string) {
+	idx = -1
+	for i := range pos {
+		if i >= len(cmd.PosArgs) || !cmd.PosArgs[i].Stdin || pos[i] != "-" {
+			continue
+		}
+		if idx >= 0 {
+			return idx, n, "only one argument may be -"
+		}
+		data, err := io.ReadAll(in)
+		if err != nil {
+			return idx, 0, fmt.Sprintf("cannot read stdin: %v", err)
+		}
+		pos[i] = strings.TrimRight(string(data), "\r\n")
+		idx, n = i, len(pos[i])
+	}
+	return idx, n, ""
+}
+
+// markStdinArg returns a copy of argv (the command line after "tm") in which
+// the token for positional idx reads "-<n>", the form §10.1 gives stdin text
+// in ERRORS.jsonl. It walks argv the way parseArgs does, also skipping the
+// global --file flag and its value.
+func markStdinArg(cmd *Command, argv []string, idx, n int) []string {
+	out := append([]string(nil), argv...)
+	seen := 0
+	for i := 1; i < len(out); i++ {
+		tok := out[i]
+		if strings.HasPrefix(tok, "--") {
+			if tok == "--file" || flagTakesValue(cmd, tok[2:]) {
+				i++
+			}
+			continue
+		}
+		if seen == idx {
+			out[i] = fmt.Sprintf("-%d", n)
+			return out
+		}
+		seen++
+	}
+	return out
+}
+
+// flagTakesValue reports whether cmd declares name as a value-taking flag.
+func flagTakesValue(cmd *Command, name string) bool {
+	for i := range cmd.Flags {
+		if cmd.Flags[i].Name == name {
+			return cmd.Flags[i].TakesValue
 		}
 	}
 	return false

@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.34
+# tm: teaching-map CLI, draft spec v0.35
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state. Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.33: graphs are named `<name>.tm.mmd` by convention, so a harness deny on `**/*.tm.mmd` keeps the model off graph files without blocking ordinary Mermaid diagrams (#117); the CLI still accepts any graph path; §3, §12, §14 updated.
+Changes from v0.34: `tm answer` refuses an answer that is empty or only whitespace, so a failed pipe into `tm answer <qid> -` cannot be recorded and graded `unclear`; the stdin rule for `-` arguments now states that trailing line endings are dropped and that one argument per command may be `-`; §6, §7, §10.1, §14 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -266,7 +266,7 @@ Locking therefore governs additions only. Two events close a batch, and both are
 
 ## 6. Commands
 
-Required arguments are positional. Any free-text argument accepts `-` to read stdin; raw answers contain quotes, backticks, and `$`, so the teacher pipes them.
+Required arguments are positional. Any free-text argument accepts `-` to read stdin; raw answers contain quotes, backticks, and `$`, so the teacher pipes them. Trailing line endings are dropped from stdin text, and at most one argument per command may be `-` (`err: only one argument may be -`).
 
 Exit codes: 0 ok; 1 refused by an invariant; 2 graph fails lint; 3 usage error or unknown ID. Codes 1 to 3 print one `err:` line, with a `fix:` line when needed. For a usage error the `fix:` line is that command's one-line usage.
 
@@ -385,7 +385,7 @@ The `reserve` count is printed only when it is nonzero.
 | `q` | the concept is passed or gated; the draft batch is at max; a probe question while a probe batch under the concept is locked or open; a teach question while a teach batch under the concept is open; `--teach` without `--re`; `--teach` once teaching is spent; `--teach` while the concept has no GAP; `--teach` with no failed probe batch above `base`; `--teach` without a fallback probe batch at min size that has no answers yet; `--re` on a probe whose target is not an `unclear` probe; `--re` on a teach question whose target is not a `fail` or `unclear` answer, or is flagged `OOS` |
 | `ask`, `q`, `gap` | the concept is in `reserve` (`err: <concept> is in reserve`; `fix: tm activate <concept>`) |
 | `ask`, `answer` | the batch is under min; any parent of the concept is in `untested`; the concept is gated; the batch is the fallback probes and any teach batch under the concept is unresolved; or the latest one is not all `pass` and teaching is not spent |
-| `answer` | the question already has an answer |
+| `answer` | the question already has an answer; or the answer is empty or only whitespace (`err: answer is empty`, exit 3, `fix:` the usage line) |
 | `check`, `grade` | the question has no `pending` answer |
 | `grade` | `TM_ROLE=teacher`; `--oos` on a probe |
 | everything except `check`, `grade`, `show` | `TM_ROLE=grader` |
@@ -559,7 +559,7 @@ One JSON object per line, written with a single append so parallel callers canno
 | `v` | CLI version |
 | `role` | `$TM_ROLE` or null |
 | `file` | resolved graph path, or null |
-| `argv` | the command as typed; text read from stdin is recorded as `-` plus its length |
+| `argv` | the command as typed; text read from stdin is recorded as `-` plus its length in bytes, for example `-17` |
 | `exit` | the process exit code: 1, 2, or 3, or 0 for a doc-version mismatch on `tm --help` |
 | `err`, `fix` | the lines printed; `fix` null when none was |
 | `violations` | `tm lint` only: the full list, as one row per run |
@@ -860,6 +860,7 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 80 | Reserve concepts keep their gate line: lint check 12 no longer flags one, and `tm reserve` leaves it in place | `--override` and upstream actions (`activate` on a parent, `add --child`, `reopen`) write `%% tm:gate <concept> base=<N>`, and the gate base is part of the round state; `tm reserve` never looked at gate lines, so the post-write lint exited 2 and a gated concept could never be parked (#110); the line stays for the same reason locked fallback batches stay (79): `tm activate` restores the round as it was, and dropping the base would re-gate the concept the moment it is activated | `tm reserve` deleting the gate line (re-gates on activate); refusing reserve while a gate line exists (the learner has no exit); a separate un-gate command | agreed, 2026-10-09 |
 | 81 | `ask`, `q`, and `gap` refuse a reserve concept with exit 1 and `fix: tm activate <concept>`; `ask` prints nothing when its batch has no unanswered question | exit 3 "unknown concept" sent the teacher looking for a typo when the concept exists and one command brings it back, and `add` already refused a reserve ID this way; a batch line with no questions under it looked like something to ask while every answer waited on the grader, and `status --concept` already chained nothing in that state | keep exit 3 for reserve IDs; print the batch line with a `pending` marker | agreed, v0.33 |
 | 82 | Graph files are named `<name>.tm.mmd` by convention and the adapter's deny rule targets `**/*.tm.mmd`; the CLI enforces no extension | `.mmd` is the standard Mermaid extension, so the recommended `**/*.mmd` deny, installed in user-level settings, kept the model off every Mermaid diagram in every project (#117); the `.jsonl` and `.lock` sidecars were already teach-me-specific; a naming convention costs no code and leaves existing `.mmd` graphs working | lesson-root-scoped deny rules only (user-level settings are often shared across hosts, so one absolute path rarely fits); a CLI-enforced extension (breaks every existing graph for no gain the convention lacks) | agreed, v0.34 |
+| 83 | `tm answer` refuses an empty or whitespace-only answer with a usage error | an empty answer holds nothing to judge, so the grader can only return `unclear`, and under §8 a second `unclear` records as `fail`; the common cause is mechanical, a command piped into `tm answer <qid> -` that failed and printed nothing, and the learner should not lose a batch to it; a learner who has no answer has `--concede` | recording it and letting the grader return `unclear` (costs a grader spawn and can end in a `fail` the learner did not earn); treating an empty answer as a concession (decision 63 makes the learner's explicit choice the only trigger) | agreed, 2026-11-11 |
 
 ## 15. Deferred
 
