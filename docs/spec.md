@@ -1015,7 +1015,7 @@ LICENSE  NOTICE  THIRD_PARTY_NOTICES.md  CITATION.cff  CONTRIBUTING.md  CHANGELO
 | Help | every help and usage path in section 1, with and without `TM_DOC`, including the version mismatch |
 | Cards | rows round-trip; derived state for every row of 17.2's table, including a concept reopened and passed again; every import refusal in 17.3; a malformed line refuses every card command; 20 parallel `review` appends all land |
 | Schedule | the worked values in 17.4 to four decimal places; every clamp; a fixed-clock sequence of ratings yields the expected due dates |
-| Review server | a request without the token gets 404; a foreign `Host` gets 403; a non-JSON `POST` is refused; card text containing markup is served escaped; the server exits after the idle time |
+| Review server | a request without the token gets 404; a foreign `Host` gets 403 and the `--public` host is accepted; the printed URL carries the token and the `--public` host; a non-JSON `POST` is refused; card text containing markup is served escaped; the server exits after the idle time |
 
 Tests run with `-race` on Linux, macOS, and Windows.
 
@@ -1243,7 +1243,7 @@ Worked values at the defaults, for the tests of section 16.5:
 
 | Command | Effect | Prints |
 |---|---|---|
-| `tmcards serve [--port <n>] [--bind <addr>] [--idle <duration>]` | serve the review page until idle for `--idle` (default `30m`) | one line: the page URL |
+| `tmcards serve [--port <n>] [--bind <addr>] [--public <host:port>] [--idle <duration>]` | serve the review page until idle for `--idle` (default `30m`) | one line: the page URL, token included |
 | `tmcards review` | review due cards in the terminal: the front, Enter to show the back, then `1` to `4` to rate | the cards |
 | `tmcards --version` | version | the version |
 
@@ -1260,7 +1260,9 @@ The server:
 
 - Binds `127.0.0.1` unless `--bind` names another address; `--port 0` (the default) lets the system pick a free port. `--bind` exists for a `tmcards` that runs inside a container whose ports are forwarded; binding a routable address exposes the cards to that network.
 - Puts a random 128-bit token in the URL path (`http://127.0.0.1:<port>/<token>/`). Every route sits under it and anything else returns 404.
-- Refuses with 403 a request whose `Host` header is not the bound address or `localhost` with the served port, so a web page that rebinds a DNS name to the loopback address cannot reach it.
+- Prints that URL as its one line of output, and the teacher gives it to the learner unchanged. The token is the key: it is new on every start, it is never written to a file or to the event log, and a request without it learns nothing, on loopback or with `--bind`.
+- Takes `--public <host:port>` when the learner reaches the server at another address than the one it binds, such as a container port forwarded to `localhost:8765` on the learner's machine. The printed URL then uses that host and port, and the `Host` check accepts it. `--bind` with a routable address requires `--port`, since a forwarded port has to be known in advance.
+- Refuses with 403 a request whose `Host` header is not the bound address, `localhost` with the served port, or the `--public` value, so a web page that rebinds a DNS name to the loopback address cannot reach it.
 - Accepts changes only as `POST` with `Content-Type: application/json`, which a cross-site form cannot send.
 
 When no browser can reach the machine, the teacher reviews through the harness question UI instead, at a token cost per card:
