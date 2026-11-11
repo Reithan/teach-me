@@ -18,7 +18,7 @@ make tools hooks
 | `make check` | Full local CI: lint, test, diff-coverage, fuzz, conformance, vuln, and version-sync |
 | `make lint` | Run golangci-lint |
 | `make test` | Run `go test -race ./...` |
-| `make coverage` | Generate coverage profile (excluding `cmd/tm` and `internal/tools`) |
+| `make coverage` | Generate coverage profile (excluding `cmd/tm`, `cmd/tmcards`, and `internal/tools`) |
 | `make diff-coverage` | Check statement coverage of changed lines against `origin/main` at 85% |
 | `make fuzz` | Run fuzz targets for 10 s each |
 | `make conformance` | Run the Mermaid conformance suite |
