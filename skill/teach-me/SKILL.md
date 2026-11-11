@@ -24,10 +24,12 @@ learner. The session is done when `tm status` shows the goal concept passed.
 Read the graph through `tm status`, `tm show`, `tm find`, `tm report`, and
 `tm show --history`; write it through a `tm` command. Never read or write
 the graph file (`<name>.tm.mmd`, or `<name>.mmd` in older lessons), its
-`.jsonl` log, or its `.lock` file by any tool, including shell reads.
+`.jsonl` log, its `.cards.jsonl` cards file, or its `.lock` file by any tool,
+including shell reads. Read cards through `tm card show`, `tm show`, and
+`tm due`.
 
 On every `tm new`, before the first `tm add`, tell the user to configure harness
-deny rules for those three files and for writes under src-root, and point at
+deny rules for those four files and for writes under src-root, and point at
 `skill/teach-me/reference/setup.md`. Continue once the user confirms or
 declines. Declining is allowed; this rule still binds.
 
@@ -40,9 +42,10 @@ write may already have broken a lint invariant.
 ## Context
 
 `tm` reads and edits one Mermaid flowchart that records what the learner has shown
-they understand. That file is the entire session state; every command re-parses
-it. `tm` output is terse and built for an agent: a bare `ok`, an allocated ID,
-or a few lines.
+they understand. That file is the entire state of what the learner has been
+taught and tested on; every command re-parses it. Flashcards for remembering it
+afterwards live in one cards file beside it. `tm` output is terse and built for
+an agent: a bare `ok`, an allocated ID, or a few lines.
 
 Who reads and writes the file:
 
@@ -53,7 +56,7 @@ Who reads and writes the file:
 | Planner sub-agent | `tm src`, `tm status`, `tm show`, `tm find` | `tm add`, `tm link`, `tm edit`, `tm drop` |
 | Pruner sub-agent | `tm status`, `tm show`, `tm find`, `tm report` | `tm prune`, `tm reserve`, `tm activate`, `tm edit` |
 | Reader sub-agent | `tm src --fulldump` | nothing |
-| Human learner | the rendered graph, your questions | answers; hand-edits |
+| Human learner | the rendered graph, your questions, cards in `tmcards` | answers; hand-edits; card reviews and card edits in `tmcards` |
 
 Citations are `hash@locator:START-END`. Relative locators resolve against the
 source root recorded by `tm new --src-root` (defaults to the graph's directory).
@@ -89,6 +92,14 @@ never write under src-root and never cite an aid. `tm add`, `tm q`, `tm recite`,
 `fix: cite the primary source`. A file you write outside aids-dir cannot be
 detected by the CLI; the harness deny rule is the only guard. The graph and
 `tm show` are the source registry; keep no other.
+
+The cards rule: a card added with `tm card add` states one fact from the
+passage it cites, in your wording; add nothing the passage does not say. Import
+cards you write from your own knowledge with `--origin teacher` and cards the
+learner dictates with `--origin user`, so the review page shows where each came
+from. Never cite a card, never quote one to a grader, and never review a card
+on the learner's behalf: the learner rates their own recall, and no grader
+reads a card review.
 
 **Line ranges come only from `tm src`.** Find a candidate source (search results
 and summaries give URLs or paths, never line numbers); run `tm src <locator>`
@@ -173,6 +184,55 @@ move. The phases:
      blocking its children and can be activated later with its round intact.
 
 9. Repeat from step 4 until `tm status` shows the goal concept passed.
+
+## Flashcards
+
+Cards help the learner keep what they passed. They never change the graph, and
+a missed card never fails a concept.
+
+**Make cards.**
+
+- After a concept passes, offer to make cards for it. If the learner agrees,
+  write each with `tm card add <concept> <cite> "<front>" "<back>"`, one fact
+  per card, favoring the facts the learner missed on the way. Take the range
+  for `<cite>` from `tm src`, as for any citation.
+- When a source comes with a list (vocabulary, command flags, dates), import it
+  during Map with `tm card import <locator> --concept <id>`. The file is
+  tab-separated text, one card per line: front, a tab, back. Cards tied to a
+  concept wait until that concept passes.
+- For loose facts that belong to no concept, use `tm card import <path>` with
+  `--origin user` for cards the learner dictates and `--origin teacher` for
+  cards you write. `<path>` may be `-` for stdin.
+
+**Review.** When `tm status` shows `cards due <n>`, tell the learner and offer
+a review. The learner reviews in `tmcards`, a second binary that costs no
+tokens:
+
+- Start `tmcards serve` in the background. It prints one line, the page URL.
+  Give the learner that URL unchanged; the token in it is the key, so never
+  shorten it, and never write it to a file. The server stops by itself after
+  30 minutes without use (`--idle <duration>` changes that), and every start
+  prints a new URL.
+- When `tmcards` runs in a container whose port is forwarded to the learner's
+  machine, run `tmcards serve --bind 0.0.0.0 --port <n> --public localhost:<n>`
+  so the printed URL is the one the learner's browser can open.
+- A learner at a terminal can run `tmcards review` themselves.
+- When no browser can reach the machine, review through the harness's question
+  tool. `tm due --format json` prints up to four due cards, each with its
+  front and answer options in an order the CLI shuffled. Show each front with
+  its options, then run `tm review <n> --pick "<chosen text>"`; it prints
+  `right` or `wrong | <back>`, and you never judge the pick. A card printed
+  with no options has no other card to draw them from: show its front, then
+  its back from `tm card show <n>`, and record the learner's own rating with
+  `tm review <n> again|hard|good|easy`.
+
+**Leeches.** A line `<concept>  passed  leech <m>/<n> cards` in `tm status`
+means the learner keeps missing those cards. Ask the learner which it is: the
+concept needs teaching again, or a card is badly worded. Run `tm reopen` only
+when the learner says the concept is lost; its cards then wait until it passes
+again. Reword a bad card with `tm card edit <n> "<front>" "<back>"` once the
+learner agrees, or let them edit it on the review page; the card keeps its
+schedule. `tm card rm <n>` removes one.
 
 ## Errata
 

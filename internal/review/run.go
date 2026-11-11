@@ -1,6 +1,7 @@
 package review
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,12 +12,14 @@ import (
 	"github.com/reithan/teach-me/internal/version"
 )
 
-const usage = `tmcards review [--file <graph>]
+const usage = `tmcards serve [--file <graph>] [--port <n>] [--bind <addr>] [--public <host:port>] [--idle <duration>]
+tmcards review [--file <graph>]
 tmcards --version`
 
 // Run is the tmcards command line. It returns the exit code: 0 ok, 2 a graph
-// or cards file that cannot be read as one, 3 a usage error.
-func Run(args []string, in io.Reader, out, errOut io.Writer) int {
+// or cards file that cannot be read as one, 3 a usage error. tmcards serve
+// stops when ctx is done.
+func Run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer) int {
 	fail := func(code int, msg, fix string) int {
 		say(errOut, "err: %s\n", msg)
 		if fix != "" {
@@ -44,7 +47,15 @@ func Run(args []string, in io.Reader, out, errOut io.Writer) int {
 	sub := flag.NewFlagSet(name, flag.ContinueOnError)
 	sub.SetOutput(io.Discard)
 	sub.StringVar(file, "file", *file, "")
-	if name != "review" {
+	var opt ServeOptions
+	switch name {
+	case "review":
+	case "serve":
+		sub.IntVar(&opt.Port, "port", 0, "")
+		sub.StringVar(&opt.Bind, "bind", "", "")
+		sub.StringVar(&opt.Public, "public", "", "")
+		sub.DurationVar(&opt.Idle, "idle", DefaultIdle, "")
+	default:
 		return fail(3, fmt.Sprintf("unknown command %q", name), usage)
 	}
 	if err := sub.Parse(rest); err != nil {
@@ -54,9 +65,24 @@ func Run(args []string, in io.Reader, out, errOut io.Writer) int {
 		return fail(3, fmt.Sprintf("unexpected argument %q", sub.Arg(0)), usage)
 	}
 
+	if msg := opt.Check(); name == "serve" && msg != "" {
+		return fail(3, msg, usage)
+	}
+
 	st, code, msg := open(*file)
 	if code != 0 {
 		return fail(code, msg, "")
+	}
+	if name == "serve" {
+		// Load once first, so a broken graph or cards file is reported here
+		// and not on the learner's first click.
+		if _, err := st.Load(); err != nil {
+			return fail(loadCode(err), err.Error(), "")
+		}
+		if err := st.Serve(ctx, opt, out); err != nil {
+			return fail(3, err.Error(), "")
+		}
+		return 0
 	}
 	if _, err := st.Terminal(in, out); err != nil {
 		return fail(loadCode(err), err.Error(), "")

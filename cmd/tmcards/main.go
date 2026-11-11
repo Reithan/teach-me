@@ -3,11 +3,16 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
 
 	"github.com/reithan/teach-me/internal/review"
 )
 
 func main() {
-	os.Exit(review.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	code := review.Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
