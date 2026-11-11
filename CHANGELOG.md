@@ -14,7 +14,12 @@ Spec v0.35.
 - Graph format 3: a `%% tm:cards <concept>` line marks a concept that has
   flashcards (spec v0.36 §4.6, decision 91). The parser refuses a line that
   names an unknown concept, sits outside its concept's block, or repeats.
-  Nothing writes the line yet; `tm card add` will.
+- `tm card add`, `tm card import`, `tm card show`, `tm card edit`, and
+  `tm card rm` write and read flashcards in a cards file beside the graph,
+  `<graph>.cards.jsonl` (spec v0.36 §17.1 to §17.3). `tm card add` and
+  `tm card import --concept` put the `%% tm:cards` line on the concept. The
+  event log gets a `card` event for each change. Cards cannot be reviewed yet.
+- `tm --help card` lists the five card commands.
 
 ### Changed
 
