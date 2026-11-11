@@ -29,6 +29,13 @@ type parser struct {
 	pos             int
 	pendingComments []string
 	pendingAids     []parsedAid
+	pendingCards    []parsedCards
+}
+
+// parsedCards is one %% tm:cards line and the block it was read in.
+type parsedCards struct {
+	block Block
+	id    string
 }
 
 type parsedAid struct {
@@ -104,6 +111,9 @@ func (p *parser) parse() (*Graph, error) {
 	}
 
 	if err := p.applyAidMetas(g); err != nil {
+		return nil, err
+	}
+	if err := p.applyCardsMetas(g); err != nil {
 		return nil, err
 	}
 
@@ -285,6 +295,17 @@ func (p *parser) parseBlock(g *Graph, block Block) error {
 				return err
 			}
 			p.pendingAids = append(p.pendingAids, parsedAid{block: block, id: id, path: path})
+			continue
+		}
+
+		// %% tm:cards is a meta line accepted in every block.
+		if strings.HasPrefix(t, "%% tm:cards ") {
+			p.pos++
+			id := strings.TrimSpace(strings.TrimPrefix(t, "%% tm:cards "))
+			if !ValidConceptID(id) {
+				return fmt.Errorf("graph: invalid tm:cards line: %q", t)
+			}
+			p.pendingCards = append(p.pendingCards, parsedCards{block: block, id: id})
 			continue
 		}
 
@@ -602,6 +623,33 @@ func parseAidLine(t string) (id, path string, err error) {
 		return "", "", fmt.Errorf("graph: invalid tm:aid line (empty path): %q", t)
 	}
 	return id, path, nil
+}
+
+// applyCardsMetas validates the collected %% tm:cards lines and marks their
+// concepts (§11 check 19): each names a concept declared in the same block,
+// at most once.
+func (p *parser) applyCardsMetas(g *Graph) error {
+	for _, c := range p.pendingCards {
+		var node *ConceptNode
+		for _, list := range [][]*ConceptNode{g.PassedConcepts, g.UntestedConcepts, g.ReserveConcepts} {
+			for _, n := range list {
+				if n.ID == c.id {
+					node = n
+				}
+			}
+		}
+		if node == nil {
+			return fmt.Errorf("graph: tm:cards for unknown concept %s", c.id)
+		}
+		if g.nodeBlocks()[c.id] != c.block {
+			return fmt.Errorf("graph: tm:cards %s outside its block", c.id)
+		}
+		if node.Cards {
+			return fmt.Errorf("graph: duplicate tm:cards %s", c.id)
+		}
+		node.Cards = true
+	}
+	return nil
 }
 
 // applyAidMetas validates the collected aid entries and attaches them to their

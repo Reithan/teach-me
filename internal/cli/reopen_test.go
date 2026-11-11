@@ -32,7 +32,7 @@ flowchart TB
         prereq --"required by"--> dependent
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
     end
     subgraph testing["Open tests validating and teaching User understanding"]
     end

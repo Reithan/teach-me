@@ -28,12 +28,12 @@ const minimalFormat1Graph = `flowchart TB
     classDef pending stroke-dasharray:4 3
 `
 
-// minimalFormat2Graph is the same graph but already migrated (format 2).
-const minimalFormat2Graph = `flowchart TB
+// minimalCurrentGraph is the same graph but already migrated (format 3).
+const minimalCurrentGraph = `flowchart TB
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
     end
     subgraph reserve["Concepts held in reserve"]
     end
@@ -101,7 +101,7 @@ func TestMigrate(t *testing.T) {
 		wantOut     string // substring expected in stdout
 		wantErr     string // substring expected in stderr (for refusals)
 		wantFix     string // substring expected in stderr fix line
-		wantFormat2 bool   // file should have FormatN()==2 after run
+		wantCurrent bool   // file should have FormatN()==3 after run
 		wantEvent   bool   // a migrate event should be appended
 		checkErrlog bool   // verify an errlog row was written
 		dryRun      bool   // --dry-run: file must remain unchanged
@@ -111,8 +111,8 @@ func TestMigrate(t *testing.T) {
 			graphCont:   minimalFormat1Graph,
 			args:        []string{},
 			wantExit:    0,
-			wantOut:     "format 1 -> 2: 0 rewritten, 0 left",
-			wantFormat2: true,
+			wantOut:     "format 1 -> 3: 0 rewritten, 0 left",
+			wantCurrent: true,
 			wantEvent:   true,
 		},
 		{
@@ -120,28 +120,28 @@ func TestMigrate(t *testing.T) {
 			graphCont:   minimalFormat1Graph,
 			args:        []string{"--dry-run"},
 			wantExit:    0,
-			wantOut:     "format 1 -> 2: 0 rewritten, 0 left",
-			wantFormat2: false,
+			wantOut:     "format 1 -> 3: 0 rewritten, 0 left",
+			wantCurrent: false,
 			wantEvent:   false,
 			dryRun:      true,
 		},
 		{
-			name:        "already format 2 refuses",
-			graphCont:   minimalFormat2Graph,
+			name:        "already format 3 refuses",
+			graphCont:   minimalCurrentGraph,
 			args:        []string{},
 			wantExit:    1,
-			wantErr:     "is already format 2",
-			wantFormat2: true, // file unchanged
+			wantErr:     "is already format 3",
+			wantCurrent: true, // file unchanged
 			wantEvent:   false,
 			checkErrlog: true,
 		},
 		{
-			// format-3 graph is above binary; migrate must refuse with upgrade fix.
-			name:      "format-3 graph refuses with upgrade fix",
-			graphCont: format3Graph,
+			// format-4 graph is above binary; migrate must refuse with upgrade fix.
+			name:      "format-4 graph refuses with upgrade fix",
+			graphCont: futureFormatGraph,
 			args:      []string{},
 			wantExit:  1,
-			wantErr:   "is format 3, this is tm format 2",
+			wantErr:   "is format 4, this is tm format 3",
 			wantFix:   "upgrade tm",
 		},
 	}
@@ -195,12 +195,12 @@ func TestMigrate(t *testing.T) {
 				if string(afterData) != tc.graphCont {
 					t.Errorf("dry-run: file was modified")
 				}
-			case tc.wantFormat2:
-				if afterG.FormatN() != 2 {
-					t.Errorf("format: want 2, got %d", afterG.FormatN())
+			case tc.wantCurrent:
+				if afterG.FormatN() != 3 {
+					t.Errorf("format: want 3, got %d", afterG.FormatN())
 				}
 			default:
-				if afterG.FormatN() == 2 {
+				if afterG.FormatN() == 3 {
 					t.Errorf("format: should not be 2; got %d", afterG.FormatN())
 				}
 			}
@@ -215,8 +215,8 @@ func TestMigrate(t *testing.T) {
 					if ev["from"] != float64(1) {
 						t.Errorf("event from: want 1, got %v", ev["from"])
 					}
-					if ev["to"] != float64(2) {
-						t.Errorf("event to: want 2, got %v", ev["to"])
+					if ev["to"] != float64(3) {
+						t.Errorf("event to: want 3, got %v", ev["to"])
 					}
 				}
 			}
@@ -309,11 +309,11 @@ func TestMigrate_CitationsBecomeLeft(t *testing.T) {
 		}
 	}
 
-	// File should now be format 2.
+	// File should now be format 3.
 	afterData, _ := os.ReadFile(gPath)
 	afterG, _ := graph.Parse(afterData)
-	if afterG.FormatN() != 2 {
-		t.Errorf("format after migrate: want 2, got %d", afterG.FormatN())
+	if afterG.FormatN() != 3 {
+		t.Errorf("format after migrate: want 3, got %d", afterG.FormatN())
 	}
 }
 
@@ -337,11 +337,11 @@ func TestMigrate_PositionalArgBeatsConfig(t *testing.T) {
 		t.Fatalf("exit: want 0, got %d\nstdout: %s\nstderr: %s", code, out, errOut)
 	}
 
-	// The actual file should be format 2.
+	// The actual file should be format 3.
 	afterData, _ := os.ReadFile(gPath)
 	afterG, _ := graph.Parse(afterData)
-	if afterG.FormatN() != 2 {
-		t.Errorf("format: want 2, got %d", afterG.FormatN())
+	if afterG.FormatN() != 3 {
+		t.Errorf("format: want 3, got %d", afterG.FormatN())
 	}
 }
 

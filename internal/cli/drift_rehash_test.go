@@ -221,7 +221,7 @@ func TestRehash(t *testing.T) {
 				content := "flowchart TB\n" +
 					"    subgraph passed[\"Concepts User understands\"]\n    end\n" +
 					"    subgraph untested[\"Concepts User has not been tested on\"]\n" +
-					"        %% tm:format 2\n" +
+					"        %% tm:format 3\n" +
 					"        mycon[\"My concept<br/>src.txt:1-5\"]\n    end\n" +
 					"    subgraph testing[\"Open tests validating and teaching User understanding\"]\n    end\n" +
 					"    classDef pending stroke-dasharray:4 3\n"
@@ -266,7 +266,7 @@ func TestRehash(t *testing.T) {
 					"    subgraph passed[\"Concepts User understands\"]\n" +
 					"        pc1[\"Passed concept<br/>src.txt:1-3\"]\n    end\n" +
 					"    subgraph untested[\"Concepts User has not been tested on\"]\n" +
-					"        %% tm:format 2\n" +
+					"        %% tm:format 3\n" +
 					"        uc1[\"Untested concept\"]\n" +
 					"        pc1 --\"enables\"--> uc1\n    end\n" +
 					"    subgraph testing[\"Open tests validating and teaching User understanding\"]\n" +
