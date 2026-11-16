@@ -20,6 +20,13 @@ Spec v0.35.
   `tm card import --concept` put the `%% tm:cards` line on the concept. The
   event log gets a `card` event for each change. Cards cannot be reviewed yet.
 - `tm --help card` lists the five card commands.
+- `tm drop` removes the dropped concept's cards and lists their numbers in the
+  `drop` event's `cards` field.
+- `tm add`, `tm q`, `tm recite`, `tm src`, and `tm card` refuse a cards file as
+  a source: `err: <path> is a cards file, not a source`.
+- `tm recite` now prints a source refusal (an aid or a cards file cited as a
+  source) as its own `err:` line with exit 1, as `tm add` and `tm q` do. It
+  used to wrap the text in `cannot hash ...` with exit 3.
 
 ### Changed
 

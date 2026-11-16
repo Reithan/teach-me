@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 
+	"github.com/reithan/teach-me/internal/cards"
+	"github.com/reithan/teach-me/internal/errlog"
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
 	"github.com/reithan/teach-me/internal/ops"
@@ -122,13 +124,24 @@ func dropRun(ctx *Context) int {
 			}
 		}
 
-		row := eventlog.NewRow("drop", map[string]any{
+		evFields := map[string]any{
 			"id":    concept,
 			"node":  nodeObj,
 			"edges": edgeList,
-		})
+		}
 
-		return &newG, []eventlog.Row{row}, nil
+		// Remove the concept's cards (§17.2). The rm rows go in before the
+		// graph is written, so a failed graph write leaves cards removed for
+		// a concept that is still there, never live cards for a missing one.
+		removed, refusal := dropCards(ctx.GraphFile, concept)
+		if refusal != nil {
+			return nil, nil, refusal
+		}
+		if len(removed) > 0 {
+			evFields["cards"] = removed
+		}
+
+		return &newG, []eventlog.Row{eventlog.NewRow("drop", evFields)}, nil
 	}
 
 	return runMutation(ctx, apply)
@@ -281,4 +294,27 @@ func dropQuestionDrift(
 	row := eventlog.NewRow("drop", evFields)
 
 	return &newG, []eventlog.Row{row}, nil
+}
+
+// dropCards appends an rm row for every live card of concept and returns their
+// numbers. The caller holds the graph lock.
+func dropCards(graphFile, concept string) ([]int, *ops.Refusal) {
+	path := cards.Path(graphFile)
+	deck, err := cards.Load(path)
+	if err != nil {
+		return nil, deckRefusal(err)
+	}
+	var rows []cards.Row
+	var removed []int
+	for _, c := range deck.OfConcept(concept) {
+		rows = append(rows, cards.Row{Ev: cards.EvRemove, N: c.N})
+		removed = append(removed, c.N)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	if err := cards.Append(path, errlog.RealClock.Now(), rows...); err != nil {
+		return nil, &ops.Refusal{Err: fmt.Sprintf("cannot write cards file: %v", err), Exit: 3}
+	}
+	return removed, nil
 }
