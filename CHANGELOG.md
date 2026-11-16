@@ -43,6 +43,19 @@ Spec v0.35.
   good, or easy. Cards come in a new random order every sitting. It finds the
   graph the way `tm` does (`--file`, `TM_FILE`, `.tmconfig`, user config) and
   records each rating with `via: term` (spec v0.36 §17.5).
+- `tmcards serve [--port <n>] [--bind <addr>] [--public <host:port>]
+  [--idle <duration>]` serves a review page for a learner with no terminal
+  and prints its URL. The page is one HTML file embedded in the binary that
+  loads nothing from the network. It shows one due card at a time (reveal,
+  then rate with the buttons or keys `1` to `4`), each card's origin and
+  citation, and a list of all cards where the learner can edit, hold,
+  release, or remove one. Ratings are recorded with `via: serve`.
+- `tmcards serve` listens on `127.0.0.1` and a port the system picks. The URL
+  carries a random 128-bit token that is new on every start; a request
+  without it gets 404. A request whose `Host` header is not the bound
+  address, `localhost` with the served port, or the `--public` value gets
+  403. Changes need `POST` with `Content-Type: application/json`. The server
+  stops after `--idle` (default `30m`) without a request.
 - `tm recite` now prints a source refusal (an aid or a cards file cited as a
   source) as its own `err:` line with exit 1, as `tm add` and `tm q` do. It
   used to wrap the text in `cannot hash ...` with exit 3.
@@ -72,7 +85,9 @@ Spec v0.35.
 - Build with Go 1.27.4. `govulncheck` reported GO-2026-6859 (an HTTP/1
   server crash from a `MaxBytesReader` header race in `net/http`) in Go
   1.27.3. `tm` runs no HTTP server; the scan flags the package's symbols as
-  reachable from URL source fetches. It is fixed in 1.27.4.
+  reachable from URL source fetches. `tmcards serve` does run one and caps
+  request bodies with `MaxBytesReader`, so it needs the fix. It is fixed in
+  1.27.4.
 
 ## [0.5.5] - 2026-10-26
 

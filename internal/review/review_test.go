@@ -2,6 +2,7 @@ package review_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -318,7 +319,7 @@ func TestRun(t *testing.T) {
 	}
 	run := func(in string, args ...string) (string, string, int) {
 		var out, errOut bytes.Buffer
-		code := review.Run(args, strings.NewReader(in), &out, &errOut)
+		code := review.Run(t.Context(), args, strings.NewReader(in), &out, &errOut)
 		return out.String(), errOut.String(), code
 	}
 
@@ -335,7 +336,7 @@ func TestRun(t *testing.T) {
 		{"flag provided but not defined", []string{"review", "--loud"}},
 		{`unexpected argument "now"`, []string{"review", "now"}},
 	} {
-		if _, errOut, code := run("", tc.args...); code != 3 || !strings.Contains(errOut, "err: "+tc.want) || !strings.Contains(errOut, "fix: tmcards review") {
+		if _, errOut, code := run("", tc.args...); code != 3 || !strings.Contains(errOut, "err: "+tc.want) || !strings.Contains(errOut, "fix: tmcards serve") || !strings.Contains(errOut, "\ntmcards review [") {
 			t.Errorf("%v: exit %d, stderr %q", tc.args, code, errOut)
 		}
 	}
@@ -379,5 +380,48 @@ func TestRun(t *testing.T) {
 	}
 	if _, errOut, code := run("", "review", "--file", bad); code != 3 || !strings.Contains(errOut, "cannot parse") {
 		t.Errorf("bad graph: exit %d, %q", code, errOut)
+	}
+}
+
+func TestRun_Serve(t *testing.T) {
+	st, _, path := setup(t, 1)
+	run := func(ctx context.Context, args ...string) (string, string, int) {
+		var out, errOut bytes.Buffer
+		code := review.Run(ctx, args, strings.NewReader(""), &out, &errOut)
+		return out.String(), errOut.String(), code
+	}
+	for _, tc := range []struct {
+		want string
+		args []string
+	}{
+		{"needs --port", []string{"serve", "--bind", "0.0.0.0"}},
+		{"not host:port", []string{"serve", "--public", "nowhere"}},
+		{"--idle must be more than zero", []string{"serve", "--idle", "0s"}},
+		{"invalid value", []string{"serve", "--idle", "soon"}},
+		{"invalid value", []string{"serve", "--port", "http"}},
+		{"flag provided but not defined", []string{"review", "--port", "1"}},
+	} {
+		args := append([]string{"--file", st.GraphFile}, tc.args...)
+		if _, errOut, code := run(t.Context(), args...); code != 3 || !strings.Contains(errOut, tc.want) || !strings.Contains(errOut, "fix: tmcards serve") {
+			t.Errorf("%v: exit %d, stderr %q", tc.args, code, errOut)
+		}
+	}
+
+	out, errOut, code := run(t.Context(), "serve", "--file", st.GraphFile, "--idle", "50ms", "--public", "localhost:8765")
+	if code != 0 || !strings.HasPrefix(out, "http://localhost:8765/") || strings.Count(out, "\n") != 1 {
+		t.Errorf("serve: exit %d, %q, %q", code, out, errOut)
+	}
+	if _, errOut, code := run(t.Context(), "serve", "--file", st.GraphFile, "--bind", "192.0.2.1", "--port", "8765"); code != 3 || !strings.Contains(errOut, "cannot listen") {
+		t.Errorf("cannot listen: exit %d, %q", code, errOut)
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString("not a row\n")
+	_ = f.Close()
+	if out, errOut, code := run(t.Context(), "serve", "--file", st.GraphFile); code != 2 || out != "" || !strings.Contains(errOut, "is not a card row") {
+		t.Errorf("broken cards file: exit %d, %q, %q", code, out, errOut)
 	}
 }
