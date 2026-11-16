@@ -244,6 +244,27 @@ var Table = []Command{
 		Run:          cardRmRun,
 	},
 	{
+		Name: "due",
+		Flags: []FlagSpec{
+			{Name: "format", TakesValue: true, ValueName: "lines|json", Values: []string{"lines", "json"}},
+			{Name: "limit", TakesValue: true, ValueName: "N"},
+		},
+		ForbidGrader: true,
+		Run:          dueRun,
+	},
+	{
+		Name: "review",
+		PosArgs: []PosArg{
+			{Name: "<n>"},
+			{Name: "[again|hard|good|easy]", Optional: true, Values: []string{"again", "hard", "good", "easy"}},
+		},
+		Flags: []FlagSpec{
+			{Name: "pick", TakesValue: true, ValueName: `"<text>"`},
+		},
+		ForbidGrader: true,
+		Run:          reviewRun,
+	},
+	{
 		Name: "prune",
 		PosArgs: []PosArg{
 			{Name: "<goal>"},

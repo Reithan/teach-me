@@ -24,6 +24,15 @@ Spec v0.35.
   `drop` event's `cards` field.
 - `tm add`, `tm q`, `tm recite`, `tm src`, and `tm card` refuse a cards file as
   a source: `err: <path> is a cards file, not a source`.
+- `tm due [--format lines|json] [--limit N]` prints the cards due now, each
+  with its number, front, and up to four answer options, in an order that is
+  shuffled on every call (spec v0.36 §17.4, §17.5).
+- `tm review <n> again|hard|good|easy` records the learner's rating of a card,
+  and `tm review <n> --pick "<text>"` scores a multiple-choice pick against
+  the card's back. Both schedule the card with FSRS-6.
+- `TM_CARD_RETENTION`, `TM_CARD_NEW`, and `TM_CARD_LEECH`, with the config
+  keys `card-retention`, `card-new`, and `card-leech`, set the target
+  retention, the new cards per day, and the leech threshold.
 - `tm recite` now prints a source refusal (an aid or a cards file cited as a
   source) as its own `err:` line with exit 1, as `tm add` and `tm q` do. It
   used to wrap the text in `cannot hash ...` with exit 3.
