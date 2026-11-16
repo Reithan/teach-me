@@ -36,6 +36,9 @@ type ConceptNode struct {
 	// order. Paths are stored exactly as written; no existence check is
 	// performed at parse time.
 	Aids []string
+	// Cards is true when a %% tm:cards line marks this concept as having had
+	// flashcards created for it (§4.6, §17). The line carries no count.
+	Cards bool
 	// Block records which subgraph the concept belongs to.
 	Block Block
 	// Class is the :::class suffix if present; always empty for valid concepts.
@@ -105,7 +108,8 @@ type FormatMeta struct {
 
 // CurrentFormat is the graph format version this binary writes and expects.
 // Graphs without a %% tm:format line are treated as format 1 (written before v0.22).
-const CurrentFormat = 2
+// Format 3 adds the %% tm:cards line and changes nothing else.
+const CurrentFormat = 3
 
 // NextMeta holds the data from a %% tm:next meta line (§4.6).
 // Q is the next question/answer number to allocate; Batch is the next batch

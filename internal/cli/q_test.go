@@ -53,7 +53,7 @@ func qSimpleGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -68,7 +68,7 @@ func qPassedConceptGraph() string {
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
     end
     subgraph testing["Open tests validating and teaching User understanding"]
     end
@@ -81,7 +81,7 @@ func qOpenProbeGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -106,7 +106,7 @@ func qTeachReadyGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -136,7 +136,7 @@ func qTeachReadyNoGapGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -166,7 +166,7 @@ func qTeachOpenBatchGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -205,7 +205,7 @@ func qTeachPassTargetGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -235,7 +235,7 @@ func qTeachOOSTargetGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -265,7 +265,7 @@ func qReNotUnclearGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -290,7 +290,7 @@ func qProbeAtMaxGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -311,7 +311,7 @@ func qTeachAtMaxGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -345,7 +345,7 @@ func qAllPassGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: some gap<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -369,7 +369,7 @@ func qNoFallbackGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: some gap<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -396,7 +396,7 @@ func qProbeWrongConceptGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
         othercon["Other concept<br/>f5ca3875b379@src.txt:1-5"]
     end
@@ -421,7 +421,7 @@ func qTeachWrongConceptGraph() string {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>GAP: the key insight was missed<br/>f5ca3875b379@src.txt:1-5"]
         othercon["Other concept<br/>f5ca3875b379@src.txt:1-5"]
     end
@@ -1060,7 +1060,7 @@ func TestQ_ProbeReplacement_HappyPath(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         mycon["My concept<br/>f5ca3875b379@src.txt:1-5"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]

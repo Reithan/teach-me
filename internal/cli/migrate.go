@@ -119,14 +119,15 @@ type migrateResult struct {
 
 // migrateRun is the Run handler for `tm migrate [<file>] [--dry-run]`.
 //
-// Upgrades a format-1 graph to format 2 by running the migration rule pipeline
-// over every citation, setting %% tm:format 2, and writing the result. With
+// Upgrades a graph to the current format. A format-1 graph goes through the
+// migration rule pipeline over every citation; a format-2 graph needs only the
+// marker changed, since format 3 adds one optional meta line (§13.2). With
 // --dry-run the same output is printed but nothing is written.
 //
 // Exit codes:
 //
 //	0  ok (including when some citations are left; partial migration is valid)
-//	1  invariant refusal (already format 2, role guard)
+//	1  invariant refusal (already the current format, role guard)
 //	3  resolve / read / write error
 func migrateRun(ctx *Context) int {
 	// Resolve file: positional arg beats config, like lint (§3).
@@ -185,7 +186,11 @@ func migrateRun(ctx *Context) int {
 	}
 
 	// Gather all citations (concepts in all blocks, questions in testing).
-	refs := gatherCitations(g)
+	// Only a format-1 graph has citations to rewrite (§13.2).
+	var refs []citationRef
+	if fromN < 2 {
+		refs = gatherCitations(g)
+	}
 
 	// Run the rule pipeline over each citation.
 	results := runMigrateRules(mctx, refs, g)

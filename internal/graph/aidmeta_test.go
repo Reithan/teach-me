@@ -29,7 +29,7 @@ func aidGraphSrc(aidBlock string, aidLines ...string) string {
 		aidStr("passed") +
 		"    end\n" +
 		"    subgraph untested[\"U\"]\n" +
-		"        %% tm:format 2\n" +
+		"        %% tm:format 3\n" +
 		"        cu[\"untested concept<br/>abc@f.txt:1-2\"]\n" +
 		aidStr("untested") +
 		"    end\n" +

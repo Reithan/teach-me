@@ -120,8 +120,8 @@ func TestMigrateRule1_Rewrite(t *testing.T) {
 		t.Fatalf("read graph: %v", err)
 	}
 	graphStr := string(graphData)
-	if !strings.Contains(graphStr, "%% tm:format 2") {
-		t.Errorf("graph does not contain %%%% tm:format 2:\n%s", graphStr)
+	if !strings.Contains(graphStr, "%% tm:format 3") {
+		t.Errorf("graph does not contain %%%% tm:format 3:\n%s", graphStr)
 	}
 	wantLocator := "git:r@" + sha12 + ":file.txt"
 	if !strings.Contains(graphStr, wantLocator) {
@@ -340,7 +340,7 @@ func TestMigrateRule1_NoAlias(t *testing.T) {
 
 	// Graph must still be format 2 (format was bumped even without rewrites).
 	graphData, _ := os.ReadFile(graphFile)
-	if !strings.Contains(string(graphData), "%% tm:format 2") {
+	if !strings.Contains(string(graphData), "%% tm:format 3") {
 		t.Errorf("graph should be format 2 even with no rewrites")
 	}
 }

@@ -84,7 +84,7 @@ func TestReport_FulltextWindow(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         big["Big concept<br/>` + cited + `"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]
@@ -147,7 +147,7 @@ func TestReport_FulltextWindow_MultiCite(t *testing.T) {
     subgraph passed["Concepts User understands"]
     end
     subgraph untested["Concepts User has not been tested on"]
-        %% tm:format 2
+        %% tm:format 3
         big["Big concept<br/>` + cites + `"]
     end
     subgraph testing["Open tests validating and teaching User understanding"]

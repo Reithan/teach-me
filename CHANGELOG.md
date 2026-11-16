@@ -9,7 +9,18 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 Spec v0.35.
 
+### Added
+
+- Graph format 3: a `%% tm:cards <concept>` line marks a concept that has
+  flashcards (spec v0.36 §4.6, decision 91). The parser refuses a line that
+  names an unknown concept, sits outside its concept's block, or repeats.
+  Nothing writes the line yet; `tm card add` will.
+
 ### Changed
+
+- Every command but `tm migrate`, `tm lint`, and help now refuses a format-2
+  graph with `fix: tm migrate`. Run `tm migrate` once per graph; from format 2
+  it changes only the `%% tm:format` marker and leaves citations alone.
 
 - `tm answer` refuses an answer that is empty or only whitespace with
   `err: answer is empty` (exit 3), so a failed pipe into `tm answer <qid> -`

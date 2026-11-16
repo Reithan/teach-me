@@ -355,7 +355,7 @@ func TestFormatMeta_ParseRejectsDuplicate(t *testing.T) {
     end
     subgraph untested["U"]
         %% tm:format 1
-        %% tm:format 2
+        %% tm:format 3
     end
     subgraph reserve["R"]
     end
@@ -377,7 +377,7 @@ func TestFormatMeta_ParseRejectsAfterNextMeta(t *testing.T) {
     end
     subgraph untested["U"]
         %% tm:next q=2 batch=2
-        %% tm:format 2
+        %% tm:format 3
     end
     subgraph reserve["R"]
     end
@@ -396,7 +396,7 @@ func TestFormatMeta_ParseRejectsAfterNextMeta(t *testing.T) {
 func TestFormatMeta_ParseRejectsOutsideUntested(t *testing.T) {
 	src := `flowchart TB
     subgraph passed["P"]
-        %% tm:format 2
+        %% tm:format 3
     end
     subgraph untested["U"]
     end

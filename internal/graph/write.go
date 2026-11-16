@@ -54,6 +54,7 @@ func writePassedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 		}
 	}
 	writeConceptAidMetas(b, g.PassedConcepts)
+	writeConceptCardsMetas(b, g.PassedConcepts)
 	writeSubgraphClose(b)
 }
 
@@ -85,6 +86,7 @@ func writeUntestedBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 		}
 	}
 	writeConceptAidMetas(b, g.UntestedConcepts)
+	writeConceptCardsMetas(b, g.UntestedConcepts)
 	writeSubgraphClose(b)
 }
 
@@ -108,6 +110,7 @@ func writeReserveBlock(b *strings.Builder, g *Graph, blocks map[string]Block) {
 		}
 	}
 	writeConceptAidMetas(b, g.ReserveConcepts)
+	writeConceptCardsMetas(b, g.ReserveConcepts)
 	writeSubgraphClose(b)
 }
 
@@ -317,6 +320,24 @@ func writeInt(b *strings.Builder, n int) {
 		n /= 10
 	}
 	b.Write(digits[i:])
+}
+
+// writeConceptCardsMetas emits one %% tm:cards line per concept marked as
+// having cards, sorted by id, after the block's aid lines.
+func writeConceptCardsMetas(b *strings.Builder, concepts []*ConceptNode) {
+	var ids []string
+	for _, c := range concepts {
+		if c.Cards {
+			ids = append(ids, c.ID)
+		}
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		b.WriteString(indent2)
+		b.WriteString("%% tm:cards ")
+		b.WriteString(id)
+		b.WriteByte('\n')
+	}
 }
 
 // writeConceptAidMetas emits %% tm:aid lines for a slice of concept nodes.

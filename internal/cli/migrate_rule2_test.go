@@ -99,7 +99,7 @@ func TestMigrateRule2_Match(t *testing.T) {
 	if !strings.Contains(string(after), srv.URL) {
 		t.Errorf("migrated graph should contain server URL; graph:\n%s", after)
 	}
-	if !strings.Contains(string(after), "tm:format 2") {
+	if !strings.Contains(string(after), "tm:format 3") {
 		t.Errorf("migrated graph should contain format marker; graph:\n%s", after)
 	}
 

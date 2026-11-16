@@ -1112,8 +1112,8 @@ func minimalFormatGraph(n int) string {
 }
 
 func TestCheck17_FormatAboveBinaryRefuses(t *testing.T) {
-	// A graph with %% tm:format 3 on a binary that knows format 2 should refuse.
-	src := minimalFormatGraph(3)
+	// A graph with %% tm:format 4 on a binary that knows format 3 should refuse.
+	src := minimalFormatGraph(4)
 	viols := lint.Check([]byte(src), defaultCfg())
 	if !hasMsgContaining(viols, "above this binary") {
 		t.Errorf("expected 'above this binary' violation; got: %v", viols)
@@ -1124,12 +1124,12 @@ func TestCheck17_FormatAboveBinaryRefuses(t *testing.T) {
 }
 
 func TestCheck17_FormatAtBinaryAccepts(t *testing.T) {
-	// Format 2 == CurrentFormat → no violation.
-	src := minimalFormatGraph(2)
+	// Format 3 == CurrentFormat → no violation.
+	src := minimalFormatGraph(3)
 	viols := lint.Check([]byte(src), defaultCfg())
 	for _, v := range viols {
 		if strings.Contains(v.Msg, "above this binary") {
-			t.Errorf("unexpected format violation for format 2: %v", viols)
+			t.Errorf("unexpected format violation for format 3: %v", viols)
 		}
 	}
 }
@@ -1190,7 +1190,7 @@ func makeConceptGraphWithCite(rawCite string) []byte {
     subgraph passed["P"]
     end
     subgraph untested["U"]
-        %% tm:format 2
+        %% tm:format 3
         c1["Concept scope<br/>` + escaped + `"]
     end
     subgraph reserve["R"]
