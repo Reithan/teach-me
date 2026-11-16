@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/reithan/teach-me/internal/eventlog"
 	"github.com/reithan/teach-me/internal/graph"
@@ -51,6 +52,15 @@ func answerRun(ctx *Context) int {
 	concede := len(ctx.Flags["concede"]) > 0
 
 	usageLine := FindCommand("answer").Usage()
+
+	// Exit 3: nothing to grade (§7). A blank answer would draw an unclear
+	// verdict, and a failed pipe into `tm answer <qid> -` produces exactly that.
+	if strings.TrimSpace(rawAnswer) == "" {
+		ctx.ErrMsg = "answer is empty"
+		ctx.FixMsg = usageLine
+		writeErrFix(ctx.ErrOut, ctx.ErrMsg, ctx.FixMsg)
+		return 3
+	}
 
 	apply := func(g *graph.Graph, s *state.State) (*graph.Graph, []eventlog.Row, *ops.Refusal) {
 		cfg := s.Cfg()

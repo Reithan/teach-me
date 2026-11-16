@@ -7,6 +7,24 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+Spec v0.35.
+
+### Changed
+
+- `tm answer` refuses an answer that is empty or only whitespace with
+  `err: answer is empty` (exit 3), so a failed pipe into `tm answer <qid> -`
+  is not recorded and graded `unclear` (spec v0.35, decision 83).
+
+### Fixed
+
+- A free-text argument given as `-` now reads stdin, as spec §6 says.
+  Before this the CLI stored the literal `-`, so
+  `tm answer <qid> -` recorded `-` as the learner's answer. Trailing line
+  endings are dropped, and one argument per command may be `-`.
+- `ERRORS.jsonl` rows for a command run with `--file` recorded a mangled
+  `argv` (later tokens shifted over the flag and repeated). The row now holds
+  the command as typed, with stdin text shown as `-` plus its byte length.
+
 ### Security
 
 - Build with Go 1.27.4. `govulncheck` reported GO-2026-6859 (an HTTP/1
