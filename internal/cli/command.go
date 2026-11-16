@@ -60,6 +60,10 @@ type Context struct {
 	// so handlers receive it without needing to declare it in their FlagSpec.
 	// Priority per §3: --file > $TM_FILE > .tmconfig.
 	FileFlag string
+	// In is stdin. The dispatcher has already read it when a positional
+	// marked Stdin was given as "-"; a handler reads it only for an argument
+	// that is not free text, such as the locator of `tm card import`.
+	In io.Reader
 	// Out is the stdout writer for command output.
 	Out io.Writer
 	// ErrOut is the stderr writer for err:/fix: diagnostic lines.
@@ -83,6 +87,7 @@ type Context struct {
 // Command is one row in the declarative command table. A single package-level
 // Table slice holds every §6 command and drives the entire CLI.
 type Command struct {
+	// Name is the command word, or two words for a subcommand ("card add").
 	Name string
 
 	// PosArgs is the ordered list of positional arguments.
