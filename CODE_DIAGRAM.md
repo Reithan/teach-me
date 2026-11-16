@@ -28,6 +28,7 @@ graph LR
     internal_9f33a7c7["internal"]
     subgraph cmd_abac3614["cmd"]
         cmd_tm_d7570c37["tm"]:::has_deps
+        cmd_tmcards_a4bf3cc6["tmcards"]:::has_deps
     end
     subgraph conformance_5500404c["conformance"]
         conformance_parse_mjs_24a216ae["parse.mjs"]:::has_deps
@@ -35,8 +36,9 @@ graph LR
 
     %% Import dependencies
     cmd_tm_d7570c37 -.-> internal_9f33a7c7
+    cmd_tmcards_a4bf3cc6 -.-> internal_9f33a7c7
 
     %% External dependencies
-    external["External Dependencies<br/><br/>jsdom<br/>mermaid11<br/>mermaid12<br/>node:fs<br/>node:path<br/>node:url<br/>os"]:::external
+    external["External Dependencies<br/><br/>context<br/>jsdom<br/>mermaid11<br/>mermaid12<br/>node:fs<br/>node:path<br/>node:url<br/>os<br/>os/signal"]:::external
     __3a52ce78 ~~~ external
 ```

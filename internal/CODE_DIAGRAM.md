@@ -23,17 +23,20 @@ graph LR
 
     %% Directory structure and files
     subgraph __3a52ce78["internal"]
+        cards_c8d3756e["cards"]:::has_deps
         cite_f7064cd7["cite"]:::has_deps
         cli_2bd8e9c9["cli"]:::has_deps
         config_dfba7aad["config"]:::has_deps
         docver_6eba3a90["docver"]:::has_deps
         errlog_a6fd2db4["errlog"]:::has_deps
         eventlog_f5caa859["eventlog"]:::has_deps
+        fsrs_77a50ad4["fsrs"]:::has_deps
         graph_29a184b6["graph"]:::has_deps
         lint_b504838c["lint"]:::has_deps
         lockfile_649ab61f["lockfile"]:::has_deps
         ops_c62973cc["ops"]:::has_deps
         report_a27297bd["report"]:::has_deps
+        review_61e62b21["review"]:::has_deps
         source_828d338a["source"]:::has_deps
         state_aa4a5f81["state"]:::has_deps
         version_c692273d["version"]:::has_deps
@@ -44,12 +47,16 @@ graph LR
     end
 
     %% Import dependencies
+    cards_c8d3756e -.-> config_dfba7aad
+    cards_c8d3756e -.-> fsrs_77a50ad4
     cite_f7064cd7 -.-> config_dfba7aad
+    cli_2bd8e9c9 -.-> cards_c8d3756e
     cli_2bd8e9c9 -.-> cite_f7064cd7
     cli_2bd8e9c9 -.-> config_dfba7aad
     cli_2bd8e9c9 -.-> docver_6eba3a90
     cli_2bd8e9c9 -.-> errlog_a6fd2db4
     cli_2bd8e9c9 -.-> eventlog_f5caa859
+    cli_2bd8e9c9 -.-> fsrs_77a50ad4
     cli_2bd8e9c9 -.-> graph_29a184b6
     cli_2bd8e9c9 -.-> lint_b504838c
     cli_2bd8e9c9 -.-> lockfile_649ab61f
@@ -73,6 +80,12 @@ graph LR
     report_a27297bd -.-> cite_f7064cd7
     report_a27297bd -.-> graph_29a184b6
     report_a27297bd -.-> state_aa4a5f81
+    review_61e62b21 -.-> cards_c8d3756e
+    review_61e62b21 -.-> fsrs_77a50ad4
+    review_61e62b21 -.-> graph_29a184b6
+    review_61e62b21 -.-> state_aa4a5f81
+    review_61e62b21 -.-> version_c692273d
+    source_828d338a -.-> cards_c8d3756e
     source_828d338a -.-> cite_f7064cd7
     source_828d338a -.-> config_dfba7aad
     state_aa4a5f81 -.-> cite_f7064cd7
@@ -84,6 +97,6 @@ graph LR
     tools_gen_568ea8cb -.-> graph_29a184b6
 
     %% External dependencies
-    external["External Dependencies<br/><br/>bufio<br/>bytes<br/>context<br/>crypto/sha256<br/>embed<br/>encoding/hex<br/>encoding/json<br/>errors<br/>flag<br/>fmt<br/>io<br/>math/rand<br/>net/http<br/>os<br/>os/exec<br/>path/filepath<br/>regexp<br/>sort<br/>strconv<br/>strings<br/>sync<br/>text/template<br/>time<br/>unicode/utf8"]:::external
+    external["External Dependencies<br/><br/>bufio<br/>bytes<br/>context<br/>crypto/rand<br/>crypto/sha256<br/>crypto/subtle<br/>embed<br/>encoding/hex<br/>encoding/json<br/>errors<br/>flag<br/>fmt<br/>io<br/>io/fs<br/>math<br/>math/rand<br/>math/rand/v2<br/>mime<br/>net<br/>net/http<br/>os<br/>os/exec<br/>path/filepath<br/>regexp<br/>runtime<br/>slices<br/>sort<br/>strconv<br/>strings<br/>sync<br/>text/template<br/>time<br/>unicode/utf8"]:::external
     __3a52ce78 ~~~ external
 ```
