@@ -7,6 +7,13 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
+### Security
+
+- Build with Go 1.27.4. `govulncheck` reported GO-2026-6859 (an HTTP/1
+  server crash from a `MaxBytesReader` header race in `net/http`) in Go
+  1.27.3. `tm` runs no HTTP server; the scan flags the package's symbols as
+  reachable from URL source fetches. It is fixed in 1.27.4.
+
 ## [0.5.5] - 2026-10-26
 
 Spec v0.34. Skill `tm-version` is `0.5`.
