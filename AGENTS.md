@@ -63,6 +63,16 @@ one `teach-me-reader` sub-agent with the locator and a question; the reader runs
 `tm src --fulldump` in a disposable context and returns a summary and candidate
 line ranges without writing to the graph.
 
+## Binaries
+
+`cmd/tm` is the agent-facing CLI. `cmd/tmcards` is the learner's flashcard
+review tool (spec §17.5): `tmcards review` in the terminal and `tmcards serve`
+for a local review page, both implemented in `internal/review`. The page is
+`internal/review/page.html`, one file with inline CSS and JavaScript embedded
+in the binary; it must load nothing from the network and insert card text as
+text only. `tmcards` appends to the cards file and never writes the graph or
+the event log.
+
 ## Architecture
 
 Prompt text for `tm check`, `tm check --drift`, `tm check --errata`, and the

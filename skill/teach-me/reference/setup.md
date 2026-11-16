@@ -155,19 +155,21 @@ Harness permissions) cannot carve an exception for aids-dir.
 ## Harness permissions
 
 For a harness with permission rules, deny direct read and write access to the
-three graph files so the model cannot bypass the CLI's invariants:
+four lesson files so the model cannot bypass the CLI's invariants:
 
 - `**/*.tm.mmd`
 - `**/*.mmd.jsonl`
+- `**/*.mmd.cards.jsonl`
 - `**/*.mmd.lock`
 
 Never deny `**/*.mmd`: `.mmd` is the standard Mermaid extension, so that rule
 blocks every Mermaid diagram in every project. Graphs are named
-`<name>.tm.mmd` for this reason; the `.jsonl` and `.lock` suffixes are already
-specific to `tm`. A lesson created as `<name>.mmd` keeps working, but its
-graph file is not covered by the rule above. To cover it, rename all three
+`<name>.tm.mmd` for this reason; the `.jsonl`, `.cards.jsonl`, and `.lock`
+suffixes are already specific to `tm`. A lesson created as `<name>.mmd` keeps working, but its
+graph file is not covered by the rule above. To cover it, rename all of its
 files together (`<name>.mmd` to `<name>.tm.mmd`, `<name>.mmd.jsonl` to
-`<name>.tm.mmd.jsonl`, and `<name>.mmd.lock` if present), then run
+`<name>.tm.mmd.jsonl`, and `<name>.mmd.cards.jsonl` and `<name>.mmd.lock` if
+present), then run
 `tm load <lesson-dir>/<name>.tm.mmd`, passing `--src-root` again if the lesson
 has one.
 
@@ -185,13 +187,15 @@ src-root stay allowed so the model can inspect what the learner placed there.
       "Edit(**/*.tm.mmd)",
       "Read(**/*.mmd.jsonl)",
       "Edit(**/*.mmd.jsonl)",
+      "Read(**/*.mmd.cards.jsonl)",
+      "Edit(**/*.mmd.cards.jsonl)",
       "Read(**/*.mmd.lock)",
       "Edit(**/*.mmd.lock)",
       "Edit(/absolute/src-root/**)"
     ]
   },
   "sandbox": {
-    "excludedCommands": ["tm"]
+    "excludedCommands": ["tm", "tmcards"]
   }
 }
 ```
@@ -202,9 +206,9 @@ consults them, so leave them out.
 
 With the bash sandbox enabled, `Read` and `Edit` deny rules also apply to file
 operations inside shell commands, which would block `tm` from its own files.
-The `excludedCommands` entry runs every `tm` command, `tm src` included,
-outside the sandbox, while the model's tools and other shell commands stay
-blocked. Sub-agents inherit both the deny rules and the sandbox.
+The `excludedCommands` entries run every `tm` command, `tm src` included, and
+`tmcards`, the learner's flashcard review tool, outside the sandbox, while the
+model's tools and other shell commands stay blocked. Sub-agents inherit both the deny rules and the sandbox.
 
 Without the sandbox, the deny rules cover only the harness's file tools, not
 shell reads, which is why the file-access rule also binds the model directly.

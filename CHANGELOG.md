@@ -56,6 +56,12 @@ Spec v0.35.
   address, `localhost` with the served port, or the `--public` value gets
   403. Changes need `POST` with `Content-Type: application/json`. The server
   stops after `--idle` (default `30m`) without a request.
+- The teacher skill gains the cards rule and a Flashcards section: when to
+  offer cards, how to add and import them, how to start `tmcards serve` and
+  pass on its URL, the question-tool fallback through `tm due` and
+  `tm review --pick`, and what to do about a leech line.
+- The setup reference and README add `**/*.mmd.cards.jsonl` to the deny rules
+  and `tmcards` to the sandbox's `excludedCommands`.
 - `tm recite` now prints a source refusal (an aid or a cards file cited as a
   source) as its own `err:` line with exit 1, as `tm add` and `tm q` do. It
   used to wrap the text in `cannot hash ...` with exit 3.
