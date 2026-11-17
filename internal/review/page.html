@@ -6,33 +6,101 @@
 <meta name="referrer" content="no-referrer">
 <title>Card review</title>
 <style>
-  :root { color-scheme: light dark; --line: #8886; --dim: #888; --accent: #2f81f7; }
+  /* The page may load no fonts (the CSP has no font-src), so both stacks name
+     faces already on the learner's machine. Card text is set in a reading
+     serif; Sitka Text ships with Windows 10 and later, Iowan and Charter with
+     macOS. Everything else uses the system face. */
+  :root {
+    color-scheme: light dark;
+    --desk: #e8ecf1;
+    --stock: #ffffff;
+    --ink: #1f2633;
+    --dim: #5f6b7d;
+    --rule: #a9c6ea;
+    --red: #d9546a;
+    --accent: #2f6fb3;
+    --line: #c9d1dc;
+    --serif: "Iowan Old Style", "Sitka Text", Charter, "Bitstream Charter", Cambria, Georgia, serif;
+    --sans: system-ui, "Segoe UI", sans-serif;
+    --pitch: 2rem; /* the gap between blue rules, and the back's line height */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --desk: #1a1e25;
+      --stock: #252a33;
+      --ink: #e4e8ee;
+      --dim: #9aa4b3;
+      --rule: #34465f;
+      --red: #c94f62;
+      --accent: #7aaee8;
+      --line: #3a414d;
+    }
+  }
   * { box-sizing: border-box; }
-  body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 1rem; max-width: 44rem; }
-  h1 { font-size: 1.1rem; margin: 0; }
-  header { display: flex; flex-wrap: wrap; gap: .5rem 1rem; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
-  nav { display: flex; gap: .5rem; }
-  nav button { padding: .2rem .7rem; font-size: .9rem; }
-  nav button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-  button { font: inherit; padding: .45rem .9rem; border: 1px solid var(--line); border-radius: .4rem; background: transparent; color: inherit; cursor: pointer; }
+  html { background: var(--desk); }
+  body { font: 1rem/1.5 var(--sans); color: var(--ink); margin: 0 auto; padding: 1.25rem 1rem 3rem; max-width: 42rem; }
+
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: 1.5rem; }
+  h1 { font-size: 1rem; font-weight: 600; margin: 0; }
+  nav { display: flex; gap: .25rem; }
+  #left { margin-left: auto; color: var(--dim); font-size: .875rem; }
+  /* On a phone the page title gives way to the controls; it stays for screen readers. */
+  @media (max-width: 34rem) { h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } }
+
+  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line); border-radius: .375rem; background: var(--stock); padding: .5rem 1rem; }
   button:hover { border-color: var(--accent); }
   button:disabled { opacity: .5; cursor: default; }
-  .card { border: 1px solid var(--line); border-radius: .6rem; padding: 1.25rem; }
-  .meta, .dim { color: var(--dim); font-size: .85rem; }
-  .text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 1.2rem; margin: .75rem 0; }
-  .back { border-top: 1px solid var(--line); padding-top: .75rem; }
-  .row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
-  .row button { flex: 1 1 6rem; }
-  kbd { font: inherit; font-size: .8rem; color: var(--dim); margin-right: .35rem; }
-  .hint { display: block; font-size: .75rem; color: var(--dim); }
-  #error { color: #f85149; min-height: 1.5rem; margin: .5rem 0; }
-  ul { list-style: none; padding: 0; margin: 0; }
-  li { border-top: 1px solid var(--line); padding: .6rem 0; }
-  li .text { font-size: 1rem; margin: .2rem 0; }
-  li .row { margin-top: .4rem; }
-  li .row button { flex: 0 0 auto; padding: .2rem .6rem; font-size: .85rem; }
-  textarea { font: inherit; width: 100%; min-height: 4rem; margin: .25rem 0; padding: .4rem; border: 1px solid var(--line); border-radius: .4rem; background: transparent; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  nav button { border-color: transparent; background: transparent; padding: .25rem .75rem; font-size: .9375rem; }
+  nav button[aria-pressed="true"] { background: var(--stock); border-color: var(--line); }
+  kbd { font: inherit; font-size: .8125rem; color: var(--dim); }
+
+  /* The index card: the front sits above the red rule, the back is written
+     on the blue rules below it. */
+  .card { background: var(--stock); border-radius: 3px; box-shadow: 0 1px 2px #0002, 0 6px 20px -8px #0003; padding: 1.25rem 1.5rem 1rem; }
+  .top { display: flex; gap: 1rem; justify-content: space-between; color: var(--dim); font-size: .8125rem; }
+  .top span:last-child { flex: none; }
+  .front { font: 1.5rem/1.35 var(--serif); margin: .75rem 0 1rem; }
+  .ruled { border-top: 2px solid var(--red); min-height: calc(var(--pitch) * 3);
+    background: repeating-linear-gradient(to bottom, transparent 0 calc(var(--pitch) - 1px), var(--rule) calc(var(--pitch) - 1px) var(--pitch)); }
+  .back { font: 1.25rem/var(--pitch) var(--serif); }
+  .front, .back, .list-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  #back:not([hidden]) { animation: ink .18s ease-out; }
+  @keyframes ink { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { #back:not([hidden]) { animation: none; } }
+
+  /* Controls sit under the card, in one place whether they reveal or rate. */
+  .controls { margin-top: 1rem; }
+  #reveal { width: 100%; padding: .75rem; }
+  #reveal kbd { margin-left: .5rem; }
+  .ratings { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; }
+  .ratings button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: .5rem .75rem .625rem; }
+  .ratings .name { display: flex; width: 100%; justify-content: space-between; align-items: baseline; font-weight: 600; }
+  .ratings .hint { font-size: .8125rem; color: var(--dim); line-height: 1.3; }
+  .ratings [data-rating="1"] .name span { color: var(--red); }
+  @media (max-width: 34rem) { .ratings { grid-template-columns: 1fr 1fr; } }
+
+  #error { color: var(--red); min-height: 1.5rem; margin: .75rem 0 0; }
   [hidden] { display: none !important; }
+
+  /* All cards: one sheet, rows divided by blue rules. */
+  .sheet { background: var(--stock); border-radius: 3px; box-shadow: 0 1px 2px #0002; padding: 0 1.5rem; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { border-bottom: 1px solid var(--rule); padding: 1rem 0; }
+  li:last-child { border-bottom: 0; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: .25rem 1.5rem; font: 1.0625rem/1.4 var(--serif); }
+  .pair .list-text:last-child { color: var(--dim); }
+  @media (max-width: 34rem) { .pair { grid-template-columns: 1fr; } }
+  .facts { display: flex; flex-wrap: wrap; gap: .25rem 1rem; color: var(--dim); font-size: .8125rem; margin-top: .5rem; }
+  .actions { display: flex; gap: .25rem; margin: .375rem 0 0 -.5rem; }
+  .actions button { border-color: transparent; background: transparent; padding: .125rem .5rem; font-size: .875rem; color: var(--accent); }
+  .actions button:hover { border-color: var(--line); }
+  .actions .save { border-color: var(--accent); }
+  .actions.editing { margin-left: 0; }
+  .actions .remove { color: var(--dim); }
+  .actions .remove:hover { color: var(--red); border-color: var(--red); }
+  .empty { color: var(--dim); }
+  textarea { font: 1.0625rem/1.4 var(--serif); color: inherit; width: 100%; min-height: 4rem; field-sizing: content; margin: .25rem 0; padding: .5rem; border: 1px solid var(--line); border-radius: .375rem; background: var(--desk); }
 </style>
 </head>
 <body>
@@ -42,33 +110,40 @@
     <button id="to-review" aria-pressed="true">Review</button>
     <button id="to-cards" aria-pressed="false">All cards</button>
   </nav>
-  <span id="left" class="dim"></span>
+  <span id="left"></span>
 </header>
 
 <!-- Two views, one shown at a time. The card list shows every back, so it
      never shares the screen with a card under review. -->
 <div id="review-view">
-<section id="review" class="card" hidden>
-  <div id="meta" class="meta"></div>
-  <div id="front" class="text"></div>
-  <div id="back" class="text back" hidden></div>
-  <div id="reveal-row" class="row">
-    <button id="reveal"><kbd>Space</kbd>Show the back</button>
+<section id="review" hidden>
+  <div class="card">
+    <div class="top"><span id="origin"></span><span id="number"></span></div>
+    <div id="front" class="front"></div>
+    <div class="ruled"><div id="back" class="back" hidden></div></div>
   </div>
-  <div id="rate-row" class="row" hidden>
-    <button data-rating="1"><kbd>1</kbd>Again<span class="hint">Forgot it; it comes back soon</span></button>
-    <button data-rating="2"><kbd>2</kbd>Hard<span class="hint">Recalled it, with effort</span></button>
-    <button data-rating="3"><kbd>3</kbd>Good<span class="hint">Recalled it</span></button>
-    <button data-rating="4"><kbd>4</kbd>Easy<span class="hint">Recalled it at once</span></button>
+  <div class="controls">
+    <div id="reveal-row">
+      <button id="reveal">Show the back<kbd>Space</kbd></button>
+    </div>
+    <div id="rate-row" class="ratings" hidden>
+      <button data-rating="1"><span class="name"><span>Again</span><kbd>1</kbd></span><span class="hint">Forgot it; it comes back soon</span></button>
+      <button data-rating="2"><span class="name"><span>Hard</span><kbd>2</kbd></span><span class="hint">Recalled it, with effort</span></button>
+      <button data-rating="3"><span class="name"><span>Good</span><kbd>3</kbd></span><span class="hint">Recalled it</span></button>
+      <button data-rating="4"><span class="name"><span>Easy</span><kbd>4</kbd></span><span class="hint">Recalled it at once</span></button>
+    </div>
   </div>
 </section>
-<section id="done" class="card" hidden>
-  <div class="text">No cards are due.</div>
-  <div class="row"><button id="again">Check again</button></div>
+<section id="done" hidden>
+  <div class="card">
+    <div class="front">Nothing is due right now.</div>
+    <div class="ruled"></div>
+  </div>
+  <div class="controls"><button id="again">Check again</button></div>
 </section>
 </div>
 <div id="cards-view" hidden>
-  <ul id="list"></ul>
+  <div class="sheet"><ul id="list"></ul></div>
 </div>
 <div id="error" role="alert"></div>
 
@@ -121,21 +196,42 @@ async function run(fn) {
   }
 }
 
-function provenance(c) {
-  let s = "card " + c.n + " · origin " + c.origin;
-  if (c.concept) s += " · " + c.concept;
-  if (c.src) s += " · " + c.src;
+// place turns a citation, <hash>@<locator>:START-END, into the file name and
+// lines a learner can look up; the hash means nothing to them.
+function place(src) {
+  const m = /^[^@]*@(.*):(\d+)-(\d+)$/.exec(src);
+  if (!m) return src;
+  const file = m[1].split(/[/:\\]/).pop();
+  return file + (m[2] === m[3] ? ", line " + m[2] : ", lines " + m[2] + "–" + m[3]);
+}
+
+// origin says who wrote the card, and where it came from when it was taken
+// from a source, so the learner can tell the two apart (§17.5).
+function origin(c) {
+  let s;
+  if (c.origin === "user") s = "Your card";
+  else if (c.origin === "teacher") s = "Your teacher's card";
+  else s = c.src ? "From " + place(c.src) : "From a source";
+  if (c.concept) s += ", for " + c.concept;
   return s;
+}
+
+// originEl is origin as an element, with the full citation on hover.
+function originEl(c) {
+  const e = el("span", "", origin(c));
+  if (c.src) e.title = c.src;
+  return e;
 }
 
 function show(next) {
   current = next.card;
   shown = false;
-  $("left").textContent = next.left === 1 ? "1 card left" : next.left + " cards left";
+  $("left").textContent = next.left === 0 ? "" : next.left === 1 ? "1 card left" : next.left + " cards left";
   $("review").hidden = !current;
   $("done").hidden = !!current;
   if (!current) return;
-  $("meta").textContent = provenance(current);
+  $("origin").replaceChildren(originEl(current));
+  $("number").textContent = "Card " + current.n;
   $("front").textContent = current.front;
   $("back").textContent = current.back;
   $("back").hidden = true;
@@ -177,27 +273,39 @@ function view(cards) {
   });
 }
 
-function dueText(c) {
-  if (!c.due || (c.state !== "learning" && c.state !== "review")) return "";
-  const days = Math.round((new Date(c.due) - Date.now()) / 86400000);
-  if (days <= 0) return " · due";
-  return " · due in " + days + (days === 1 ? " day" : " days");
+// status says, in words, where the card stands in its schedule.
+function status(c) {
+  switch (c.state) {
+    case "waiting": return "Waits until " + c.concept + " is passed";
+    case "held": return "Held";
+    case "new": return "New";
+  }
+  if (!c.due) return "";
+  const ms = new Date(c.due) - Date.now();
+  if (ms <= 0) return "Due now";
+  const days = Math.round(ms / 86400000);
+  if (days === 0) return "Due later today";
+  return days === 1 ? "Due tomorrow" : "Due in " + days + " days";
 }
 
 async function list() {
   const data = await call("api/cards");
   const ul = $("list");
   ul.replaceChildren();
-  if (data.cards.length === 0) ul.append(el("li", "dim", "There are no cards yet."));
+  if (data.cards.length === 0) ul.append(el("li", "empty", "There are no cards yet. Your teacher adds them after you pass a concept."));
   for (const c of data.cards) ul.append(item(c));
 }
 
 function item(c) {
   const li = el("li");
-  let meta = provenance(c) + " · " + c.state + dueText(c);
-  if (c.lapses > 0) meta += " · lapses " + c.lapses;
-  li.append(el("div", "meta", meta), el("div", "text", c.front), el("div", "text dim", c.back));
-  const row = el("div", "row");
+  const pair = el("div", "pair");
+  pair.append(el("div", "list-text", c.front), el("div", "list-text", c.back));
+  const facts = el("div", "facts");
+  facts.append(el("span", "", "Card " + c.n), originEl(c));
+  const st = status(c);
+  if (st) facts.append(el("span", "", st));
+  if (c.lapses > 0) facts.append(el("span", "", c.lapses === 1 ? "Forgotten once" : "Forgotten " + c.lapses + " times"));
+  const row = el("div", "actions");
   const edit = el("button", "", "Edit");
   edit.onclick = () => editor(li, c);
   // A waiting card can be held too: the hold takes effect once its concept
@@ -205,12 +313,12 @@ function item(c) {
   const held = c.state === "held";
   const hold = el("button", "", held ? "Release" : "Hold");
   hold.onclick = () => change("api/hold", { n: c.n, on: !held });
-  const rm = el("button", "", "Remove");
+  const rm = el("button", "remove", "Remove");
   rm.onclick = () => {
     if (confirm("Remove card " + c.n + "? This cannot be undone here.")) change("api/remove", { n: c.n });
   };
   row.append(edit, hold, rm);
-  li.append(row);
+  li.append(pair, facts, row);
   return li;
 }
 
@@ -221,13 +329,15 @@ function editor(li, c) {
   const back = el("textarea");
   back.value = c.back;
   back.setAttribute("aria-label", "Back");
-  const row = el("div", "row");
-  const save = el("button", "", "Save");
+  const row = el("div", "actions editing");
+  const save = el("button", "save", "Save");
   save.onclick = () => change("api/edit", { n: c.n, front: front.value, back: back.value });
   const cancel = el("button", "", "Cancel");
   cancel.onclick = () => li.replaceWith(item(c));
   row.append(save, cancel);
-  li.replaceChildren(el("div", "meta", provenance(c)), front, back, row);
+  const facts = el("div", "facts");
+  facts.append(el("span", "", "Card " + c.n), originEl(c));
+  li.replaceChildren(facts, front, back, row);
   front.focus();
 }
 
