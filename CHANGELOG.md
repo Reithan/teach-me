@@ -51,7 +51,11 @@ Spec v0.35.
   rating has a one-line description under its name) and the card's origin and
   citation. All cards lists every card with its back, where the learner can
   edit, hold, release, or remove one; it is fetched only when opened, so no
-  back shows during a review. Ratings are recorded with `via: serve`.
+  back shows during a review. Ratings are recorded with `via: serve`. The
+  card is drawn as an index card: the front above a red rule, the back on
+  blue rules, in a serif the learner's system already has. The origin reads
+  in words ("Your card", "From raft.md, lines 10–14"), with the full citation
+  on hover.
 - `tmcards serve` listens on `127.0.0.1` and a port the system picks. The URL
   carries a random 128-bit token that is new on every start; a request
   without it gets 404. A request whose `Host` header is not the bound
