@@ -46,10 +46,12 @@ Spec v0.35.
 - `tmcards serve [--port <n>] [--bind <addr>] [--public <host:port>]
   [--idle <duration>]` serves a review page for a learner with no terminal
   and prints its URL. The page is one HTML file embedded in the binary that
-  loads nothing from the network. It shows one due card at a time (reveal,
-  then rate with the buttons or keys `1` to `4`), each card's origin and
-  citation, and a list of all cards where the learner can edit, hold,
-  release, or remove one. Ratings are recorded with `via: serve`.
+  loads nothing from the network. It has two views. Review shows one due card
+  at a time (reveal, then rate with the buttons or keys `1` to `4`; each
+  rating has a one-line description under its name) and the card's origin and
+  citation. All cards lists every card with its back, where the learner can
+  edit, hold, release, or remove one; it is fetched only when opened, so no
+  back shows during a review. Ratings are recorded with `via: serve`.
 - `tmcards serve` listens on `127.0.0.1` and a port the system picks. The URL
   carries a random 128-bit token that is new on every start; a request
   without it gets 404. A request whose `Host` header is not the bound

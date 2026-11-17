@@ -10,7 +10,10 @@
   * { box-sizing: border-box; }
   body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 1rem; max-width: 44rem; }
   h1 { font-size: 1.1rem; margin: 0; }
-  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
+  header { display: flex; flex-wrap: wrap; gap: .5rem 1rem; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
+  nav { display: flex; gap: .5rem; }
+  nav button { padding: .2rem .7rem; font-size: .9rem; }
+  nav button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
   button { font: inherit; padding: .45rem .9rem; border: 1px solid var(--line); border-radius: .4rem; background: transparent; color: inherit; cursor: pointer; }
   button:hover { border-color: var(--accent); }
   button:disabled { opacity: .5; cursor: default; }
@@ -21,8 +24,8 @@
   .row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
   .row button { flex: 1 1 6rem; }
   kbd { font: inherit; font-size: .8rem; color: var(--dim); margin-right: .35rem; }
+  .hint { display: block; font-size: .75rem; color: var(--dim); }
   #error { color: #f85149; min-height: 1.5rem; margin: .5rem 0; }
-  h2 { font-size: 1rem; margin: 2rem 0 .5rem; }
   ul { list-style: none; padding: 0; margin: 0; }
   li { border-top: 1px solid var(--line); padding: .6rem 0; }
   li .text { font-size: 1rem; margin: .2rem 0; }
@@ -35,9 +38,16 @@
 <body>
 <header>
   <h1>Card review</h1>
+  <nav>
+    <button id="to-review" aria-pressed="true">Review</button>
+    <button id="to-cards" aria-pressed="false">All cards</button>
+  </nav>
   <span id="left" class="dim"></span>
 </header>
 
+<!-- Two views, one shown at a time. The card list shows every back, so it
+     never shares the screen with a card under review. -->
+<div id="review-view">
 <section id="review" class="card" hidden>
   <div id="meta" class="meta"></div>
   <div id="front" class="text"></div>
@@ -46,20 +56,21 @@
     <button id="reveal"><kbd>Space</kbd>Show the back</button>
   </div>
   <div id="rate-row" class="row" hidden>
-    <button data-rating="1"><kbd>1</kbd>Again</button>
-    <button data-rating="2"><kbd>2</kbd>Hard</button>
-    <button data-rating="3"><kbd>3</kbd>Good</button>
-    <button data-rating="4"><kbd>4</kbd>Easy</button>
+    <button data-rating="1"><kbd>1</kbd>Again<span class="hint">Forgot it; it comes back soon</span></button>
+    <button data-rating="2"><kbd>2</kbd>Hard<span class="hint">Recalled it, with effort</span></button>
+    <button data-rating="3"><kbd>3</kbd>Good<span class="hint">Recalled it</span></button>
+    <button data-rating="4"><kbd>4</kbd>Easy<span class="hint">Recalled it at once</span></button>
   </div>
 </section>
 <section id="done" class="card" hidden>
   <div class="text">No cards are due.</div>
   <div class="row"><button id="again">Check again</button></div>
 </section>
+</div>
+<div id="cards-view" hidden>
+  <ul id="list"></ul>
+</div>
 <div id="error" role="alert"></div>
-
-<h2>All cards</h2>
-<ul id="list"></ul>
 
 <script>
 "use strict";
@@ -69,6 +80,7 @@ const $ = (id) => document.getElementById(id);
 let current = null;   // the card on screen
 let shown = false;    // whether its back is showing
 let busy = false;     // a request is in flight
+let cardsView = false; // the card list is on screen instead of the review
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -143,7 +155,25 @@ function rate(rating) {
   if (!current || !shown) return;
   run(async () => {
     show(await call("api/review", { n: current.n, rating }));
-    await list();
+  });
+}
+
+// view switches between the review and the card list. The list is fetched
+// only when it is opened, so no back reaches the page during a review; going
+// back to the review fetches the next card, since an edit may have changed it.
+function view(cards) {
+  run(async () => {
+    if (cards) {
+      await list();
+    } else {
+      show(await call("api/next"));
+    }
+    cardsView = cards;
+    $("review-view").hidden = cards;
+    $("cards-view").hidden = !cards;
+    if (!cards) $("list").replaceChildren();
+    $("to-review").setAttribute("aria-pressed", String(!cards));
+    $("to-cards").setAttribute("aria-pressed", String(cards));
   });
 }
 
@@ -201,16 +231,19 @@ function editor(li, c) {
   front.focus();
 }
 
-// change makes one change to a card, then redraws the card on screen and the
-// list, since the change may have reworded or removed the card being shown.
+// change makes one change to a card, then redraws the card on screen and,
+// in the card list, the list, since the change may have reworded or removed
+// the card being shown.
 function change(route, body) {
   run(async () => {
     await call(route, body);
     show(await call("api/next"));
-    await list();
+    if (cardsView) await list();
   });
 }
 
+$("to-review").onclick = () => view(false);
+$("to-cards").onclick = () => view(true);
 $("reveal").onclick = reveal;
 for (const b of document.querySelectorAll("[data-rating]")) {
   b.onclick = () => rate(Number(b.dataset.rating));
@@ -220,7 +253,7 @@ $("again").onclick = () => change("api/start", {});
 document.addEventListener("keydown", (e) => {
   const t = e.target;
   if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || cardsView) return;
   if (!shown && (e.key === " " || e.key === "Enter")) {
     // On a focused button the browser clicks it itself.
     if (t && t.tagName === "BUTTON") return;
@@ -234,7 +267,6 @@ document.addEventListener("keydown", (e) => {
 // Every page load starts a sitting, which draws a new random order.
 run(async () => {
   show(await call("api/start", {}));
-  await list();
 });
 </script>
 </body>

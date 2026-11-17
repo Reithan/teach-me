@@ -1260,8 +1260,9 @@ Worked values at the defaults, for the tests of section 16.5:
 The page:
 
 - One HTML file with inline CSS and JavaScript, embedded in the binary. It loads nothing from the network.
-- Shows the due count, then one card at a time: front, a control to reveal the back, and the four ratings (keys `1` to `4`). Each card shows its origin, and its citation when it has one, so the learner can tell a card taken from a source from one the teacher or the learner wrote.
-- Lists all cards with their state, and lets the learner edit, hold, release, or remove a card.
+- Has two views, one on screen at a time: Review and All cards.
+- Review shows the due count, then one card at a time: front, a control to reveal the back, and the four ratings (keys `1` to `4`). Each rating carries a one-line description under its name: again "forgot it; it comes back soon", hard "recalled it, with effort", good "recalled it", easy "recalled it at once". Each card shows its origin, and its citation when it has one, so the learner can tell a card taken from a source from one the teacher or the learner wrote.
+- All cards lists every card with its back and state, and lets the learner edit, hold, release, or remove a card. The page fetches the list only when this view opens and clears it on leaving, so no back is on the page during a review.
 - Inserts card text as text, never as HTML.
 
 The server:
