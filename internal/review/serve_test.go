@@ -173,6 +173,15 @@ func TestHandler_Page(t *testing.T) {
 	if strings.Contains(body, "front 1") {
 		t.Errorf("card text is in the page itself; it should come from the API")
 	}
+	// The card list shows every back, so it sits in its own view, hidden
+	// until the learner opens it, and the page does not fetch it on load.
+	if !strings.Contains(body, `<div id="cards-view" hidden>`) {
+		t.Errorf("the card list is not in a view hidden by default")
+	}
+	start := strings.Index(body, "// Every page load starts a sitting")
+	if start < 0 || strings.Contains(body[start:], "list()") {
+		t.Errorf("the page loads the card list on start")
+	}
 }
 
 func TestHandler_ReviewFlow(t *testing.T) {
