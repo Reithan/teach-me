@@ -1,8 +1,8 @@
-# tm: teaching-map CLI, draft spec v0.36
+# tm: teaching-map CLI, draft spec v0.37
 
 `tm` reads and edits a Mermaid flowchart that records what a human learner has shown they understand. A teacher agent drives it, grader sub-agents score answers through it, and the human reads and may hand-edit the same file. The graph file is the only state of what the learner has been taught and tested on; flashcards for remembering it afterwards live in one file beside it (section 17). Agents never read raw Mermaid; they pay tokens only for `tm` output.
 
-Changes from v0.35: flashcards (new section 17): a cards file beside the graph; `tm card`, `tm due`, and `tm review`; a second binary `tmcards` for the learner's reviews; an FSRS schedule; graph format 3 with the `%% tm:cards` meta line. This realizes the deferred "decay and re-test" item. The intro and §2, §2.1, §3, §4.6, §6, §7, §8, §10, §11, §12, §13, §13.2, §14, §15, §16 updated.
+Changes from v0.36: a build order for the work after `v0.6.0` (§16.10, milestones 13 to 18, decision 98): a trial lesson first, then a study guide, config keys for the gate limits, Anki export, a stored goal marker, and audio and images on cards. Those items leave the deferred list in §15. §14, §15, §16.10 updated.
 
 ## 1. Design rule: agent-facing, token-minimal
 
@@ -901,26 +901,24 @@ Output is one line per rewritten citation (`ok <id> <old> -> <new>`), one per ci
 | 95 | Lists are imported as UTF-8 tab-separated text, front then back, shown as plain text only | Anki and spreadsheet programs read and write it, it needs no quoting rules for the common case, and plain-text display means a list from an untrusted source cannot inject markup into the review page | CSV (quoting rules, and commas are common in card text); a `%% tm:list` line in the graph pointing at a file (a second place for card state to disagree); Anki `.apkg` (a zipped database; needs a dependency) | agreed, 2026-11-11 |
 | 96 | Cards are shown in a new random order every session, never a fixed one; a card on a learning step is placed at a random position among the next few cards when its time comes, and is shown early when nothing else is left | a fixed order lets the learner memorize the sequence of answers in place of the answers; the step times are part of the schedule, so those cards are randomized within the few positions the schedule allows; showing a step card early keeps a short session from stranding cards on the 10-minute step | most-overdue first (the same order on every visit until the cards are cleared); shorter steps (a shorter session strands those too) | agreed, 2026-11-11 |
 | 97 | Editing a card keeps its review history and schedule; the teacher edits with `tm card edit` and the learner in `tmcards` | a reworded card tests the same fact, and resetting it would throw away the learner's reviews; a leech is often a badly worded card, so the teacher needs a way to fix one | resetting the schedule on edit; learner-only edits (the teacher could flag a bad card and not fix it) | agreed, 2026-11-11 |
+| 98 | After `v0.6.0`, one real lesson on the released tool comes before new features, then the study guide, gate-limit config keys, Anki export, the goal marker, and card media, in that order (§16.10) | flashcards have not met a learner yet, and several deferred items wait on a lesson that shows a need; the next three reuse existing code and need no format change; the goal marker needs a graph format bump; media needs a cards-file change, file storage, and playback with no network loads, so it is the largest and gains the most from what the lesson finds | media first (the owner's own goals, but the largest change, designed before any review data exists); leaving every item in §15 with no order | agreed, 2026-11-16 |
 
 ## 15. Deferred
 
 - `maxTextSize` and `maxEdges`. Revisit when testing at realistic graph sizes.
 - Bypass flag for the frontier rule. Superseded by `reserve` (14.59) unless a lesson shows a need that parking cannot meet.
 - Dotted rendering for edges that touch a reserve concept, derived by the writer from the block. Cosmetic; needs the parser to accept `-.->`.
-- A stored goal marker (`%% tm:goal <id>`) so `tm status` can print distance to goal and lint can enforce an active-ancestor budget. `prune` takes the goal as an argument for now.
-- Config file keys for the batch and gate limits (`TM_PROBE_MIN` through `TM_MAX_STALL`), so one lesson can loosen the gate without environment variables.
 - Condition coverage. Go has no native branch coverage and nothing filters gobco's output to a diff, so it needs an in-repo filter. gobco v1.3.4 writes per-condition true and false counts with `-stats`; untested under Go 1.27.
 - `--oos` on probes. Probes have no scope check yet.
 - Automatic grader spawning: a filter command the CLI runs, or a harness skill that injects `tm check` output into the grader's prompt. Both close the teacher's channel to the grader and both sit on `check` and `grade` unchanged.
 - Harness hook that authenticates the grader role.
 - Quote and position selectors, and fragment anchoring, for web citations.
-- Learner-facing study guide from `tm report` (same walk over the passed block, question text omitted).
 - Remote git fetch.
 - `tm lint --remote` (resolve fetched citations).
 - Mermaid size limits under long URIs: measure in M9.
 - Adapters from `tm ask --format json` to a specific harness's question UI.
 - Multiple citations per concept via a `%% tm:cite <id> <cite>` meta line at a later format. Not needed until a lesson shows a concept whose foundation is two disjoint passages.
-- Flashcards (section 17): parameters fitted to the learner's own review history; cloze cards; images and audio on cards; export to Anki; compaction of the cards file; a drift check on card citations; card capture from the review page's microphone or camera.
+- Flashcards (section 17): parameters fitted to the learner's own review history; cloze cards; compaction of the cards file; a drift check on card citations; card capture from the review page's microphone or camera.
 
 ## 16. Implementation
 
@@ -1096,6 +1094,15 @@ Flashcards (section 17) land after `v0.1.0`, in this order:
 10. `fsrs`; `tm due`, `tm review`; the `cards due` count and leech lines in `tm status`; cards in `tm show`.
 11. `cmd/tmcards`: `tmcards review`, then `tmcards serve` with the embedded page; the second binary in `.goreleaser.yaml`.
 12. Adapters: the cards rule and usage in `skill/teach-me/SKILL.md`, and the cards-file deny entry in the setup reference and `README.md`.
+
+After `v0.6.0`, in this order (decision 98). Each milestone after 13 starts with a spec revision that settles its open design choices; the notes below give the scope, not the design.
+
+13. A trial lesson on `v0.6.0`: one real lesson that maps, teaches, and passes a few concepts and writes cards for them, with the learner reviewing the cards in `tmcards serve` over several days, launched by Claude from a GUI harness. No code. Each problem found becomes an issue, and those issues may change the order below.
+14. Learner-facing study guide from `tm report`: the same walk over the passed block, with question text left out, so the learner gets something to read.
+15. Config file keys for the batch and gate limits (`TM_PROBE_MIN` through `TM_MAX_STALL`), so one lesson can loosen the gate without environment variables.
+16. Export to Anki: write a concept's cards, or all cards, in the tab-separated format of section 17.3 so Anki and phone apps can import them. Scheduling state is not exported.
+17. A stored goal marker (`%% tm:goal <id>`), with a graph format bump and `tm migrate`, so `tm status` can print distance to goal and lint can enforce an active-ancestor budget. `prune` keeps taking the goal as an argument until it lands.
+18. Audio and images on cards: media files stored beside the cards file, played and shown by `tmcards serve` with nothing loaded from the network. The owner's target uses are phoneme-level pronunciation (audio) and guitar and stretching practice (images, then pose). Card capture from the microphone or camera stays deferred (section 15).
 
 `v0.1.0` is done when every command in section 6 behaves as specified, every refusal in section 7 has a test, the lifecycle transcripts cover every edge in section 12's diagram, and all CI jobs are green on all three operating systems.
 
