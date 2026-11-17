@@ -7,7 +7,11 @@ in beta. Each release names the `docs/spec.md` revision it implements.
 
 ## [Unreleased]
 
-Spec v0.35.
+## [0.6.0] - 2026-11-16
+
+Spec v0.36. Skill `tm-version` is `0.6`. To upgrade, run `tm migrate` once
+per graph, then reinstall the skill and the agent files so the teacher knows
+about flashcards.
 
 ### Added
 
@@ -375,7 +379,8 @@ with content hashes, source resolution and converters, drift and recheck,
 `tm report`), the release pipeline, and the teacher, grader, and planner
 adapters under `skill/teach-me/`. (#1 through #39)
 
-[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/Reithan/teach-me/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Reithan/teach-me/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/Reithan/teach-me/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/Reithan/teach-me/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/Reithan/teach-me/compare/v0.5.2...v0.5.3
